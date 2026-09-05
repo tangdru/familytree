@@ -118,6 +118,32 @@
     </div>
   </div>
 
+  <!-- Photo crop overlay -->
+  <div id="cropModal" class="modal-overlay" hidden>
+    <div class="modal crop-modal">
+      <div class="modal-header">
+        <h2>Adjust Photo</h2>
+        <button id="cropCloseBtn" type="button" class="icon-btn" aria-label="Cancel">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="crop-viewport" id="cropViewport">
+          <img id="cropImage" alt="" draggable="false">
+        </div>
+        <div class="crop-zoom-row">
+          <span aria-hidden="true">−</span>
+          <input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1">
+          <span aria-hidden="true">+</span>
+        </div>
+        <p class="hint">Drag to reposition, use the slider (or pinch) to zoom.</p>
+        <div class="modal-footer">
+          <div class="spacer"></div>
+          <button type="button" id="cropCancelBtn" class="btn">Cancel</button>
+          <button type="button" id="cropApplyBtn" class="btn btn-primary">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
