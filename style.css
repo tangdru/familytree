@@ -328,6 +328,11 @@ body {
 .combo {
   position: relative;
 }
+
+.location-field {
+  position: relative;
+}
+.location-suggestions .combo-options { max-height: 220px; }
 /* A real <button>, not a text input: tapping it must never raise the
    on-screen keyboard — only the .combo-filter inside the open dropdown
    should do that, and only once someone deliberately taps it. */
