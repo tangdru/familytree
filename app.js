@@ -170,9 +170,16 @@
 
   // ---------- Searchable combo (parent / spouse pickers) ----------
 
-  function createCombo(rootEl, { multiple }) {
-    const searchInput = rootEl.querySelector('.combo-search');
+  // Tapping the trigger opens a scrollable list immediately, with no
+  // on-screen keyboard — the trigger is a <button>, not a text input. The
+  // keyboard only appears if someone deliberately taps the filter field
+  // inside the open dropdown to search a long list.
+  function createCombo(rootEl, { multiple, placeholder }) {
+    const trigger = rootEl.querySelector('.combo-trigger');
+    const triggerText = trigger.querySelector('.combo-trigger-text');
     const dropdown = rootEl.querySelector('.combo-dropdown');
+    const filterInput = dropdown.querySelector('.combo-filter');
+    const optionsEl = dropdown.querySelector('.combo-options');
     const clearBtn = rootEl.querySelector('.combo-clear');
     const chipsEl = rootEl.querySelector('.combo-chips');
 
@@ -182,34 +189,51 @@
 
     const labelFor = (id) => (options.find(o => o.id === id) || {}).name || '';
 
-    function closeDropdown() {
-      dropdown.hidden = true;
-      dropdown.innerHTML = '';
+    function setTriggerText(text, isPlaceholder) {
+      triggerText.textContent = text;
+      trigger.classList.toggle('placeholder', !!isPlaceholder);
     }
 
-    function openDropdown(query) {
+    function renderOptions(query) {
       const q = query.trim().toLowerCase();
       const available = options.filter(o => !multiple || !selectedIds.includes(o.id));
       const matches = q ? available.filter(o => o.name.toLowerCase().includes(q)) : available;
-      dropdown.innerHTML = '';
+      optionsEl.innerHTML = '';
       if (!matches.length) {
         const empty = document.createElement('div');
         empty.className = 'combo-option-empty';
         empty.textContent = 'No matches';
-        dropdown.appendChild(empty);
+        optionsEl.appendChild(empty);
       } else {
         for (const opt of matches.slice(0, 50)) {
           const item = document.createElement('div');
           item.className = 'combo-option';
           item.textContent = opt.name;
-          item.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // keep focus so the click isn't lost to blur
+          item.addEventListener('click', (e) => {
+            // Selecting an option (esp. in multi mode) rebuilds the options
+            // list before this click finishes bubbling, detaching e.target
+            // from the DOM — the document-level "click outside" listener
+            // would then see a detached node and wrongly treat this as an
+            // outside click. Stop it here; this click is unambiguously
+            // inside the combo.
+            e.stopPropagation();
             choose(opt);
           });
-          dropdown.appendChild(item);
+          optionsEl.appendChild(item);
         }
       }
+    }
+
+    function openDropdown() {
+      filterInput.value = '';
+      renderOptions('');
       dropdown.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeDropdown() {
+      dropdown.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     function updateClearBtn() {
@@ -228,6 +252,7 @@
         removeBtn.addEventListener('click', () => {
           selectedIds = selectedIds.filter(x => x !== id);
           renderChips();
+          if (!dropdown.hidden) renderOptions(filterInput.value);
         });
         chip.appendChild(removeBtn);
         chipsEl.appendChild(chip);
@@ -237,41 +262,33 @@
     function choose(opt) {
       if (multiple) {
         if (!selectedIds.includes(opt.id)) selectedIds.push(opt.id);
-        searchInput.value = '';
         renderChips();
-        closeDropdown();
-        searchInput.focus();
+        filterInput.value = '';
+        renderOptions('');
       } else {
         selectedId = opt.id;
-        searchInput.value = opt.name;
+        setTriggerText(opt.name, false);
         updateClearBtn();
         closeDropdown();
       }
     }
 
-    searchInput.addEventListener('focus', () => {
-      openDropdown('');
-      searchInput.select();
+    trigger.addEventListener('click', () => {
+      if (dropdown.hidden) openDropdown();
+      else closeDropdown();
     });
-    searchInput.addEventListener('input', () => {
-      if (!multiple) { selectedId = ''; updateClearBtn(); }
-      openDropdown(searchInput.value);
+    filterInput.addEventListener('input', () => renderOptions(filterInput.value));
+    filterInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDropdown();
     });
-    searchInput.addEventListener('blur', () => {
-      setTimeout(() => {
-        closeDropdown();
-        if (!multiple && !selectedId) searchInput.value = '';
-      }, 120);
-    });
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeDropdown(); searchInput.blur(); }
+    document.addEventListener('click', (e) => {
+      if (!dropdown.hidden && !rootEl.contains(e.target)) closeDropdown();
     });
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         selectedId = '';
-        searchInput.value = '';
+        setTriggerText(placeholder, true);
         updateClearBtn();
-        searchInput.focus();
       });
     }
 
@@ -281,18 +298,17 @@
       getValues() { return selectedIds.slice(); },
       setValue(id) {
         selectedId = id || '';
-        searchInput.value = id ? labelFor(id) : '';
+        setTriggerText(id ? labelFor(id) : placeholder, !id);
         updateClearBtn();
       },
       setValues(ids) {
         selectedIds = (ids || []).slice();
-        searchInput.value = '';
         renderChips();
       },
       clear() {
         selectedId = '';
         selectedIds = [];
-        searchInput.value = '';
+        setTriggerText(placeholder, true);
         updateClearBtn();
         if (chipsEl) chipsEl.innerHTML = '';
         closeDropdown();
@@ -300,9 +316,9 @@
     };
   }
 
-  const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false });
-  const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false });
-  const spousesCombo = createCombo(document.getElementById('spousesCombo'), { multiple: true });
+  const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false, placeholder: 'Select…' });
+  const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false, placeholder: 'Select…' });
+  const spousesCombo = createCombo(document.getElementById('spousesCombo'), { multiple: true, placeholder: 'Add spouse/partner…' });
 
   // ---------- View state (pan/zoom) ----------
 
