@@ -82,19 +82,30 @@
 
         <div class="form-row two-col">
           <div>
-            <label for="parent1Input">Parent 1</label>
-            <select id="parent1Input"><option value="">—</option></select>
+            <label for="parent1Search">Parent 1</label>
+            <div class="combo" id="parent1Combo">
+              <input type="text" id="parent1Search" class="combo-search" placeholder="Search name…" autocomplete="off">
+              <button type="button" class="combo-clear" id="parent1Clear" aria-label="Clear parent 1" hidden>✕</button>
+              <div class="combo-dropdown" id="parent1Dropdown" hidden></div>
+            </div>
           </div>
           <div>
-            <label for="parent2Input">Parent 2</label>
-            <select id="parent2Input"><option value="">—</option></select>
+            <label for="parent2Search">Parent 2</label>
+            <div class="combo" id="parent2Combo">
+              <input type="text" id="parent2Search" class="combo-search" placeholder="Search name…" autocomplete="off">
+              <button type="button" class="combo-clear" id="parent2Clear" aria-label="Clear parent 2" hidden>✕</button>
+              <div class="combo-dropdown" id="parent2Dropdown" hidden></div>
+            </div>
           </div>
         </div>
 
         <div class="form-row">
-          <label for="spousesInput">Spouse(s) / Partner(s)</label>
-          <select id="spousesInput" multiple size="4"></select>
-          <small class="hint">Ctrl/Cmd-click to select multiple</small>
+          <label for="spousesSearch">Spouse(s) / Partner(s)</label>
+          <div class="combo combo-multi" id="spousesCombo">
+            <div class="combo-chips" id="spousesChips"></div>
+            <input type="text" id="spousesSearch" class="combo-search" placeholder="Search to add…" autocomplete="off">
+            <div class="combo-dropdown" id="spousesDropdown" hidden></div>
+          </div>
         </div>
 
         <div class="form-row">

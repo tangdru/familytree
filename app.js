@@ -138,9 +138,6 @@
     birthInput: document.getElementById('birthInput'),
     deathInput: document.getElementById('deathInput'),
     genderInput: document.getElementById('genderInput'),
-    parent1Input: document.getElementById('parent1Input'),
-    parent2Input: document.getElementById('parent2Input'),
-    spousesInput: document.getElementById('spousesInput'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -151,6 +148,142 @@
   };
 
   let pendingPhoto = null; // dataURL currently staged in the form
+
+  // ---------- Searchable combo (parent / spouse pickers) ----------
+
+  function createCombo(rootEl, { multiple }) {
+    const searchInput = rootEl.querySelector('.combo-search');
+    const dropdown = rootEl.querySelector('.combo-dropdown');
+    const clearBtn = rootEl.querySelector('.combo-clear');
+    const chipsEl = rootEl.querySelector('.combo-chips');
+
+    let options = []; // [{id, name}]
+    let selectedId = ''; // single mode
+    let selectedIds = []; // multi mode
+
+    const labelFor = (id) => (options.find(o => o.id === id) || {}).name || '';
+
+    function closeDropdown() {
+      dropdown.hidden = true;
+      dropdown.innerHTML = '';
+    }
+
+    function openDropdown(query) {
+      const q = query.trim().toLowerCase();
+      const available = options.filter(o => !multiple || !selectedIds.includes(o.id));
+      const matches = q ? available.filter(o => o.name.toLowerCase().includes(q)) : available;
+      dropdown.innerHTML = '';
+      if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.className = 'combo-option-empty';
+        empty.textContent = 'No matches';
+        dropdown.appendChild(empty);
+      } else {
+        for (const opt of matches.slice(0, 50)) {
+          const item = document.createElement('div');
+          item.className = 'combo-option';
+          item.textContent = opt.name;
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // keep focus so the click isn't lost to blur
+            choose(opt);
+          });
+          dropdown.appendChild(item);
+        }
+      }
+      dropdown.hidden = false;
+    }
+
+    function updateClearBtn() {
+      if (clearBtn) clearBtn.hidden = !selectedId;
+    }
+
+    function renderChips() {
+      chipsEl.innerHTML = '';
+      for (const id of selectedIds) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = labelFor(id) || '(unknown)';
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', () => {
+          selectedIds = selectedIds.filter(x => x !== id);
+          renderChips();
+        });
+        chip.appendChild(removeBtn);
+        chipsEl.appendChild(chip);
+      }
+    }
+
+    function choose(opt) {
+      if (multiple) {
+        if (!selectedIds.includes(opt.id)) selectedIds.push(opt.id);
+        searchInput.value = '';
+        renderChips();
+        closeDropdown();
+        searchInput.focus();
+      } else {
+        selectedId = opt.id;
+        searchInput.value = opt.name;
+        updateClearBtn();
+        closeDropdown();
+      }
+    }
+
+    searchInput.addEventListener('focus', () => {
+      openDropdown('');
+      searchInput.select();
+    });
+    searchInput.addEventListener('input', () => {
+      if (!multiple) { selectedId = ''; updateClearBtn(); }
+      openDropdown(searchInput.value);
+    });
+    searchInput.addEventListener('blur', () => {
+      setTimeout(() => {
+        closeDropdown();
+        if (!multiple && !selectedId) searchInput.value = '';
+      }, 120);
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeDropdown(); searchInput.blur(); }
+    });
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        selectedId = '';
+        searchInput.value = '';
+        updateClearBtn();
+        searchInput.focus();
+      });
+    }
+
+    return {
+      setOptions(list) { options = list; },
+      getValue() { return selectedId; },
+      getValues() { return selectedIds.slice(); },
+      setValue(id) {
+        selectedId = id || '';
+        searchInput.value = id ? labelFor(id) : '';
+        updateClearBtn();
+      },
+      setValues(ids) {
+        selectedIds = (ids || []).slice();
+        searchInput.value = '';
+        renderChips();
+      },
+      clear() {
+        selectedId = '';
+        selectedIds = [];
+        searchInput.value = '';
+        updateClearBtn();
+        if (chipsEl) chipsEl.innerHTML = '';
+        closeDropdown();
+      },
+    };
+  }
+
+  const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false });
+  const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false });
+  const spousesCombo = createCombo(document.getElementById('spousesCombo'), { multiple: true });
 
   // ---------- View state (pan/zoom) ----------
 
@@ -322,6 +455,9 @@
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
+    parent1Combo.clear();
+    parent2Combo.clear();
+    spousesCombo.clear();
     els.modal.hidden = false;
     els.nameInput.focus();
   }
@@ -341,11 +477,9 @@
     els.modalTitle.textContent = 'Edit Person';
     els.deletePersonBtn.hidden = false;
     populateSelectOptions(p.id);
-    els.parent1Input.value = p.parents[0] || '';
-    els.parent2Input.value = p.parents[1] || '';
-    Array.from(els.spousesInput.options).forEach(opt => {
-      opt.selected = p.spouses.includes(opt.value);
-    });
+    parent1Combo.setValue(p.parents[0] || '');
+    parent2Combo.setValue(p.parents[1] || '');
+    spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
   }
 
@@ -362,26 +496,12 @@
   function populateSelectOptions(excludeId) {
     const people = Object.values(data.people)
       .filter(p => p.id !== excludeId)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(p => ({ id: p.id, name: p.name || '(unnamed)' }));
 
-    const buildOptions = (select, includeBlank) => {
-      select.innerHTML = '';
-      if (includeBlank) {
-        const blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = '—';
-        select.appendChild(blank);
-      }
-      for (const p of people) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name || '(unnamed)';
-        select.appendChild(opt);
-      }
-    };
-    buildOptions(els.parent1Input, true);
-    buildOptions(els.parent2Input, true);
-    buildOptions(els.spousesInput, false);
+    parent1Combo.setOptions(people);
+    parent2Combo.setOptions(people);
+    spousesCombo.setOptions(people);
   }
 
   // ---------- Form submit / delete ----------
@@ -394,11 +514,11 @@
     const id = els.personId.value || uid();
     const isNew = !els.personId.value;
 
-    const parents = [els.parent1Input.value, els.parent2Input.value].filter(Boolean);
+    const parents = [parent1Combo.getValue(), parent2Combo.getValue()].filter(Boolean);
     if (parents.length === 2 && parents[0] === parents[1]) parents.pop();
     if (parents.includes(id)) { alert('A person cannot be their own parent.'); return; }
 
-    const spouses = Array.from(els.spousesInput.selectedOptions).map(o => o.value).filter(v => v && v !== id);
+    const spouses = spousesCombo.getValues().filter(v => v && v !== id);
 
     // Prevent a parent cycle (ancestor being set as descendant)
     if (parents.some(pid => isDescendant(id, pid))) {
