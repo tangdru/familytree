@@ -14,6 +14,6 @@
 // Leaving these blank runs the app in local-only mode (saves to this
 // browser's localStorage instead of the shared database).
 window.SUPABASE_CONFIG = {
-  url: '', // e.g. 'https://xxxxxxxxxxxx.supabase.co'
-  anonKey: '', // e.g. 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+  url: 'https://fjzrodjqysdaarfmxvqv.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqenJvZGpxeXNkYWFyZm14dnF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NTk0OTIsImV4cCI6MjEwNDEzNTQ5Mn0.XapBkqZOv8GRDiI9t0mJ4TA4bnfPQ3DblupwEJxjvko',
 };
