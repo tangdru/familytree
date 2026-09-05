@@ -366,6 +366,41 @@ body {
 }
 .modal-footer .spacer { flex: 1; }
 
+/* ---------- Photo crop overlay ---------- */
+.crop-modal { max-width: 380px; }
+.crop-viewport {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 150 / 110;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 2px solid var(--card-border);
+  background: #1a1712;
+  cursor: grab;
+  touch-action: none;
+}
+.crop-viewport.grabbing { cursor: grabbing; }
+.crop-viewport img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.crop-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  margin: 12px auto 4px;
+  color: var(--ink-soft);
+}
+.crop-zoom-row input[type=range] { flex: 1; }
+.crop-modal .hint { display: block; text-align: center; margin-bottom: 4px; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #201c16;
