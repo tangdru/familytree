@@ -323,14 +323,31 @@ body {
   font-family: inherit;
   width: 100%;
 }
+.form-row input[type=date] {
+  /* Without this, iOS Safari can let the control's own internal layout
+     (month/day/year segments + calendar icon) win over the CSS width and
+     overflow its box rather than shrink to it. */
+  min-width: 0;
+}
 .form-row select[multiple] { height: auto; }
-/* flex-wrap is the safety valve: on any screen too narrow to fit both
-   fields at their 130px floor, Died wraps below Born instead of either
-   overflowing the modal or being squeezed thin enough that iOS Safari
-   renders a date input as a blank/broken box instead of its normal
-   month/day/year + calendar-icon layout. */
 .two-col { flex-direction: row; flex-wrap: wrap; gap: 12px; }
 .two-col > div { flex: 1 1 130px; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
+
+/* Native date inputs have their own functional minimum width (room for
+   "mm/dd/yyyy" plus the calendar icon) that iOS Safari will not shrink
+   below — cramming Born and Died side by side inside the modal's ~310px
+   content width squeezed each one under that floor, and instead of
+   clipping cleanly, Safari rendered the control with no visible hint
+   text/icon at all while still laying it out at its own wider intrinsic
+   width, so it overflowed past the modal edge. Stack them (each gets the
+   full content width, comfortably above that floor) until the screen is
+   wide enough to fit both at a safe width side by side. */
+.dates-row { flex-direction: column; }
+.dates-row > div { flex: initial; min-width: 0; width: 100%; }
+@media (min-width: 480px) {
+  .dates-row { flex-direction: row; flex-wrap: nowrap; gap: 12px; }
+  .dates-row > div { flex: 1 1 0; min-width: 160px; width: auto; }
+}
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
 
 .combo {
