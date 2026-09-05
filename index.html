@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905e">
+<link rel="stylesheet" href="style.css?v=20260905f">
 </head>
 <body>
   <header class="toolbar">
@@ -41,7 +41,7 @@
         <h2 id="modalTitle">Add Person</h2>
         <button id="closeModalBtn" class="icon-btn" aria-label="Close">✕</button>
       </div>
-      <form id="personForm" class="modal-body">
+      <form id="personForm" class="modal-body" autocomplete="off">
         <input type="hidden" id="personId">
 
         <div class="form-row photo-row">
@@ -58,7 +58,7 @@
 
         <div class="form-row">
           <label for="nameInput">Full name *</label>
-          <input id="nameInput" type="text" required placeholder="e.g. Jane Doe" autocomplete="off" autocorrect="off" spellcheck="false">
+          <input id="nameInput" type="text" name="person-full-name" required placeholder="e.g. Jane Doe" autocomplete="off" autocorrect="off" spellcheck="false">
         </div>
 
         <div class="form-row two-col">
@@ -101,7 +101,7 @@
         <div class="form-row">
           <label for="locationInput">Location</label>
           <div class="location-field">
-            <input type="text" id="locationInput" placeholder="City, Country" autocomplete="off" autocorrect="off" spellcheck="false">
+            <input type="text" id="locationInput" name="person-location" placeholder="City, Country" autocomplete="off" autocorrect="off" spellcheck="false">
             <div class="combo-dropdown location-suggestions" id="locationSuggestions" hidden>
               <div class="combo-options"></div>
             </div>
@@ -193,7 +193,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905e"></script>
-  <script src="app.js?v=20260905e"></script>
+  <script src="config.js?v=20260905f"></script>
+  <script src="app.js?v=20260905f"></script>
 </body>
 </html>
