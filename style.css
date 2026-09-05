@@ -370,7 +370,12 @@ body {
   text-overflow: ellipsis;
 }
 .date-display.placeholder .date-display-text { color: var(--ink-soft); }
-.date-icon { flex-shrink: 0; font-size: 13px; }
+.date-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--ink-soft);
+}
+.date-icon svg { width: 15px; height: 15px; }
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
 
 .combo {
