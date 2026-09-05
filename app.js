@@ -2,17 +2,40 @@
   'use strict';
 
   const STORAGE_KEY = 'familytree.data.v1';
+  const SUPABASE_ROW_ID = 'main';
   const MAX_PHOTO_DIM = 300;
 
   /** @type {{people: Object<string, Person>}} */
-  let data = loadData();
+  let data = { people: {} };
 
   /** @typedef {{id:string,name:string,birthDate:string,deathDate:string,gender:string,
    *  photo:string,notes:string,parents:string[],spouses:string[]}} Person */
 
+  let supabaseClient = null;
+  let usingSupabase = false;
+
+  function isSupabaseConfigured() {
+    const cfg = window.SUPABASE_CONFIG;
+    return !!(cfg && cfg.url && cfg.anonKey);
+  }
+
+  function setSyncStatus(state) {
+    const el = els.syncStatus;
+    if (!el) return;
+    const labels = {
+      local: 'Local only',
+      connecting: 'Connecting…',
+      connected: '● Synced',
+      saving: 'Saving…',
+      error: '⚠ Sync error',
+    };
+    el.textContent = labels[state] || labels.local;
+    el.className = 'sync-status ' + state;
+  }
+
   // ---------- Persistence ----------
 
-  function loadData() {
+  function loadLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -25,13 +48,61 @@
     return { people: {} };
   }
 
-  function saveData() {
+  function saveLocal() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
       console.error('Failed to save family tree (storage may be full).', e);
       alert('Could not save changes — browser storage may be full (large photos take space).');
     }
+  }
+
+  async function loadRemote() {
+    const { data: row, error } = await supabaseClient
+      .from('family_tree')
+      .select('data')
+      .eq('id', SUPABASE_ROW_ID)
+      .maybeSingle();
+    if (error) throw error;
+    return row ? row.data : null;
+  }
+
+  async function saveRemote() {
+    const { error } = await supabaseClient
+      .from('family_tree')
+      .upsert({ id: SUPABASE_ROW_ID, data, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  }
+
+  async function saveData() {
+    if (!usingSupabase) {
+      saveLocal();
+      return;
+    }
+    setSyncStatus('saving');
+    try {
+      await saveRemote();
+      setSyncStatus('connected');
+    } catch (e) {
+      console.error('Failed to save to Supabase.', e);
+      setSyncStatus('error');
+      alert('Could not save your change to the shared tree. Check your connection and try again.');
+    }
+  }
+
+  function subscribeRealtime() {
+    supabaseClient
+      .channel('family_tree_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'family_tree', filter: `id=eq.${SUPABASE_ROW_ID}` },
+        (payload) => {
+          if (!payload.new || !payload.new.data) return;
+          data = payload.new.data;
+          render();
+        }
+      )
+      .subscribe();
   }
 
   function uid() {
@@ -47,6 +118,7 @@
     svg: document.getElementById('linesSvg'),
     emptyState: document.getElementById('emptyState'),
     searchInput: document.getElementById('searchInput'),
+    syncStatus: document.getElementById('syncStatus'),
 
     addPersonBtn: document.getElementById('addPersonBtn'),
     zoomInBtn: document.getElementById('zoomInBtn'),
@@ -263,7 +335,7 @@
 
   // ---------- Form submit / delete ----------
 
-  els.form.addEventListener('submit', (e) => {
+  els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = els.nameInput.value.trim();
     if (!name) { els.nameInput.focus(); return; }
@@ -308,7 +380,7 @@
     }
     person.spouses = Array.from(nextSpouses);
 
-    saveData();
+    await saveData();
     closeModal();
     render();
     if (isNew) highlightPerson(id);
@@ -330,7 +402,7 @@
     return false;
   }
 
-  els.deletePersonBtn.addEventListener('click', () => {
+  els.deletePersonBtn.addEventListener('click', async () => {
     const id = els.personId.value;
     if (!id) return;
     const person = data.people[id];
@@ -341,7 +413,7 @@
       p.spouses = p.spouses.filter(sid => sid !== id);
     }
     delete data.people[id];
-    saveData();
+    await saveData();
     closeModal();
     render();
   });
@@ -392,7 +464,7 @@
     const file = els.importFile.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed = JSON.parse(reader.result);
         if (!parsed || typeof parsed !== 'object' || !parsed.people) throw new Error('bad format');
@@ -406,7 +478,7 @@
             data.people[id] = p; // last write wins on id collision
           }
         }
-        saveData();
+        await saveData();
         render();
       } catch (e) {
         alert('That file does not look like a valid family tree export.');
@@ -689,12 +761,43 @@
       [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', gender: 'female', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
       [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', gender: 'male', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
     };
-    saveData();
   }
 
-  if (Object.keys(data.people).length === 0) {
-    seedSampleData();
+  // ---------- Startup ----------
+
+  async function init() {
+    usingSupabase = isSupabaseConfigured() && typeof window.supabase !== 'undefined';
+
+    if (usingSupabase) {
+      setSyncStatus('connecting');
+      try {
+        supabaseClient = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+        const remote = await loadRemote();
+        if (remote) {
+          data = remote;
+        } else {
+          seedSampleData();
+          await saveRemote();
+        }
+        setSyncStatus('connected');
+        subscribeRealtime();
+      } catch (e) {
+        console.error('Could not reach Supabase, falling back to local-only mode.', e);
+        usingSupabase = false;
+      }
+    }
+
+    if (!usingSupabase) {
+      setSyncStatus('local');
+      data = loadLocal();
+      if (Object.keys(data.people).length === 0) {
+        seedSampleData();
+        saveLocal();
+      }
+    }
+
+    render();
   }
 
-  render();
+  init();
 })();

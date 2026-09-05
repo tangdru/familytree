@@ -10,6 +10,7 @@
   <header class="toolbar">
     <h1>🌳 Family Tree</h1>
     <div class="toolbar-actions">
+      <span id="syncStatus" class="sync-status local">Local only</span>
       <input id="searchInput" type="search" placeholder="Search people…" autocomplete="off">
       <button id="addPersonBtn" class="btn btn-primary">+ Add Person</button>
       <button id="zoomOutBtn" class="btn" title="Zoom out">−</button>
@@ -111,6 +112,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
