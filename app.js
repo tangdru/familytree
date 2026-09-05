@@ -12,7 +12,7 @@
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
-  /** @typedef {{id:string,name:string,birthDate:string,deathDate:string,gender:string,
+  /** @typedef {{id:string,name:string,birthDate:string,deathDate:string,
    *  photo:string,notes:string,parents:string[],spouses:string[]}} Person */
 
   let supabaseClient = null;
@@ -150,7 +150,6 @@
     deathInput: document.getElementById('deathInput'),
     locationInput: document.getElementById('locationInput'),
     locationSuggestions: document.getElementById('locationSuggestions'),
-    genderInput: document.getElementById('genderInput'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -760,7 +759,6 @@
     parent2Combo.clear();
     spousesCombo.clear();
     els.modal.hidden = false;
-    els.nameInput.focus();
   }
 
   function openModalForEdit(personId) {
@@ -772,7 +770,6 @@
     els.birthInput.value = p.birthDate || '';
     els.deathInput.value = p.deathDate || '';
     els.locationInput.value = p.location || '';
-    els.genderInput.value = p.gender || '';
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -844,7 +841,6 @@
     person.birthDate = els.birthInput.value || '';
     person.deathDate = els.deathInput.value || '';
     person.location = els.locationInput.value.trim();
-    person.gender = els.genderInput.value || '';
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
     person.parents = parents;
@@ -1220,7 +1216,6 @@
   function buildCard(person) {
     const card = document.createElement('div');
     card.className = 'person-card';
-    if (person.gender) card.classList.add(`gender-${person.gender}`);
     if (person.deathDate) card.classList.add('deceased');
     card.dataset.id = person.id;
 
@@ -1232,7 +1227,7 @@
       img.alt = person.name;
       photo.appendChild(img);
     } else {
-      photo.textContent = person.gender === 'female' ? '👩' : person.gender === 'male' ? '👨' : '🧑';
+      photo.textContent = '🧑';
     }
 
     const info = document.createElement('div');
@@ -1355,12 +1350,12 @@
   function seedSampleData() {
     const gp1 = uid(), gp2 = uid(), parent1 = uid(), parent2 = uid(), child1 = uid(), child2 = uid();
     data.people = {
-      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', gender: 'female', photo: '', notes: '', parents: [], spouses: [gp2] },
-      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', gender: 'male', photo: '', notes: '', parents: [], spouses: [gp1] },
-      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', gender: 'female', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2] },
-      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', gender: 'male', photo: '', notes: '', parents: [], spouses: [parent1] },
-      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', gender: 'female', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
-      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', gender: 'male', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
+      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2] },
+      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', photo: '', notes: '', parents: [], spouses: [gp1] },
+      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2] },
+      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', photo: '', notes: '', parents: [], spouses: [parent1] },
+      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
+      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
     };
   }
 

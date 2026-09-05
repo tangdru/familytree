@@ -14,9 +14,6 @@
   --line: #b79f7c;
   --card-border: #d8cdb8;
   --danger: #b23a3a;
-  --female: #c96a8a;
-  --male: #4d7ea8;
-  --other: #8b6fb0;
   --shadow: 0 2px 6px rgba(60, 45, 20, 0.15);
   --radius: 10px;
 }
@@ -229,9 +226,6 @@ body {
   transform: translateY(-3px);
   box-shadow: 0 6px 14px rgba(60,45,20,0.22);
 }
-.person-card.gender-female { border-color: var(--female); }
-.person-card.gender-male { border-color: var(--male); }
-.person-card.gender-other { border-color: var(--other); }
 .person-card.deceased { filter: grayscale(0.35); opacity: 0.88; }
 .person-card.highlight {
   outline: 3px solid #ffd54a;
