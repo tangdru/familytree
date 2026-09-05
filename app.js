@@ -121,9 +121,6 @@
     syncStatus: document.getElementById('syncStatus'),
 
     addPersonBtn: document.getElementById('addPersonBtn'),
-    zoomInBtn: document.getElementById('zoomInBtn'),
-    zoomOutBtn: document.getElementById('zoomOutBtn'),
-    zoomResetBtn: document.getElementById('zoomResetBtn'),
     exportBtn: document.getElementById('exportBtn'),
 
     modal: document.getElementById('personModal'),
@@ -303,15 +300,7 @@
     view.x = ax - worldX * view.scale;
     view.y = ay - worldY * view.scale;
     applyTransform();
-    els.zoomResetBtn.textContent = Math.round(view.scale * 100) + '%';
   }
-
-  els.zoomInBtn.addEventListener('click', () => setZoom(view.scale + 0.1));
-  els.zoomOutBtn.addEventListener('click', () => setZoom(view.scale - 0.1));
-  els.zoomResetBtn.addEventListener('click', () => {
-    view.scale = 1; view.x = 40; view.y = 20; applyTransform();
-    els.zoomResetBtn.textContent = '100%';
-  });
 
   els.viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
