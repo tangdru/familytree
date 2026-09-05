@@ -341,9 +341,18 @@
       optionsEl.innerHTML = '';
     }
 
-    function renderSuggestions(names) {
+    function showMessage(text) {
       optionsEl.innerHTML = '';
-      if (!names.length) { hideSuggestions(); return; }
+      const msg = document.createElement('div');
+      msg.className = 'combo-option-empty';
+      msg.textContent = text;
+      optionsEl.appendChild(msg);
+      list.hidden = false;
+    }
+
+    function renderSuggestions(names) {
+      if (!names.length) { showMessage('No matches'); return; }
+      optionsEl.innerHTML = '';
       for (const name of names) {
         const item = document.createElement('div');
         item.className = 'combo-option';
@@ -359,16 +368,17 @@
 
     async function fetchSuggestions(query) {
       const token = ++requestToken;
+      showMessage('Searching…');
       try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=${encodeURIComponent(query)}`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error('Nominatim request failed');
+        if (!res.ok) throw new Error(`Nominatim request failed (${res.status})`);
         const results = await res.json();
         if (token !== requestToken) return; // superseded by a newer query
         renderSuggestions(results.map(r => r.display_name));
       } catch (e) {
         console.warn('Location lookup failed', e);
-        if (token === requestToken) hideSuggestions();
+        if (token === requestToken) showMessage("Couldn't load suggestions — you can still type a location");
       }
     }
 
