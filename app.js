@@ -148,6 +148,8 @@
     nameInput: document.getElementById('nameInput'),
     birthInput: document.getElementById('birthInput'),
     deathInput: document.getElementById('deathInput'),
+    birthDisplayText: document.querySelector('#birthDisplay .date-display-text'),
+    deathDisplayText: document.querySelector('#deathDisplay .date-display-text'),
     locationInput: document.getElementById('locationInput'),
     locationSuggestions: document.getElementById('locationSuggestions'),
     notesInput: document.getElementById('notesInput'),
@@ -745,6 +747,24 @@
   });
   els.cropViewport.addEventListener('touchcancel', () => { cropTouchMode = null; });
 
+  // ---------- Date field display (custom-rendered, see .date-display in style.css) ----------
+
+  function formatDateDisplay(value) {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date);
+  }
+
+  function updateDateDisplay(inputEl, textEl) {
+    const formatted = formatDateDisplay(inputEl.value);
+    textEl.textContent = formatted || 'mm/dd/yyyy';
+    textEl.closest('.date-display').classList.toggle('placeholder', !formatted);
+  }
+
+  els.birthInput.addEventListener('change', () => updateDateDisplay(els.birthInput, els.birthDisplayText));
+  els.deathInput.addEventListener('change', () => updateDateDisplay(els.deathInput, els.deathDisplayText));
+
   // ---------- Modal open/close ----------
 
   function openModalForAdd() {
@@ -752,6 +772,8 @@
     els.personId.value = '';
     pendingPhoto = null;
     showPhotoPreview(null);
+    updateDateDisplay(els.birthInput, els.birthDisplayText);
+    updateDateDisplay(els.deathInput, els.deathDisplayText);
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
@@ -769,6 +791,8 @@
     els.nameInput.value = p.name || '';
     els.birthInput.value = p.birthDate || '';
     els.deathInput.value = p.deathDate || '';
+    updateDateDisplay(els.birthInput, els.birthDisplayText);
+    updateDateDisplay(els.deathInput, els.deathDisplayText);
     els.locationInput.value = p.location || '';
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;

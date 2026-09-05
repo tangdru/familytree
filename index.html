@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905">
+<link rel="stylesheet" href="style.css?v=20260905c">
 </head>
 <body>
   <header class="toolbar">
@@ -64,11 +64,23 @@
         <div class="form-row two-col">
           <div>
             <label for="birthInput">Born</label>
-            <input id="birthInput" type="date">
+            <div class="date-field">
+              <input id="birthInput" type="date">
+              <div class="date-display placeholder" id="birthDisplay" aria-hidden="true">
+                <span class="date-display-text">mm/dd/yyyy</span>
+                <span class="date-icon">📅</span>
+              </div>
+            </div>
           </div>
           <div>
             <label for="deathInput">Died</label>
-            <input id="deathInput" type="date">
+            <div class="date-field">
+              <input id="deathInput" type="date">
+              <div class="date-display placeholder" id="deathDisplay" aria-hidden="true">
+                <span class="date-display-text">mm/dd/yyyy</span>
+                <span class="date-icon">📅</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -167,7 +179,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905"></script>
-  <script src="app.js?v=20260905"></script>
+  <script src="config.js?v=20260905c"></script>
+  <script src="app.js?v=20260905c"></script>
 </body>
 </html>
