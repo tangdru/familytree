@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905f">
+<link rel="stylesheet" href="style.css?v=20260905g">
 </head>
 <body>
   <header class="toolbar">
@@ -57,8 +57,8 @@
         </div>
 
         <div class="form-row">
-          <label for="nameInput">Full name *</label>
-          <input id="nameInput" type="text" name="person-full-name" required placeholder="e.g. Jane Doe" autocomplete="off" autocorrect="off" spellcheck="false">
+          <label id="nameLabel">Full name *</label>
+          <div id="nameInput" class="editable-text" contenteditable="true" role="textbox" aria-labelledby="nameLabel" data-placeholder="e.g. Jane Doe" autocorrect="off" spellcheck="false"></div>
         </div>
 
         <div class="form-row two-col">
@@ -99,9 +99,9 @@
         </div>
 
         <div class="form-row">
-          <label for="locationInput">Location</label>
+          <label id="locationLabel">Location</label>
           <div class="location-field">
-            <input type="text" id="locationInput" name="person-location" placeholder="City, Country" autocomplete="off" autocorrect="off" spellcheck="false">
+            <div id="locationInput" class="editable-text" contenteditable="true" role="textbox" aria-labelledby="locationLabel" data-placeholder="City, Country" autocorrect="off" spellcheck="false"></div>
             <div class="combo-dropdown location-suggestions" id="locationSuggestions" hidden>
               <div class="combo-options"></div>
             </div>
@@ -193,7 +193,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905f"></script>
-  <script src="app.js?v=20260905f"></script>
+  <script src="config.js?v=20260905g"></script>
+  <script src="app.js?v=20260905g"></script>
 </body>
 </html>
