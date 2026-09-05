@@ -885,6 +885,15 @@
     return parentIds.slice().sort().join('+') || '_none_';
   }
 
+  // Siblings order oldest to youngest by birth date; undated people sort
+  // after dated ones, falling back to name so the order stays stable.
+  function compareByBirth(a, b) {
+    if (a.birthDate && b.birthDate) return a.birthDate.localeCompare(b.birthDate);
+    if (a.birthDate) return -1;
+    if (b.birthDate) return 1;
+    return a.name.localeCompare(b.name);
+  }
+
   function computeOrder(levels) {
     const people = data.people;
     const maxLevel = Object.values(levels).reduce((m, v) => Math.max(m, v), 0);
@@ -915,14 +924,14 @@
       for (const parentId of prevRow) {
         const children = Object.values(people)
           .filter(p => levels[p.id] === lvl && p.parents.includes(parentId))
-          .sort((a, b) => a.name.localeCompare(b.name));
+          .sort(compareByBirth);
         for (const child of children) {
           const fkey = familyKey(child.parents);
           if (seenFamilies.has(fkey)) continue;
           seenFamilies.add(fkey);
           const siblings = Object.values(people)
             .filter(p => levels[p.id] === lvl && familyKey(p.parents) === fkey)
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort(compareByBirth);
           for (const sib of siblings) placeWithSpouses(sib.id, row);
         }
       }
