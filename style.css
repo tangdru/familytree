@@ -1,4 +1,10 @@
 :root {
+  /* Tells the browser this page supports both themes and to draw native
+     control chrome (date pickers, select arrows, etc.) accordingly,
+     instead of guessing — a mismatch here is a likely cause of a native
+     date input's own internal "mm/dd/yyyy" hint rendering with too little
+     contrast against whatever background it falls back to. */
+  color-scheme: light dark;
   --bg: #f4f1ea;
   --surface: #ffffff;
   --ink: #2b2620;
@@ -307,6 +313,14 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
+  /* Explicit, not inherited: applying a custom border/radius to a native
+     control (date input, select) can make iOS Safari fall back to its own
+     internal control colors for whatever it still draws itself (the
+     mm/dd/yyyy hint, the calendar icon) instead of the page's colors —
+     and if that happens to render low- or no-contrast against its own
+     fill, the field looks like a solid blank box even though it isn't. */
+  background: var(--surface);
+  color: var(--ink);
   /* 16px, not a smaller rem value: iOS Safari auto-zooms the whole page in
      on focus for any text input under 16px, and doesn't reliably zoom back
      out once the modal containing it closes — which was the real cause of
