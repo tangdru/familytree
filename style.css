@@ -323,14 +323,23 @@ body {
 .combo {
   position: relative;
 }
-.combo-search {
+/* A real <button>, not a text input: tapping it must never raise the
+   on-screen keyboard — only the .combo-filter inside the open dropdown
+   should do that, and only once someone deliberately taps it. */
+.combo-trigger {
+  display: block;
+  width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
-  font-size: 16px; /* prevent iOS Safari auto-zoom-on-focus; see .form-row inputs */
+  background: var(--surface);
+  font-size: 16px;
   font-family: inherit;
-  width: 100%;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
 }
+.combo-trigger.placeholder .combo-trigger-text { color: var(--ink-soft); }
 .combo-clear {
   position: absolute;
   right: 6px;
@@ -351,19 +360,33 @@ body {
   background: var(--surface);
   border: 1px solid var(--card-border);
   border-radius: 6px;
-  max-height: 180px;
-  overflow-y: auto;
   z-index: 50;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.combo-filter {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--card-border);
+  border-radius: 6px 6px 0 0;
+  font-size: 16px;
+  font-family: inherit;
+  background: var(--bg);
+}
+.combo-options {
+  max-height: 180px;
+  overflow-y: auto;
 }
 .combo-option {
-  padding: 7px 10px;
+  padding: 9px 10px;
   cursor: pointer;
   font-size: 0.87rem;
 }
 .combo-option:hover { background: #f1ead9; }
 .combo-option-empty {
-  padding: 7px 10px;
+  padding: 9px 10px;
   font-size: 0.85rem;
   font-style: italic;
   color: var(--ink-soft);
