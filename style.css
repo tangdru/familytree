@@ -138,20 +138,7 @@ body {
 
 .tree-content {
   position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 60px;
 }
-
-.tree-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 26px;
-  margin-bottom: 70px;
-}
-
-.spouse-gap { gap: 10px !important; }
 
 .empty-state {
   position: absolute;
@@ -166,6 +153,7 @@ body {
 
 /* ---------- Person card ---------- */
 .person-card {
+  position: absolute;
   width: 150px;
   background: var(--surface);
   border: 2px solid var(--card-border);

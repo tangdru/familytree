@@ -762,6 +762,92 @@
     return rows;
   }
 
+  // ---------- Centered tree layout ----------
+
+  const CARD_WIDTH = 150; // must match .person-card { width } in style.css
+  const SPOUSE_GAP = 16; // gap between the two cards of a couple
+  const SIBLING_GAP = 30; // gap between distinct sibling/couple clusters
+  const ROW_GAP = 70; // vertical gap between generations
+  const MARGIN = 60;
+
+  // Groups each row into clusters (a lone person, or a spouse pair that must
+  // render side by side), then gives each cluster a subtree width and an x
+  // center so that every parent cluster sits centered above its children —
+  // a couple's own width may be narrower than its children need, in which
+  // case the couple is centered over the wider children span, and vice versa.
+  function buildClusters(rows) {
+    const personToCluster = {};
+    const clustersByLevel = rows.map((row, level) => {
+      const clusters = [];
+      const used = new Set();
+      for (let i = 0; i < row.length; i++) {
+        const id = row[i];
+        if (used.has(id)) continue;
+        used.add(id);
+        const next = row[i + 1];
+        let members;
+        if (next && !used.has(next) && data.people[id].spouses.includes(next)) {
+          used.add(next);
+          members = [id, next];
+        } else {
+          members = [id];
+        }
+        const cluster = { members, level, children: [], width: 0, ownWidth: 0, x: 0 };
+        clusters.push(cluster);
+        for (const m of members) personToCluster[m] = cluster;
+      }
+      return clusters;
+    });
+
+    // Attach each child cluster to the cluster containing its first parent.
+    for (let level = 1; level < rows.length; level++) {
+      for (const id of rows[level]) {
+        const firstParent = data.people[id].parents[0];
+        if (!firstParent || !data.people[firstParent]) continue;
+        const parentCluster = personToCluster[firstParent];
+        const childCluster = personToCluster[id];
+        if (parentCluster && !parentCluster.children.includes(childCluster)) {
+          parentCluster.children.push(childCluster);
+        }
+      }
+    }
+
+    // Subtree widths, deepest generation first.
+    for (let level = clustersByLevel.length - 1; level >= 0; level--) {
+      for (const cluster of clustersByLevel[level]) {
+        cluster.ownWidth = cluster.members.length === 2 ? CARD_WIDTH * 2 + SPOUSE_GAP : CARD_WIDTH;
+        if (cluster.children.length === 0) {
+          cluster.width = cluster.ownWidth;
+        } else {
+          const childrenWidth = cluster.children.reduce((sum, c) => sum + c.width, 0)
+            + SIBLING_GAP * (cluster.children.length - 1);
+          cluster.width = Math.max(cluster.ownWidth, childrenWidth);
+        }
+      }
+    }
+
+    // X centers, root generation first, then each cluster centers its children.
+    let cursorX = MARGIN;
+    for (const cluster of clustersByLevel[0] || []) {
+      cluster.x = cursorX + cluster.width / 2;
+      cursorX += cluster.width + SIBLING_GAP;
+    }
+    for (const row of clustersByLevel) {
+      for (const cluster of row) {
+        if (!cluster.children.length) continue;
+        const childrenWidth = cluster.children.reduce((sum, c) => sum + c.width, 0)
+          + SIBLING_GAP * (cluster.children.length - 1);
+        let childX = cluster.x - childrenWidth / 2;
+        for (const child of cluster.children) {
+          child.x = childX + child.width / 2;
+          childX += child.width + SIBLING_GAP;
+        }
+      }
+    }
+
+    return clustersByLevel;
+  }
+
   // ---------- Rendering ----------
 
   function render() {
@@ -773,15 +859,42 @@
 
     const levels = computeLevels();
     const rows = computeOrder(levels);
+    const clustersByLevel = buildClusters(rows);
 
+    const cardEls = {};
     for (const row of rows) {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'tree-row';
       for (const id of row) {
-        rowEl.appendChild(buildCard(data.people[id]));
+        const card = buildCard(data.people[id]);
+        els.content.appendChild(card);
+        cardEls[id] = card;
       }
-      els.content.appendChild(rowEl);
     }
+
+    // Row heights depend on rendered card height (names can wrap), so
+    // measure now that cards are in the DOM, before positioning them.
+    const rowHeight = rows.map(row => row.reduce((max, id) => Math.max(max, cardEls[id].offsetHeight), 0));
+    const rowY = [];
+    let y = MARGIN;
+    for (let i = 0; i < rows.length; i++) {
+      rowY.push(y);
+      y += rowHeight[i] + ROW_GAP;
+    }
+
+    let maxRight = 0;
+    for (const row of clustersByLevel) {
+      for (const cluster of row) {
+        const leftEdge = cluster.x - cluster.ownWidth / 2;
+        cluster.members.forEach((id, i) => {
+          const left = leftEdge + i * (CARD_WIDTH + SPOUSE_GAP);
+          cardEls[id].style.left = `${left}px`;
+          cardEls[id].style.top = `${rowY[cluster.level]}px`;
+          maxRight = Math.max(maxRight, left + CARD_WIDTH);
+        });
+      }
+    }
+
+    els.content.style.width = `${maxRight + MARGIN}px`;
+    els.content.style.height = `${y - ROW_GAP + MARGIN}px`;
 
     // Draw connecting lines after layout so we can measure real positions.
     requestAnimationFrame(drawLines);
