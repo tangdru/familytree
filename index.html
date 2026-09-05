@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Tree</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <h1>🌳 Family Tree</h1>
+    <div class="toolbar-actions">
+      <span id="syncStatus" class="sync-status local">Local only</span>
+      <input id="searchInput" type="search" placeholder="Search people…" autocomplete="off">
+      <button id="addPersonBtn" class="btn btn-primary">+ Add Person</button>
+      <button id="zoomOutBtn" class="btn" title="Zoom out">−</button>
+      <button id="zoomResetBtn" class="btn" title="Reset view">100%</button>
+      <button id="zoomInBtn" class="btn" title="Zoom in">+</button>
+      <button id="exportBtn" class="btn">Export</button>
+      <button id="importBtn" class="btn">Import</button>
+      <input id="importFile" type="file" accept="application/json" hidden>
+    </div>
+  </header>
+
+  <main id="treeViewport" class="tree-viewport">
+    <div id="treeCanvas" class="tree-canvas">
+      <svg id="linesSvg" class="lines-svg"></svg>
+      <div id="treeContent" class="tree-content"></div>
+    </div>
+    <p id="emptyState" class="empty-state" hidden>
+      No one in the tree yet. Click <strong>+ Add Person</strong> to start building your family tree.
+    </p>
+  </main>
+
+  <!-- Add / Edit Person Modal -->
+  <div id="personModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Person</h2>
+        <button id="closeModalBtn" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <form id="personForm" class="modal-body">
+        <input type="hidden" id="personId">
+
+        <div class="form-row photo-row">
+          <div class="photo-preview" id="photoPreview">
+            <span id="photoPlaceholder">📷</span>
+            <img id="photoImg" alt="" hidden>
+          </div>
+          <div class="photo-controls">
+            <label class="btn" for="photoInput">Choose Photo</label>
+            <input id="photoInput" type="file" accept="image/*" hidden>
+            <button type="button" id="removePhotoBtn" class="btn btn-subtle">Remove</button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="nameInput">Full name *</label>
+          <input id="nameInput" type="text" required placeholder="e.g. Jane Doe">
+        </div>
+
+        <div class="form-row two-col">
+          <div>
+            <label for="birthInput">Born</label>
+            <input id="birthInput" type="date">
+          </div>
+          <div>
+            <label for="deathInput">Died</label>
+            <input id="deathInput" type="date">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="genderInput">Gender</label>
+          <select id="genderInput">
+            <option value="">Unspecified</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-row two-col">
+          <div>
+            <label for="parent1Input">Parent 1</label>
+            <select id="parent1Input"><option value="">—</option></select>
+          </div>
+          <div>
+            <label for="parent2Input">Parent 2</label>
+            <select id="parent2Input"><option value="">—</option></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="spousesInput">Spouse(s) / Partner(s)</label>
+          <select id="spousesInput" multiple size="4"></select>
+          <small class="hint">Ctrl/Cmd-click to select multiple</small>
+        </div>
+
+        <div class="form-row">
+          <label for="notesInput">Notes</label>
+          <textarea id="notesInput" rows="2" placeholder="Optional notes"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="deletePersonBtn" class="btn btn-danger">Delete</button>
+          <div class="spacer"></div>
+          <button type="button" id="cancelBtn" class="btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
