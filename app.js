@@ -1088,21 +1088,27 @@
   }
 
   function drawLines() {
-    const contentRect = els.content.getBoundingClientRect();
     const svg = els.svg;
     svg.innerHTML = '';
 
+    // Use layout coordinates (offsetLeft/Top/Width/Height), not
+    // getBoundingClientRect(): the SVG lives inside the same panned/zoomed
+    // #treeCanvas as the cards, so screen-space (post-transform) coordinates
+    // would get scaled a second time when the browser paints the SVG,
+    // squashing or exploding the lines away from the cards whenever
+    // view.scale != 1. offsetLeft/Top are relative to #treeContent (the
+    // nearest positioned ancestor) and are transform-independent, matching
+    // how cards were positioned in the first place.
     const cardRect = (id) => {
       const el = els.content.querySelector(`[data-id="${id}"]`);
       if (!el) return null;
-      const r = el.getBoundingClientRect();
       return {
-        left: r.left - contentRect.left,
-        top: r.top - contentRect.top,
-        right: r.right - contentRect.left,
-        bottom: r.bottom - contentRect.top,
-        centerX: r.left - contentRect.left + r.width / 2,
-        centerY: r.top - contentRect.top + r.height / 2,
+        left: el.offsetLeft,
+        top: el.offsetTop,
+        right: el.offsetLeft + el.offsetWidth,
+        bottom: el.offsetTop + el.offsetHeight,
+        centerX: el.offsetLeft + el.offsetWidth / 2,
+        centerY: el.offsetTop + el.offsetHeight / 2,
       };
     };
 
