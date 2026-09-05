@@ -619,10 +619,12 @@
       els.photoImg.src = dataUrl;
       els.photoImg.hidden = false;
       els.photoPlaceholder.hidden = true;
+      els.removePhotoBtn.hidden = false;
     } else {
       els.photoImg.hidden = true;
       els.photoImg.src = '';
       els.photoPlaceholder.hidden = false;
+      els.removePhotoBtn.hidden = true;
     }
   }
 
