@@ -303,6 +303,23 @@
   }
   applyTransform();
 
+  // Zoom/pan so the whole tree is visible, centered in the viewport. Called
+  // once after the initial render (never on later re-renders, so it doesn't
+  // yank the view out from under someone who's already panned/zoomed).
+  function fitToView() {
+    const vw = els.viewport.clientWidth;
+    const vh = els.viewport.clientHeight;
+    const cw = els.content.offsetWidth;
+    const ch = els.content.offsetHeight;
+    if (!vw || !vh || !cw || !ch) return;
+    const padding = 24;
+    const scale = Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1);
+    view.scale = Math.max(0.3, scale);
+    view.x = (vw - cw * view.scale) / 2;
+    view.y = (vh - ch * view.scale) / 2;
+    applyTransform();
+  }
+
   function setZoom(newScale, anchorClientX, anchorClientY) {
     newScale = Math.min(2, Math.max(0.3, newScale));
     const rect = els.viewport.getBoundingClientRect();
@@ -1244,7 +1261,16 @@
     }
 
     render();
+    fitToView();
   }
+
+  // Re-fit when the page is restored from the browser's back-forward cache
+  // (e.g. returning to an already-open tab on iOS Safari): bfcache resumes
+  // the exact prior JS state rather than re-running this script, so without
+  // this the view could still be wherever it was left panned/zoomed before.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) fitToView();
+  });
 
   init();
 })();
