@@ -29,12 +29,12 @@
     const labels = {
       local: 'Local only',
       connecting: 'Connecting…',
-      connected: '● Synced',
+      connected: 'Synced',
       saving: 'Saving…',
-      error: '⚠ Sync error',
+      error: 'Sync error',
     };
-    el.textContent = labels[state] || labels.local;
-    el.className = 'sync-status ' + state;
+    el.title = labels[state] || labels.local;
+    el.className = 'sync-dot ' + state;
   }
 
   // ---------- Persistence ----------
@@ -122,6 +122,8 @@
     svg: document.getElementById('linesSvg'),
     emptyState: document.getElementById('emptyState'),
     searchInput: document.getElementById('searchInput'),
+    searchWrap: document.getElementById('searchWrap'),
+    searchToggleBtn: document.getElementById('searchToggleBtn'),
     syncStatus: document.getElementById('syncStatus'),
 
     addPersonBtn: document.getElementById('addPersonBtn'),
@@ -775,6 +777,30 @@
         card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       }
     }
+  });
+
+  function openSearch() {
+    els.searchWrap.classList.add('open');
+    els.searchToggleBtn.setAttribute('aria-expanded', 'true');
+    els.searchInput.focus();
+  }
+
+  function closeSearch() {
+    els.searchWrap.classList.remove('open');
+    els.searchToggleBtn.setAttribute('aria-expanded', 'false');
+    els.searchInput.value = '';
+    document.querySelectorAll('.person-card.highlight').forEach(el => el.classList.remove('highlight'));
+  }
+
+  els.searchToggleBtn.addEventListener('click', () => {
+    if (els.searchWrap.classList.contains('open')) closeSearch();
+    else openSearch();
+  });
+  els.searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSearch();
+  });
+  els.searchInput.addEventListener('blur', () => {
+    if (!els.searchInput.value) closeSearch();
   });
 
   // ---------- Export ----------

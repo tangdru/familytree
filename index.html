@@ -8,13 +8,17 @@
 </head>
 <body>
   <header class="toolbar">
-    <h1>🌳 Family Tree</h1>
-    <div class="toolbar-actions">
-      <span id="syncStatus" class="sync-status local">Local only</span>
-      <input id="searchInput" type="search" placeholder="Search people…" autocomplete="off">
-      <button id="addPersonBtn" class="btn btn-primary">+ Add Person</button>
-      <button id="exportBtn" class="btn">Export JSON</button>
+    <button id="addPersonBtn" class="toolbar-add-btn" aria-label="Add person" title="Add person">+</button>
+    <div class="search-wrap" id="searchWrap">
+      <button id="searchToggleBtn" class="search-toggle-btn" type="button" aria-label="Search" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+      <input id="searchInput" class="search-input" type="search" placeholder="Search people…" autocomplete="off">
     </div>
+    <div class="toolbar-spacer"></div>
+    <span id="syncStatus" class="sync-dot local" title="Local only"></span>
+    <h1 class="toolbar-title">Family Tree</h1>
+    <button id="exportBtn" class="btn" hidden>Export JSON</button>
   </header>
 
   <main id="treeViewport" class="tree-viewport">
