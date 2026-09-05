@@ -96,6 +96,7 @@ body {
   align-items: center;
   gap: 4px;
 }
+.btn[hidden] { display: none; }
 .btn:hover { background: #f1ead9; border-color: var(--accent); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
@@ -272,6 +273,81 @@ body {
 .two-col { flex-direction: row; gap: 12px; }
 .two-col > div { flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
+
+.combo {
+  position: relative;
+}
+.combo-search {
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  width: 100%;
+}
+.combo-clear {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 4px 6px;
+}
+.combo-clear:hover { color: var(--danger); }
+.combo-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: var(--shadow);
+}
+.combo-option {
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 0.87rem;
+}
+.combo-option:hover { background: #f1ead9; }
+.combo-option-empty {
+  padding: 7px 10px;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.combo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.combo-chips:not(:empty) { margin-bottom: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f1ead9;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+  font-size: 0.8rem;
+}
+.chip button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 2px;
+}
+.chip button:hover { color: var(--danger); }
 
 .photo-row {
   flex-direction: row;
