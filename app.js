@@ -690,6 +690,9 @@
   }
 
   function closeModal() {
+    if (document.activeElement && els.modal.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     els.modal.hidden = true;
     resetPageScroll();
   }
@@ -721,6 +724,9 @@
     e.preventDefault();
     const name = els.nameInput.value.trim();
     if (!name) { els.nameInput.focus(); return; }
+    // Blur now (rather than waiting for closeModal) so the on-screen
+    // keyboard has the whole saveData() round-trip to finish dismissing.
+    if (document.activeElement) document.activeElement.blur();
 
     const id = els.personId.value || uid();
     const isNew = !els.personId.value;
@@ -1305,6 +1311,18 @@
   window.addEventListener('pageshow', (e) => {
     if (e.persisted) fitToView();
   });
+
+  // Mobile Safari resizes the visual viewport when the on-screen keyboard
+  // shows/hides, and that resize can leave the page scrolled even after our
+  // own modal-close reset already ran — the keyboard's dismiss animation
+  // finishes asynchronously, after that reset. Reacting to the resize event
+  // itself (rather than guessing a delay) catches that trailing scroll
+  // whenever it actually settles, as long as no dialog is open.
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (els.modal.hidden && els.cropModal.hidden) resetPageScroll();
+    });
+  }
 
   init();
 })();
