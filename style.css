@@ -302,7 +302,8 @@ body {
 .form-row label { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
 .form-row input[type=text],
 .form-row select,
-.form-row textarea {
+.form-row textarea,
+.editable-text {
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
@@ -323,6 +324,22 @@ body {
   width: 100%;
 }
 .form-row select[multiple] { height: auto; }
+
+/* Full name/Location: a plain contenteditable div, not an <input>, so iOS
+   Safari's Contacts/AutoFill heuristic (which kept suggesting to fill the
+   Name field from the Contacts app, unrelated to and unaffected by
+   autocomplete="off") has no native form field to key off of at all. We
+   draw our own placeholder since contenteditable has no native one. */
+.editable-text {
+  min-height: 1.4em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.editable-text.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-soft);
+  pointer-events: none;
+}
 .two-col { flex-direction: row; flex-wrap: wrap; gap: 12px; }
 .two-col > div { flex: 1 1 130px; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
 

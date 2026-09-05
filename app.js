@@ -171,6 +171,40 @@
 
   let pendingPhoto = null; // dataURL currently staged in the form
 
+  // ---------- Editable-text fields (Full name / Location) ----------
+  // Plain contenteditable divs rather than <input> -- see .editable-text in
+  // style.css for why. They don't participate in form.reset() or native
+  // .value, so read/write goes through these helpers everywhere instead.
+
+  function getEditableText(el) {
+    return el.textContent.trim();
+  }
+
+  function updateEditablePlaceholder(el) {
+    el.classList.toggle('is-empty', el.textContent.trim() === '');
+  }
+
+  function setEditableText(el, value) {
+    el.textContent = value || '';
+    updateEditablePlaceholder(el);
+  }
+
+  function setupEditableText(el) {
+    updateEditablePlaceholder(el);
+    el.addEventListener('input', () => updateEditablePlaceholder(el));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    el.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+  }
+
+  setupEditableText(els.nameInput);
+  setupEditableText(els.locationInput);
+
   // ---------- Searchable combo (parent / spouse pickers) ----------
 
   // Tapping the trigger opens a scrollable list immediately, with no
@@ -359,7 +393,7 @@
         item.className = 'combo-option';
         item.textContent = name;
         item.addEventListener('click', () => {
-          input.value = name;
+          setEditableText(input, name);
           hideSuggestions();
         });
         optionsEl.appendChild(item);
@@ -384,7 +418,7 @@
     }
 
     input.addEventListener('input', () => {
-      const q = input.value.trim();
+      const q = getEditableText(input);
       clearTimeout(debounceTimer);
       if (q.length < 3) { hideSuggestions(); return; }
       debounceTimer = setTimeout(() => fetchSuggestions(q), 400);
@@ -770,6 +804,8 @@
   function openModalForAdd() {
     els.form.reset();
     els.personId.value = '';
+    setEditableText(els.nameInput, '');
+    setEditableText(els.locationInput, '');
     pendingPhoto = null;
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
@@ -788,12 +824,12 @@
     if (!p) return;
     els.form.reset();
     els.personId.value = p.id;
-    els.nameInput.value = p.name || '';
+    setEditableText(els.nameInput, p.name || '');
     els.birthInput.value = p.birthDate || '';
     els.deathInput.value = p.deathDate || '';
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    els.locationInput.value = p.location || '';
+    setEditableText(els.locationInput, p.location || '');
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -839,7 +875,7 @@
 
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = els.nameInput.value.trim();
+    const name = getEditableText(els.nameInput);
     if (!name) { els.nameInput.focus(); return; }
     // Blur now (rather than waiting for closeModal) so the on-screen
     // keyboard has the whole saveData() round-trip to finish dismissing.
@@ -864,7 +900,7 @@
     person.name = name;
     person.birthDate = els.birthInput.value || '';
     person.deathDate = els.deathInput.value || '';
-    person.location = els.locationInput.value.trim();
+    person.location = getEditableText(els.locationInput);
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
     person.parents = parents;
