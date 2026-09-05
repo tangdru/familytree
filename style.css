@@ -165,6 +165,7 @@ body {
   padding: 4px 8px; border-radius: 6px;
 }
 .icon-btn:hover { background: #f1ead9; }
+.icon-btn svg { display: block; width: 16px; height: 16px; }
 
 /* ---------- Tree viewport ---------- */
 .tree-viewport {
@@ -444,10 +445,21 @@ body {
   box-shadow: var(--shadow);
   overflow: hidden;
 }
+.combo-filter-wrap { position: relative; }
+.combo-filter-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-soft);
+  pointer-events: none;
+  display: flex;
+}
+.combo-filter-icon svg { width: 15px; height: 15px; }
 .combo-filter {
   display: block;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 32px;
   border: none;
   border-bottom: 1px solid var(--card-border);
   border-radius: 6px 6px 0 0;
@@ -507,17 +519,19 @@ body {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: #eee2c9;
+  background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
   overflow: hidden;
   flex-shrink: 0;
-  border: 2px solid var(--card-border);
+  border: 1px solid var(--card-border);
+  color: var(--ink-soft);
 }
 .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
-.photo-controls { display: flex; flex-direction: column; gap: 6px; }
+#photoPlaceholder { display: flex; }
+#photoPlaceholder svg { width: 30px; height: 30px; }
+.photo-controls { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 
 .modal-footer {
   display: flex;
@@ -573,5 +587,4 @@ body {
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
-  .photo-preview { background: #3a3324; }
 }

@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905g">
+<link rel="stylesheet" href="style.css?v=20260905h">
 </head>
 <body>
   <header class="toolbar">
@@ -46,13 +46,26 @@
 
         <div class="form-row photo-row">
           <div class="photo-preview" id="photoPreview">
-            <span id="photoPlaceholder">📷</span>
+            <span id="photoPlaceholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+            </span>
             <img id="photoImg" alt="" hidden>
           </div>
           <div class="photo-controls">
             <label class="btn" for="photoInput">Choose Photo</label>
             <input id="photoInput" type="file" accept="image/*" hidden>
-            <button type="button" id="removePhotoBtn" class="btn btn-subtle">Remove</button>
+            <button type="button" id="removePhotoBtn" class="icon-btn" aria-label="Remove photo" title="Remove photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -117,7 +130,12 @@
               </button>
               <button type="button" class="combo-clear" id="parent1Clear" aria-label="Clear parent 1" hidden>✕</button>
               <div class="combo-dropdown" id="parent1Dropdown" hidden>
-                <input type="text" class="combo-filter" placeholder="Type to filter…" autocomplete="off">
+                <div class="combo-filter-wrap">
+                  <span class="combo-filter-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  </span>
+                  <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
+                </div>
                 <div class="combo-options"></div>
               </div>
             </div>
@@ -130,7 +148,12 @@
               </button>
               <button type="button" class="combo-clear" id="parent2Clear" aria-label="Clear parent 2" hidden>✕</button>
               <div class="combo-dropdown" id="parent2Dropdown" hidden>
-                <input type="text" class="combo-filter" placeholder="Type to filter…" autocomplete="off">
+                <div class="combo-filter-wrap">
+                  <span class="combo-filter-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  </span>
+                  <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
+                </div>
                 <div class="combo-options"></div>
               </div>
             </div>
@@ -145,7 +168,12 @@
               <span class="combo-trigger-text">Add spouse/partner…</span>
             </button>
             <div class="combo-dropdown" id="spousesDropdown" hidden>
-              <input type="text" class="combo-filter" placeholder="Type to filter…" autocomplete="off">
+              <div class="combo-filter-wrap">
+                <span class="combo-filter-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
+              </div>
               <div class="combo-options"></div>
             </div>
           </div>
@@ -193,7 +221,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905g"></script>
-  <script src="app.js?v=20260905g"></script>
+  <script src="config.js?v=20260905h"></script>
+  <script src="app.js?v=20260905h"></script>
 </body>
 </html>
