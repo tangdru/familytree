@@ -125,8 +125,6 @@
     zoomOutBtn: document.getElementById('zoomOutBtn'),
     zoomResetBtn: document.getElementById('zoomResetBtn'),
     exportBtn: document.getElementById('exportBtn'),
-    importBtn: document.getElementById('importBtn'),
-    importFile: document.getElementById('importFile'),
 
     modal: document.getElementById('personModal'),
     modalTitle: document.getElementById('modalTitle'),
@@ -616,7 +614,7 @@
     }
   });
 
-  // ---------- Export / Import ----------
+  // ---------- Export ----------
 
   els.exportBtn.addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -628,36 +626,6 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  });
-
-  els.importBtn.addEventListener('click', () => els.importFile.click());
-  els.importFile.addEventListener('change', () => {
-    const file = els.importFile.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        if (!parsed || typeof parsed !== 'object' || !parsed.people) throw new Error('bad format');
-        const mode = Object.keys(data.people).length
-          ? confirm('Replace the current tree with the imported file?\nOK = Replace, Cancel = Merge')
-          : true;
-        if (mode) {
-          data = { people: parsed.people };
-        } else {
-          for (const [id, p] of Object.entries(parsed.people)) {
-            data.people[id] = p; // last write wins on id collision
-          }
-        }
-        await saveData();
-        render();
-      } catch (e) {
-        alert('That file does not look like a valid family tree export.');
-      } finally {
-        els.importFile.value = '';
-      }
-    };
-    reader.readAsText(file);
   });
 
   // ---------- Layout ----------
