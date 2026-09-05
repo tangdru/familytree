@@ -307,7 +307,11 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
-  font-size: 0.9rem;
+  /* 16px, not a smaller rem value: iOS Safari auto-zooms the whole page in
+     on focus for any text input under 16px, and doesn't reliably zoom back
+     out once the modal containing it closes — which was the real cause of
+     the header appearing to vanish after Save, not a scroll issue. */
+  font-size: 16px;
   font-family: inherit;
   width: 100%;
 }
@@ -323,7 +327,7 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 16px; /* prevent iOS Safari auto-zoom-on-focus; see .form-row inputs */
   font-family: inherit;
   width: 100%;
 }
