@@ -20,6 +20,7 @@
 html, body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--ink);
@@ -28,7 +29,6 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 /* ---------- Toolbar ---------- */

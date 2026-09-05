@@ -113,6 +113,16 @@
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  // Mobile Safari can scroll the page to keep a focused input clear of the
+  // on-screen keyboard, and doesn't always scroll back once the keyboard
+  // dismisses — leaving the sticky header pushed above the visible area.
+  // Force it back after any dialog with focusable inputs closes.
+  function resetPageScroll() {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+
   // ---------- DOM refs ----------
 
   const els = {
@@ -531,6 +541,7 @@
     els.cropImage.src = '';
     cropDragging = false;
     cropTouchMode = null;
+    resetPageScroll();
   }
 
   function cancelCropper() {
@@ -661,6 +672,7 @@
 
   function closeModal() {
     els.modal.hidden = true;
+    resetPageScroll();
   }
 
   els.addPersonBtn.addEventListener('click', openModalForAdd);
