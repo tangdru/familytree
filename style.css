@@ -301,18 +301,17 @@ body {
 .form-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 5px; }
 .form-row label { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
 .form-row input[type=text],
-.form-row input[type=date],
 .form-row select,
 .form-row textarea {
   padding: 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
   /* Explicit, not inherited: applying a custom border/radius to a native
-     control (date input, select) can make iOS Safari fall back to its own
-     internal control colors for whatever it still draws itself (the
-     mm/dd/yyyy hint, the calendar icon) instead of the page's colors —
-     and if that happens to render low- or no-contrast against its own
-     fill, the field looks like a solid blank box even though it isn't. */
+     control (select) can make iOS Safari fall back to its own internal
+     control colors for whatever it still draws itself instead of the
+     page's colors — and if that happens to render low- or no-contrast
+     against its own fill, the field looks like a solid blank box even
+     though it isn't. */
   background: var(--surface);
   color: var(--ink);
   /* 16px, not a smaller rem value: iOS Safari auto-zooms the whole page in
@@ -323,31 +322,55 @@ body {
   font-family: inherit;
   width: 100%;
 }
-.form-row input[type=date] {
-  /* Without this, iOS Safari can let the control's own internal layout
-     (month/day/year segments + calendar icon) win over the CSS width and
-     overflow its box rather than shrink to it. */
-  min-width: 0;
-}
 .form-row select[multiple] { height: auto; }
 .two-col { flex-direction: row; flex-wrap: wrap; gap: 12px; }
 .two-col > div { flex: 1 1 130px; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
 
-/* Native date inputs have their own functional minimum width (room for
-   "mm/dd/yyyy" plus the calendar icon) that iOS Safari will not shrink
-   below — cramming Born and Died side by side inside the modal's ~310px
-   content width squeezed each one under that floor, and instead of
-   clipping cleanly, Safari rendered the control with no visible hint
-   text/icon at all while still laying it out at its own wider intrinsic
-   width, so it overflowed past the modal edge. Stack them (each gets the
-   full content width, comfortably above that floor) until the screen is
-   wide enough to fit both at a safe width side by side. */
-.dates-row { flex-direction: column; }
-.dates-row > div { flex: initial; min-width: 0; width: 100%; }
-@media (min-width: 480px) {
-  .dates-row { flex-direction: row; flex-wrap: nowrap; gap: 12px; }
-  .dates-row > div { flex: 1 1 0; min-width: 160px; width: auto; }
+/* Born/Died: a native <input type=date>'s own internal rendering (the
+   mm/dd/yyyy hint, the calendar icon, a populated value) has a
+   platform-dependent minimum width that iOS Safari won't shrink below,
+   which repeatedly caused it to render blank or overflow its box when
+   squeezed into a two-column layout. Instead, the real input is made
+   fully invisible but still on top (so a tap opens the native picker
+   exactly as normal) and .date-display — a plain, fully custom text box
+   we render ourselves — shows the value/placeholder underneath. Being
+   ordinary CSS, it can only ever ellipsis-truncate if truly out of room;
+   it can never overflow its box or render invisible content. */
+.date-field { position: relative; }
+.date-field input[type=date] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  z-index: 1;
+  /* Kept at 16px (even though invisible) so tapping it doesn't trigger
+     iOS Safari's auto-zoom-on-focus for sub-16px text inputs. */
+  font-size: 16px;
 }
+.date-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 8px 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.date-display-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.date-display.placeholder .date-display-text { color: var(--ink-soft); }
+.date-icon { flex-shrink: 0; font-size: 13px; }
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
 
 .combo {
