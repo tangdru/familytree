@@ -330,6 +330,25 @@
     applyTransform();
   }
 
+  // Center a card in the viewport by adjusting our own pan transform.
+  // Deliberately not the native el.scrollIntoView(): the tree isn't laid
+  // out via normal document scroll, so scrollIntoView walks up the DOM
+  // looking for a real scrollable ancestor and finds one anyway — overflow:
+  // hidden blocks user scrolling but not programmatic scrolling — and ends
+  // up scrolling the whole page (hiding the sticky header) instead of
+  // panning the tree.
+  function panToCard(id) {
+    const card = els.content.querySelector(`[data-id="${id}"]`);
+    if (!card) return;
+    const vw = els.viewport.clientWidth;
+    const vh = els.viewport.clientHeight;
+    const cardCenterX = card.offsetLeft + card.offsetWidth / 2;
+    const cardCenterY = card.offsetTop + card.offsetHeight / 2;
+    view.x = vw / 2 - cardCenterX * view.scale;
+    view.y = vh / 2 - cardCenterY * view.scale;
+    applyTransform();
+  }
+
   function setZoom(newScale, anchorClientX, anchorClientY) {
     newScale = Math.min(2, Math.max(0.3, newScale));
     const rect = els.viewport.getBoundingClientRect();
@@ -790,7 +809,7 @@
     const card = els.content.querySelector(`[data-id="${id}"]`);
     if (card) {
       card.classList.add('highlight');
-      card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      panToCard(id);
     }
   }
 
@@ -799,13 +818,7 @@
     document.querySelectorAll('.person-card').forEach(el => el.classList.remove('highlight'));
     if (!q) return;
     const match = Object.values(data.people).find(p => (p.name || '').toLowerCase().includes(q));
-    if (match) {
-      const card = els.content.querySelector(`[data-id="${match.id}"]`);
-      if (card) {
-        card.classList.add('highlight');
-        card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-      }
-    }
+    if (match) highlightPerson(match.id);
   });
 
   function openSearch() {
