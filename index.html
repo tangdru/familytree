@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905i">
+<link rel="stylesheet" href="style.css?v=20260905j">
 </head>
 <body>
   <header class="toolbar">
@@ -45,7 +45,7 @@
         <input type="hidden" id="personId">
 
         <div class="form-row photo-row">
-          <div class="photo-preview" id="photoPreview">
+          <label class="photo-preview" id="photoPreview" for="photoInput" aria-label="Choose photo">
             <span id="photoPlaceholder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
@@ -53,11 +53,11 @@
               </svg>
             </span>
             <img id="photoImg" alt="" hidden>
-          </div>
+          </label>
           <div class="photo-controls">
-            <label class="btn" for="photoInput">Choose Photo</label>
+            <label class="btn" id="updatePhotoLabel" for="photoInput" hidden>Update Photo</label>
             <input id="photoInput" type="file" accept="image/*" hidden>
-            <button type="button" id="removePhotoBtn" class="icon-btn" aria-label="Remove photo" title="Remove photo">
+            <button type="button" id="removePhotoBtn" class="icon-btn" aria-label="Remove photo" title="Remove photo" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
@@ -221,7 +221,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905i"></script>
-  <script src="app.js?v=20260905i"></script>
+  <script src="config.js?v=20260905j"></script>
+  <script src="app.js?v=20260905j"></script>
 </body>
 </html>

@@ -157,6 +157,7 @@
     photoPreview: document.getElementById('photoPreview'),
     photoImg: document.getElementById('photoImg'),
     photoPlaceholder: document.getElementById('photoPlaceholder'),
+    updatePhotoLabel: document.getElementById('updatePhotoLabel'),
     removePhotoBtn: document.getElementById('removePhotoBtn'),
     deletePersonBtn: document.getElementById('deletePersonBtn'),
 
@@ -619,11 +620,13 @@
       els.photoImg.src = dataUrl;
       els.photoImg.hidden = false;
       els.photoPlaceholder.hidden = true;
+      els.updatePhotoLabel.hidden = false;
       els.removePhotoBtn.hidden = false;
     } else {
       els.photoImg.hidden = true;
       els.photoImg.src = '';
       els.photoPlaceholder.hidden = false;
+      els.updatePhotoLabel.hidden = true;
       els.removePhotoBtn.hidden = true;
     }
   }
