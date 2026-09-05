@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905c">
+<link rel="stylesheet" href="style.css?v=20260905d">
 </head>
 <body>
   <header class="toolbar">
@@ -68,7 +68,14 @@
               <input id="birthInput" type="date">
               <div class="date-display placeholder" id="birthDisplay" aria-hidden="true">
                 <span class="date-display-text">mm/dd/yyyy</span>
-                <span class="date-icon">📅</span>
+                <span class="date-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </span>
               </div>
             </div>
           </div>
@@ -78,7 +85,14 @@
               <input id="deathInput" type="date">
               <div class="date-display placeholder" id="deathDisplay" aria-hidden="true">
                 <span class="date-display-text">mm/dd/yyyy</span>
-                <span class="date-icon">📅</span>
+                <span class="date-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </span>
               </div>
             </div>
           </div>
@@ -179,7 +193,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905c"></script>
-  <script src="app.js?v=20260905c"></script>
+  <script src="config.js?v=20260905d"></script>
+  <script src="app.js?v=20260905d"></script>
 </body>
 </html>
