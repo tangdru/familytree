@@ -148,6 +148,8 @@
     nameInput: document.getElementById('nameInput'),
     birthInput: document.getElementById('birthInput'),
     deathInput: document.getElementById('deathInput'),
+    locationInput: document.getElementById('locationInput'),
+    locationSuggestions: document.getElementById('locationSuggestions'),
     genderInput: document.getElementById('genderInput'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
@@ -319,6 +321,73 @@
   const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false, placeholder: 'Select…' });
   const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false, placeholder: 'Select…' });
   const spousesCombo = createCombo(document.getElementById('spousesCombo'), { multiple: true, placeholder: 'Add spouse/partner…' });
+
+  // ---------- Location autocomplete ----------
+  // Free-text field backed by OpenStreetMap's Nominatim search API (no key
+  // or signup needed — a good fit given a family tree app is used rarely
+  // enough that a paid/keyed geocoding API would be overkill). Debounced,
+  // and guarded against out-of-order responses with a request token, since
+  // a slow earlier request could otherwise resolve after a newer one.
+
+  function setupLocationAutocomplete() {
+    const input = els.locationInput;
+    const list = els.locationSuggestions;
+    const optionsEl = list.querySelector('.combo-options');
+    let debounceTimer = null;
+    let requestToken = 0;
+
+    function hideSuggestions() {
+      list.hidden = true;
+      optionsEl.innerHTML = '';
+    }
+
+    function renderSuggestions(names) {
+      optionsEl.innerHTML = '';
+      if (!names.length) { hideSuggestions(); return; }
+      for (const name of names) {
+        const item = document.createElement('div');
+        item.className = 'combo-option';
+        item.textContent = name;
+        item.addEventListener('click', () => {
+          input.value = name;
+          hideSuggestions();
+        });
+        optionsEl.appendChild(item);
+      }
+      list.hidden = false;
+    }
+
+    async function fetchSuggestions(query) {
+      const token = ++requestToken;
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=${encodeURIComponent(query)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Nominatim request failed');
+        const results = await res.json();
+        if (token !== requestToken) return; // superseded by a newer query
+        renderSuggestions(results.map(r => r.display_name));
+      } catch (e) {
+        console.warn('Location lookup failed', e);
+        if (token === requestToken) hideSuggestions();
+      }
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      clearTimeout(debounceTimer);
+      if (q.length < 3) { hideSuggestions(); return; }
+      debounceTimer = setTimeout(() => fetchSuggestions(q), 400);
+    });
+    input.addEventListener('blur', () => setTimeout(hideSuggestions, 150));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideSuggestions();
+    });
+    document.addEventListener('click', (e) => {
+      if (!list.hidden && !e.target.closest('.location-field')) hideSuggestions();
+    });
+  }
+
+  setupLocationAutocomplete();
 
   // ---------- View state (pan/zoom) ----------
 
@@ -692,6 +761,7 @@
     els.nameInput.value = p.name || '';
     els.birthInput.value = p.birthDate || '';
     els.deathInput.value = p.deathDate || '';
+    els.locationInput.value = p.location || '';
     els.genderInput.value = p.gender || '';
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
@@ -763,6 +833,7 @@
     person.name = name;
     person.birthDate = els.birthInput.value || '';
     person.deathDate = els.deathInput.value || '';
+    person.location = els.locationInput.value.trim();
     person.gender = els.genderInput.value || '';
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
