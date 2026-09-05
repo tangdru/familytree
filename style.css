@@ -316,13 +316,13 @@ body {
   width: 100%;
 }
 .form-row select[multiple] { height: auto; }
-.two-col { flex-direction: row; gap: 12px; }
-/* min-width:0 overrides the flex-item default of min-width:auto, which
-   otherwise refuses to shrink a child below its content's natural size —
-   date inputs render wide locale text (e.g. "Nov 23, 1978" on iOS) that's
-   easily wider than half the modal, which without this pushes the whole
-   row past the modal's edge instead of wrapping the input to fit. */
-.two-col > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* flex-wrap is the safety valve: on any screen too narrow to fit both
+   fields at their 130px floor, Died wraps below Born instead of either
+   overflowing the modal or being squeezed thin enough that iOS Safari
+   renders a date input as a blank/broken box instead of its normal
+   month/day/year + calendar-icon layout. */
+.two-col { flex-direction: row; flex-wrap: wrap; gap: 12px; }
+.two-col > div { flex: 1 1 130px; min-width: 130px; display: flex; flex-direction: column; gap: 5px; }
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
 
 .combo {
