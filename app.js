@@ -159,6 +159,7 @@
   function applyTransform() {
     els.canvas.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   }
+  applyTransform();
 
   function setZoom(newScale, anchorClientX, anchorClientY) {
     newScale = Math.min(2, Math.max(0.3, newScale));
@@ -204,6 +205,56 @@
     isPanning = false;
     els.viewport.classList.remove('grabbing');
   });
+
+  // ---------- Touch (swipe to pan, pinch to zoom) ----------
+
+  function touchDistance(t1, t2) {
+    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  }
+  function touchMidpoint(t1, t2) {
+    return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+  }
+
+  let touchMode = null; // 'pan' | 'pinch'
+  let touchPanStart = null;
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+
+  els.viewport.addEventListener('touchstart', (e) => {
+    if (e.target.closest('.person-card')) { touchMode = null; return; }
+    if (e.touches.length === 1) {
+      touchMode = 'pan';
+      touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+    } else if (e.touches.length === 2) {
+      touchMode = 'pinch';
+      pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
+      pinchStartScale = view.scale;
+    }
+  }, { passive: true });
+
+  els.viewport.addEventListener('touchmove', (e) => {
+    if (!touchMode) return;
+    e.preventDefault();
+    if (touchMode === 'pan' && e.touches.length === 1) {
+      view.x = e.touches[0].clientX - touchPanStart.x;
+      view.y = e.touches[0].clientY - touchPanStart.y;
+      applyTransform();
+    } else if (touchMode === 'pinch' && e.touches.length === 2) {
+      const dist = touchDistance(e.touches[0], e.touches[1]);
+      const mid = touchMidpoint(e.touches[0], e.touches[1]);
+      setZoom(pinchStartScale * (dist / pinchStartDist), mid.x, mid.y);
+    }
+  }, { passive: false });
+
+  els.viewport.addEventListener('touchend', (e) => {
+    if (e.touches.length === 1) {
+      touchMode = 'pan';
+      touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+    } else {
+      touchMode = null;
+    }
+  });
+  els.viewport.addEventListener('touchcancel', () => { touchMode = null; });
 
   // ---------- Photo handling ----------
 
