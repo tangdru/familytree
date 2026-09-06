@@ -440,6 +440,11 @@
 
   // ---------- View state (pan/zoom) ----------
 
+  // How far out pinch/wheel zoom and the initial auto-fit are allowed to
+  // go. A big chronological tree (many decades at even a modest px/year)
+  // can be far taller than any single screen, so this needs to go well
+  // below a "normal" zoomed-out level to let the whole thing fit.
+  const MIN_ZOOM = 0.05;
   const view = { x: 40, y: 20, scale: 1 };
   let viewMode = 'traditional'; // 'traditional' | 'chronological'
 
@@ -473,7 +478,7 @@
     if (!vw || !vh || !cw || !ch) return;
     const padding = 24;
     const scale = Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1);
-    view.scale = Math.max(0.3, scale);
+    view.scale = Math.max(MIN_ZOOM, scale);
     view.x = (vw - cw * view.scale) / 2;
     view.y = (vh - ch * view.scale) / 2;
     applyTransform();
@@ -499,7 +504,7 @@
   }
 
   function setZoom(newScale, anchorClientX, anchorClientY) {
-    newScale = Math.min(2, Math.max(0.3, newScale));
+    newScale = Math.min(2, Math.max(MIN_ZOOM, newScale));
     const rect = els.viewport.getBoundingClientRect();
     const ax = anchorClientX !== undefined ? anchorClientX - rect.left : rect.width / 2;
     const ay = anchorClientY !== undefined ? anchorClientY - rect.top : rect.height / 2;
