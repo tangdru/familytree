@@ -1174,13 +1174,16 @@
         const id = row[i];
         if (used.has(id)) continue;
         used.add(id);
-        const next = row[i + 1];
-        let members;
-        if (next && !used.has(next) && data.people[id].spouses.includes(next)) {
+        // placeWithSpouses() pushes a hub immediately followed by every
+        // same-level spouse it has, so a remarriage (2+ spouses) needs a
+        // 3+-member cluster here -- pairing only the first two would leave
+        // later spouses in their own untethered, unpositioned cluster.
+        const members = [id];
+        while (true) {
+          const next = row[i + members.length];
+          if (!next || used.has(next) || !data.people[id].spouses.includes(next)) break;
           used.add(next);
-          members = [id, next];
-        } else {
-          members = [id];
+          members.push(next);
         }
         const cluster = { members, level, children: [], width: 0, ownWidth: 0, x: 0 };
         clusters.push(cluster);
@@ -1205,7 +1208,7 @@
     // Subtree widths, deepest generation first.
     for (let level = clustersByLevel.length - 1; level >= 0; level--) {
       for (const cluster of clustersByLevel[level]) {
-        cluster.ownWidth = cluster.members.length === 2 ? CARD_WIDTH * 2 + SPOUSE_GAP : CARD_WIDTH;
+        cluster.ownWidth = cluster.members.length * CARD_WIDTH + (cluster.members.length - 1) * SPOUSE_GAP;
         if (cluster.children.length === 0) {
           cluster.width = cluster.ownWidth;
         } else {
@@ -1352,16 +1355,6 @@
     return line;
   }
 
-  function svgRingMarker(x, y) {
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', x); circle.setAttribute('cy', y);
-    circle.setAttribute('r', '3.5');
-    circle.setAttribute('fill', 'var(--bg)');
-    circle.setAttribute('stroke', 'var(--line)');
-    circle.setAttribute('stroke-width', '1.5');
-    return circle;
-  }
-
   function drawLines() {
     const svg = els.svg;
     svg.innerHTML = '';
@@ -1450,34 +1443,27 @@
 
   // ---------- Chronological view ----------
   //
-  // Y = birth year (pixels-per-year scale), except a spouse with no
-  // recorded parents in the tree "marries in": instead of using their own
-  // birth year, they sit at the same Y as the partner they married, since
-  // the timeline only encodes parent/child time, not a married-in spouse's
-  // own ancestry. X keeps every set of children centered under the
-  // midpoint of their parent(s), recursively, with multiple spouses of the
-  // same hub flanking left/right so their separate children never cross.
+  // X-axis, generation grouping, and sibling/spouse spacing are taken
+  // wholesale from the traditional tree's own layout (computeLevels /
+  // computeOrder / buildClusters) -- only the Y-axis differs. Each row
+  // (generation level) sits at a Y derived from birth year instead of a
+  // fixed row height, so the parent/child edge connecting it to the row
+  // above lengthens to reflect real elapsed time, and never compresses
+  // below the traditional tree's own row gap.
+  //
+  // Y = birth year, except a spouse with no recorded parents in the tree
+  // "marries in": instead of using their own birth year, they inherit the
+  // same year as the partner they married, since the timeline only encodes
+  // parent/child time, not a married-in spouse's own ancestry.
 
   const CHRONO_PX_PER_YEAR = 6;
-  const CHRONO_CARD_GAP = 30;     // gap between unrelated sibling/child clusters
-  const CHRONO_SPOUSE_GAP = 16;   // gap between a couple's two cards
-  const CHRONO_CLUSTER_GAP = 60;  // gap between independent root family trees
-  const CHRONO_RULER_MARGIN = 56; // must match .chrono-ruler width in style.css
-  const CHRONO_Y_TOP = 60;        // top margin above the earliest year
+  const CHRONO_Y_TOP = 60; // top margin above the earliest year
 
   function chronoBirthYear(id) {
     const p = data.people[id];
     if (!p || !p.birthDate) return null;
     const y = parseInt(p.birthDate.split('-')[0], 10);
     return Number.isFinite(y) ? y : null;
-  }
-
-  function chronoBirthYearSort(a, b) {
-    const ya = chronoBirthYear(a), yb = chronoBirthYear(b);
-    if (ya != null && yb != null) return ya - yb;
-    if (ya != null) return -1;
-    if (yb != null) return 1;
-    return 0;
   }
 
   // Resolves every person's chronological Y-year, plus which ids "married
@@ -1564,127 +1550,6 @@
     return { year, marriedIn };
   }
 
-  function chronoRoots(marriedIn) {
-    return Object.keys(data.people).filter(id => data.people[id].parents.length === 0 && !marriedIn[id]);
-  }
-
-  // Places a row of already-built subtrees side by side centered at
-  // centerX (in the caller's local coordinate space), merging each
-  // subtree's own relative positions into `localX`. Returns the row width.
-  function chronoPlaceRow(nodes, localX, centerX) {
-    if (!nodes.length) return 0;
-    const totalWidth = nodes.reduce((s, n) => s + n.width, 0) + CHRONO_CARD_GAP * (nodes.length - 1);
-    let x = centerX - totalWidth / 2;
-    for (const n of nodes) {
-      const shift = x - n.left;
-      for (const pid of Object.keys(n.localX)) {
-        localX[pid] = n.localX[pid] + shift;
-      }
-      x += n.width + CHRONO_CARD_GAP;
-    }
-    return totalWidth;
-  }
-
-  // Recursively lays out a blood-relative hub, its spouses (flanking left
-  // and right, alternating, sorted by birth year), and each pairing's
-  // children (centered under that pair's own midpoint). Returns the
-  // subtree's extent in coordinates local to the hub (hub sits at X=0).
-  function chronoBuildSubtree(id, claimed) {
-    claimed.add(id);
-    const p = data.people[id];
-
-    // A "co-parent" is anyone this hub shares an unclaimed child with, plus
-    // every recorded spouse -- either way they get a card flanking the hub
-    // with their shared children centered beneath the pair.
-    const coParentSet = new Set((p.spouses || []).filter(sid => data.people[sid]));
-    const soloKids = [];
-    const kidsByCoParent = new Map();
-    for (const cid of Object.keys(data.people)) {
-      if (claimed.has(cid) || cid === id) continue;
-      const child = data.people[cid];
-      if (!child.parents.includes(id)) continue;
-      const other = child.parents.find(pid => pid !== id && data.people[pid]);
-      if (other) {
-        coParentSet.add(other);
-        if (!kidsByCoParent.has(other)) kidsByCoParent.set(other, []);
-        kidsByCoParent.get(other).push(cid);
-      } else {
-        soloKids.push(cid);
-      }
-    }
-
-    const coParents = Array.from(coParentSet).filter(sid => !claimed.has(sid));
-    coParents.sort(chronoBirthYearSort);
-    for (const sid of coParents) claimed.add(sid);
-
-    const rightSide = [];
-    const leftSide = [];
-    coParents.forEach((sid, i) => (i % 2 === 0 ? rightSide : leftSide).push(sid));
-    leftSide.reverse(); // closest-to-hub first when walking outward
-
-    const localX = { [id]: 0 };
-
-    // Children recorded with only this hub as a parent sit directly under it.
-    soloKids.sort((a, b) => compareByBirth(data.people[a], data.people[b]));
-    const soloNodes = soloKids.map(kid => chronoBuildSubtree(kid, claimed));
-    const soloWidth = chronoPlaceRow(soloNodes, localX, 0);
-
-    let rightFrontier = Math.max(CARD_WIDTH / 2, soloWidth / 2);
-    let leftFrontier = -rightFrontier;
-
-    const placeSide = (list, direction) => {
-      for (const sid of list) {
-        const frontier = direction > 0 ? rightFrontier : leftFrontier;
-        const sidX = frontier + direction * (CHRONO_SPOUSE_GAP + CARD_WIDTH / 2);
-        localX[sid] = sidX;
-
-        const kids = (kidsByCoParent.get(sid) || [])
-          .slice()
-          .sort((a, b) => compareByBirth(data.people[a], data.people[b]));
-        const kidNodes = kids.map(kid => chronoBuildSubtree(kid, claimed));
-        const midpoint = sidX / 2;
-        const kidsWidth = chronoPlaceRow(kidNodes, localX, midpoint);
-
-        const sidRightEdge = sidX + CARD_WIDTH / 2;
-        const sidLeftEdge = sidX - CARD_WIDTH / 2;
-        const kidsRightEdge = midpoint + kidsWidth / 2;
-        const kidsLeftEdge = midpoint - kidsWidth / 2;
-
-        if (direction > 0) rightFrontier = Math.max(sidRightEdge, kidsRightEdge);
-        else leftFrontier = Math.min(sidLeftEdge, kidsLeftEdge);
-      }
-    };
-    placeSide(rightSide, 1);
-    placeSide(leftSide, -1);
-
-    return { id, localX, width: rightFrontier - leftFrontier, left: leftFrontier, right: rightFrontier };
-  }
-
-  function computeChronoPositions(marriedIn) {
-    const claimed = new Set();
-    const roots = chronoRoots(marriedIn).sort(chronoBirthYearSort);
-    const posX = {};
-    let cursor = 0;
-    for (const rootId of roots) {
-      if (claimed.has(rootId)) continue;
-      const subtree = chronoBuildSubtree(rootId, claimed);
-      const shift = cursor - subtree.left;
-      for (const pid of Object.keys(subtree.localX)) {
-        posX[pid] = subtree.localX[pid] + shift;
-      }
-      cursor += subtree.width + CHRONO_CLUSTER_GAP;
-    }
-    // Safety net for any data inconsistency (e.g. a parent referenced by id
-    // that no longer exists) that left someone unclaimed.
-    for (const id of Object.keys(data.people)) {
-      if (posX[id] == null) {
-        posX[id] = cursor;
-        cursor += CARD_WIDTH + CHRONO_CARD_GAP;
-      }
-    }
-    return posX;
-  }
-
   function chronoYearRange(year) {
     const years = Object.values(year);
     years.push(new Date().getFullYear());
@@ -1699,166 +1564,19 @@
     return CHRONO_Y_TOP + (yr - minYear) * CHRONO_PX_PER_YEAR;
   }
 
-  function chronoCardBoxes(cardEls) {
-    const boxes = {};
-    for (const id of Object.keys(cardEls)) {
-      const el = cardEls[id];
-      const left = el.offsetLeft, top = el.offsetTop;
-      boxes[id] = {
-        left, top,
-        right: left + el.offsetWidth,
-        bottom: top + el.offsetHeight,
-        centerX: left + el.offsetWidth / 2,
-        centerY: top + el.offsetHeight / 2,
-      };
-    }
-    return boxes;
-  }
-
-  // Scans Y from minY to maxY and returns the first height at which a
-  // horizontal jog spanning [xStart, xEnd] would not cut through any other
-  // card -- so a connector never appears to pass underneath a node. Falls
-  // back to maxY (which may reach into the child's own row, producing a
-  // "side-entry" connector) if no fully clear band exists.
-  function chronoFindClearY(minY, maxY, xStart, xEnd, boxes, excludeIds) {
-    const step = 4;
-    const lo = Math.min(xStart, xEnd);
-    const hi = Math.max(xStart, xEnd);
-    const blocks = Object.keys(boxes)
-      .filter(id => !excludeIds.has(id))
-      .map(id => boxes[id]);
-    for (let y = minY; y <= maxY; y += step) {
-      const blocked = blocks.some(b => y > b.top && y < b.bottom && hi > b.left && lo < b.right);
-      if (!blocked) return y;
-    }
-    return maxY;
-  }
-
-  // Birth-year spacing alone can pack real card heights tighter than they
-  // physically fit (e.g. two generations 20-something years apart, with
-  // cards well over 100px tall). Nudges same-year rows straight down --
-  // never up, never sideways -- just enough that no two cards overlap,
-  // processing years oldest-first so a nudge never un-does an earlier one.
-  function chronoResolveRowCollisions(cardEls, year, minYear) {
-    const rowsByYear = new Map();
-    for (const id of Object.keys(cardEls)) {
-      const y = year[id];
-      if (!rowsByYear.has(y)) rowsByYear.set(y, []);
-      rowsByYear.get(y).push(id);
-    }
-    const rows = Array.from(rowsByYear.entries())
-      .map(([y, ids]) => ({ year: Number(y), ids }))
-      .sort((a, b) => a.year - b.year);
-
-    // Reuse the traditional tree's own generation gap as the floor, so a
-    // parent/child pair is never squeezed closer here than they'd be there.
-    const MIN_GAP = ROW_GAP;
-    const placedBoxes = [];
-    const top = {};
-
-    for (const row of rows) {
-      const rowCards = row.ids.map(id => ({
-        id,
-        left: cardEls[id].offsetLeft,
-        right: cardEls[id].offsetLeft + cardEls[id].offsetWidth,
-        height: cardEls[id].offsetHeight,
-      }));
-      let center = chronoYToPixel(row.year, minYear);
-
-      let adjusted = true;
-      while (adjusted) {
-        adjusted = false;
-        for (const c of rowCards) {
-          const cTop = center - c.height / 2;
-          for (const box of placedBoxes) {
-            if (c.right > box.left && c.left < box.right && cTop < box.bottom + MIN_GAP) {
-              const needed = box.bottom + MIN_GAP + c.height / 2;
-              if (needed > center) { center = needed; adjusted = true; }
-            }
-          }
-        }
-      }
-
-      for (const c of rowCards) {
-        const cTop = center - c.height / 2;
-        top[c.id] = cTop;
-        placedBoxes.push({ left: c.left, right: c.right, bottom: cTop + c.height });
-      }
-    }
-
-    return top;
-  }
-
-  function drawChronoLines(cardEls, year, minYear, maxYear, contentWidth) {
+  // Extra decade gridlines + a "Today" line, drawn behind whatever
+  // drawLines() already put in the SVG (it draws first and does not clear
+  // what's appended after it).
+  function drawChronoGridlines(minYear, maxYear, contentWidth) {
     const svg = els.svg;
-    svg.innerHTML = '';
-    const boxes = chronoCardBoxes(cardEls);
-
     for (let y = minYear; y <= maxYear; y += 10) {
       const py = chronoYToPixel(y, minYear);
-      svg.appendChild(svgLine(0, py, contentWidth, py, 'var(--card-border)', 1));
+      svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--card-border)', 1), svg.firstChild);
     }
     const thisYear = new Date().getFullYear();
     if (thisYear >= minYear && thisYear <= maxYear) {
       const py = chronoYToPixel(thisYear, minYear);
-      svg.appendChild(svgLine(0, py, contentWidth, py, 'var(--accent-dark)', 1.5, '5 4'));
-    }
-
-    // Spouse ties: married-in couples always share the same Y, so the tie
-    // is a plain horizontal segment between their adjacent cards.
-    const drawnPairs = new Set();
-    for (const id of Object.keys(data.people)) {
-      for (const sid of data.people[id].spouses || []) {
-        if (!data.people[sid] || !boxes[id] || !boxes[sid]) continue;
-        const pairKey = [id, sid].sort().join('|');
-        if (drawnPairs.has(pairKey)) continue;
-        drawnPairs.add(pairKey);
-        const a = boxes[id], b = boxes[sid];
-        if (Math.abs(a.centerY - b.centerY) > 1) continue; // not on the same row
-        const leftBox = a.left < b.left ? a : b;
-        const rightBox = a.left < b.left ? b : a;
-        if (leftBox.right >= rightBox.left) continue;
-        const midY = (leftBox.centerY + rightBox.centerY) / 2;
-        svg.appendChild(svgLine(leftBox.right, midY, rightBox.left, midY, 'var(--accent-dark)', 2));
-        svg.appendChild(svgRingMarker((leftBox.right + rightBox.left) / 2, midY));
-      }
-    }
-
-    // Parent -> child connectors, grouped by exact parent set so full
-    // siblings share a common drop point off their parents' shared midpoint.
-    const groups = {};
-    for (const id of Object.keys(data.people)) {
-      const p = data.people[id];
-      if (!p.parents.length) continue;
-      const key = familyKey(p.parents);
-      (groups[key] = groups[key] || { parents: p.parents, children: [] }).children.push(id);
-    }
-
-    for (const key of Object.keys(groups)) {
-      const group = groups[key];
-      const parentBoxes = group.parents.map(pid => boxes[pid]).filter(Boolean);
-      if (!parentBoxes.length) continue;
-      const parentAnchorX = parentBoxes.reduce((s, b) => s + b.centerX, 0) / parentBoxes.length;
-      const parentY = Math.max(...parentBoxes.map(b => b.bottom));
-
-      for (const childId of group.children) {
-        const childBox = boxes[childId];
-        if (!childBox) continue;
-        const childExclude = new Set(group.parents);
-        childExclude.add(childId);
-        const routeY = chronoFindClearY(parentY + 4, childBox.bottom - 4, parentAnchorX, childBox.centerX, boxes, childExclude);
-
-        svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, routeY, 'var(--line)', 1.5));
-        if (routeY <= childBox.top) {
-          svg.appendChild(svgLine(parentAnchorX, routeY, childBox.centerX, routeY, 'var(--line)', 1.5));
-          svg.appendChild(svgLine(childBox.centerX, routeY, childBox.centerX, childBox.top, 'var(--line)', 1.5));
-        } else {
-          // No fully clear band above the child -- enter from whichever
-          // side faces the parent instead of cutting through its top edge.
-          const enterX = childBox.centerX < parentAnchorX ? childBox.right : childBox.left;
-          svg.appendChild(svgLine(parentAnchorX, routeY, enterX, routeY, 'var(--line)', 1.5));
-        }
-      }
+      svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--accent-dark)', 1.5, '5 4'), svg.firstChild);
     }
   }
 
@@ -1890,41 +1608,67 @@
     els.chronoRulerInner.innerHTML = '';
     if (!hasPeople) return;
 
+    // Same X-layout as the traditional tree: identical generation grouping,
+    // ordering, and sibling/spouse clustering -- only the Y axis (and the
+    // row gap it drives) differs below.
+    const levels = computeLevels();
+    const rows = computeOrder(levels);
+    const clustersByLevel = buildClusters(rows);
+
     const { year, marriedIn } = computeChronoYears();
-    const posX = computeChronoPositions(marriedIn);
     const { minYear, maxYear } = chronoYearRange(year);
 
-    const xOffset = CHRONO_RULER_MARGIN + 20 - Math.min(...Object.values(posX));
-
     const cardEls = {};
-    for (const id of Object.keys(data.people)) {
-      const card = buildCard(data.people[id], { marriedIn: !!marriedIn[id] });
-      els.content.appendChild(card);
-      cardEls[id] = card;
+    for (const row of rows) {
+      for (const id of row) {
+        const card = buildCard(data.people[id], { marriedIn: !!marriedIn[id] });
+        els.content.appendChild(card);
+        cardEls[id] = card;
+      }
     }
 
-    // X first (fixed by lineage), then measure real card heights (names
-    // can wrap) before resolving Y, so two closely-spaced birth years
-    // never leave their cards physically overlapping.
-    for (const id of Object.keys(data.people)) {
-      cardEls[id].style.left = `${posX[id] + xOffset - CARD_WIDTH / 2}px`;
+    // Row heights depend on rendered card height (names can wrap), so
+    // measure now that cards are in the DOM, before positioning them.
+    const rowHeight = rows.map(row => row.reduce((max, id) => Math.max(max, cardEls[id].offsetHeight), 0));
+
+    // One representative year per row: the latest resolved birth year among
+    // that row's people, so a row is never placed earlier than anyone in
+    // it. Each row's Y is the later of its natural chronological spot
+    // (centered on that year) or the traditional tree's own row gap below
+    // the row above -- so a small age gap still gets the traditional
+    // minimum, while a large one lengthens the edge to match real time.
+    const rowYear = rows.map(row => Math.max(...row.map(id => year[id])));
+    const rowY = [];
+    for (let i = 0; i < rows.length; i++) {
+      const naturalTop = chronoYToPixel(rowYear[i], minYear) - rowHeight[i] / 2;
+      const floor = i === 0 ? MARGIN : rowY[i - 1] + rowHeight[i - 1] + ROW_GAP;
+      rowY.push(Math.max(naturalTop, floor));
     }
-    const topById = chronoResolveRowCollisions(cardEls, year, minYear);
 
     let maxRight = 0;
-    let maxBottom = 0;
-    for (const id of Object.keys(data.people)) {
-      cardEls[id].style.top = `${topById[id]}px`;
-      maxRight = Math.max(maxRight, cardEls[id].offsetLeft + cardEls[id].offsetWidth);
-      maxBottom = Math.max(maxBottom, topById[id] + cardEls[id].offsetHeight);
+    for (const row of clustersByLevel) {
+      for (const cluster of row) {
+        const leftEdge = cluster.x - cluster.ownWidth / 2;
+        cluster.members.forEach((id, i) => {
+          const left = leftEdge + i * (CARD_WIDTH + SPOUSE_GAP);
+          cardEls[id].style.left = `${left}px`;
+          cardEls[id].style.top = `${rowY[cluster.level]}px`;
+          maxRight = Math.max(maxRight, left + CARD_WIDTH);
+        });
+      }
     }
 
-    const contentHeight = Math.max(maxBottom, chronoYToPixel(maxYear, minYear)) + MARGIN;
+    const contentBottom = rowY[rowY.length - 1] + rowHeight[rowHeight.length - 1];
+    const contentHeight = Math.max(contentBottom, chronoYToPixel(maxYear, minYear)) + MARGIN;
     els.content.style.width = `${maxRight + MARGIN}px`;
     els.content.style.height = `${contentHeight}px`;
 
+    // Connectors are drawn by the exact same function the traditional tree
+    // uses (same X-layout means the same bus-line grouping works
+    // unchanged); only the extra gridlines/ruler are chrono-specific.
     requestAnimationFrame(() => {
-      drawChronoLines(cardEls, year, minYear, maxYear, maxRight + MARGIN);
+      drawLines();
+      drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
       renderChronoRuler(minYear, maxYear, contentHeight);
     });
   }
