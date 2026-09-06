@@ -244,7 +244,7 @@
   // on-screen keyboard — the trigger is a <button>, not a text input. The
   // keyboard only appears if someone deliberately taps the filter field
   // inside the open dropdown to search a long list.
-  function createCombo(rootEl, { multiple, placeholder }) {
+  function createCombo(rootEl, { multiple, placeholder, createLabel, onCreateNew }) {
     const trigger = rootEl.querySelector('.combo-trigger');
     const triggerText = trigger.querySelector('.combo-trigger-text');
     const dropdown = rootEl.querySelector('.combo-dropdown');
@@ -269,6 +269,20 @@
       const available = options.filter(o => !multiple || !selectedIds.includes(o.id));
       const matches = q ? available.filter(o => o.name.toLowerCase().includes(q)) : available;
       optionsEl.innerHTML = '';
+      // Pinned above the search results (and unaffected by the filter) so
+      // "this person doesn't exist yet" is always one click away -- see
+      // startAddSpouseFlow for what happens on click.
+      if (onCreateNew) {
+        const createItem = document.createElement('div');
+        createItem.className = 'combo-option combo-option-create';
+        createItem.textContent = createLabel || '+ Add new';
+        createItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeDropdown();
+          onCreateNew();
+        });
+        optionsEl.appendChild(createItem);
+      }
       if (!matches.length) {
         const empty = document.createElement('div');
         empty.className = 'combo-option-empty';
@@ -388,7 +402,12 @@
 
   const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false, placeholder: 'Select…' });
   const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false, placeholder: 'Select…' });
-  const spousesCombo = createCombo(document.getElementById('spousesCombo'), { multiple: true, placeholder: 'Add spouse/partner…' });
+  const spousesCombo = createCombo(document.getElementById('spousesCombo'), {
+    multiple: true,
+    placeholder: 'Add spouse/partner…',
+    createLabel: '+ Add new spouse',
+    onCreateNew: startAddSpouseFlow,
+  });
 
   // ---------- Location autocomplete ----------
   // Free-text field backed by OpenStreetMap's Nominatim search API (no key
@@ -899,7 +918,67 @@
     els.modal.hidden = false;
   }
 
+  // Set while the Add/Edit form is repurposed for a nested "add a brand new
+  // spouse" sub-step (see startAddSpouseFlow) -- holds everything needed to
+  // put the form back the way it was, so an in-progress edit isn't lost
+  // just because the person being edited doesn't have their partner in the
+  // tree yet.
+  let pendingSpouseSnapshot = null;
+
+  function snapshotPersonForm() {
+    return {
+      personId: els.personId.value,
+      name: getEditableText(els.nameInput),
+      birth: els.birthInput.value,
+      death: els.deathInput.value,
+      location: getEditableText(els.locationInput),
+      notes: els.notesInput.value,
+      photo: pendingPhoto,
+      parent1: parent1Combo.getValue(),
+      parent2: parent2Combo.getValue(),
+      spouses: spousesCombo.getValues(),
+      title: els.modalTitle.textContent,
+      showDelete: !els.deletePersonBtn.hidden,
+    };
+  }
+
+  function restorePersonForm(snap) {
+    els.form.reset();
+    els.personId.value = snap.personId;
+    setEditableText(els.nameInput, snap.name);
+    els.birthInput.value = snap.birth;
+    els.deathInput.value = snap.death;
+    updateDateDisplay(els.birthInput, els.birthDisplayText);
+    updateDateDisplay(els.deathInput, els.deathDisplayText);
+    setEditableText(els.locationInput, snap.location);
+    els.notesInput.value = snap.notes;
+    pendingPhoto = snap.photo;
+    showPhotoPreview(pendingPhoto);
+    els.modalTitle.textContent = snap.title;
+    els.deletePersonBtn.hidden = !snap.showDelete;
+    populateSelectOptions(snap.personId || null);
+    parent1Combo.setValue(snap.parent1);
+    parent2Combo.setValue(snap.parent2);
+    spousesCombo.setValues(snap.spouses);
+  }
+
+  // Triggered by "+ Add new spouse" in the spouses combo (see createCombo):
+  // stash the in-progress form, then repurpose the same modal for a normal
+  // Add Person flow. Its own submit (below) restores the stashed form and
+  // adds the new person as a spouse, rather than closing the modal.
+  function startAddSpouseFlow() {
+    pendingSpouseSnapshot = snapshotPersonForm();
+    openModalForAdd();
+    els.modalTitle.textContent = 'Add Spouse';
+  }
+
   function closeModal() {
+    if (pendingSpouseSnapshot) {
+      const snap = pendingSpouseSnapshot;
+      pendingSpouseSnapshot = null;
+      restorePersonForm(snap);
+      return;
+    }
     if (document.activeElement && els.modal.contains(document.activeElement)) {
       document.activeElement.blur();
     }
@@ -1416,6 +1495,20 @@
     person.spouses = Array.from(nextSpouses);
 
     await saveData();
+
+    // Finishing the nested "+ Add new spouse" step: the new person is
+    // already saved as their own record above, so just add them to the
+    // stashed form's spouse chips and pick up the original edit where it
+    // left off, instead of closing the whole modal.
+    if (pendingSpouseSnapshot) {
+      const snap = pendingSpouseSnapshot;
+      pendingSpouseSnapshot = null;
+      if (!snap.spouses.includes(id)) snap.spouses.push(id);
+      renderTree();
+      restorePersonForm(snap);
+      return;
+    }
+
     closeModal();
     renderTree();
     if (isNew) highlightPerson(id);
