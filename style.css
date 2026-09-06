@@ -55,13 +55,27 @@ body {
   margin: 0;
   white-space: nowrap;
   color: var(--accent-dark);
-  order: 5;
+  order: 6;
 }
 
 .toolbar-spacer {
   flex: 1 1 auto;
   min-width: 0;
   order: 3;
+}
+
+.view-mode-select {
+  order: 4;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 5px 6px;
+  max-width: 118px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .toolbar-add-btn {
@@ -86,7 +100,7 @@ body {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  order: 4;
+  order: 5;
   background: var(--ink-soft);
 }
 .sync-dot.local { background: #b7a98a; }
@@ -198,6 +212,44 @@ body {
   position: relative;
 }
 
+/* Chronological view's year ruler. Sits outside #treeCanvas so horizontal
+   pan never moves it (it stays pinned to the viewport's left edge), while
+   its inner layer gets the SAME vertical translate+scale as the canvas
+   applied via JS, so it still tracks vertical pan/zoom in step with the
+   rows it's labeling. */
+.chrono-ruler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  background: var(--bg);
+  border-right: 1px solid var(--card-border);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+.chrono-ruler-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  transform-origin: 0 0;
+}
+.chrono-year-label {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.chrono-year-label.today {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
 .empty-state {
   position: absolute;
   top: 45%;
@@ -228,6 +280,7 @@ body {
   box-shadow: 0 6px 14px rgba(60,45,20,0.22);
 }
 .person-card.deceased { filter: grayscale(0.35); opacity: 0.88; }
+.person-card.married-in { border-style: dashed; border-color: var(--line); }
 .person-card.highlight {
   outline: 3px solid #ffd54a;
   outline-offset: 2px;
