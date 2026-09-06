@@ -691,6 +691,57 @@ body {
 }
 .view-spouse-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
+/* A couple's shared card -- two equal-size members side by side, replacing
+   a single parent's card when a swipe-to-parent (or a Parents-section link)
+   would otherwise force a guess at which of two recorded parents to show. */
+.view-couple {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin: 0 auto 8px;
+}
+.view-couple[hidden] { display: none; }
+.view-couple-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 130px;
+  cursor: pointer;
+}
+.view-couple-photo {
+  width: 96px;
+  height: 96px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #eee2c9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #b79f7c;
+  border: 3px solid transparent;
+}
+/* The colored ring: which of the two parents is "selected" -- their own
+   parents/siblings show below, and further swipes follow their tree. */
+.view-couple-photo.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.view-couple-photo img { width: 100%; height: 100%; object-fit: cover; }
+.view-couple-photo svg { width: 36px; height: 36px; }
+.view-couple-name {
+  margin-top: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+}
+.view-couple-dates {
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
 .view-name {
   margin: 0 0 2px;
   font-size: 1.25rem;
@@ -759,4 +810,5 @@ body {
   .person-photo { background: #3a3324; color: #6f6650; }
   .view-photo { background: #3a3324; color: #6f6650; }
   .view-spouse-avatar { background: #3a3324; color: #6f6650; }
+  .view-couple-photo { background: #3a3324; color: #6f6650; }
 }

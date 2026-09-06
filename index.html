@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907e">
+<link rel="stylesheet" href="style.css?v=20260907f">
 </head>
 <body>
   <header class="toolbar">
@@ -236,18 +236,23 @@
       </div>
       <div class="modal-body">
         <div class="view-swipe-zone" id="viewSwipeZone">
-          <div class="view-photo" id="viewPhoto">
-            <span id="viewPhotoPlaceholder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                <circle cx="12" cy="13" r="4"></circle>
-              </svg>
-            </span>
-            <img id="viewPhotoImg" alt="" hidden>
+          <div class="view-person" id="viewPersonSingle">
+            <div class="view-photo" id="viewPhoto">
+              <span id="viewPhotoPlaceholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+              </span>
+              <img id="viewPhotoImg" alt="" hidden>
+            </div>
+            <h3 class="view-name" id="viewName"></h3>
+            <p class="view-dates" id="viewDates" hidden></p>
           </div>
+          <!-- A couple's shared card: two equal-size member blocks, built and
+               populated in JS by buildCoupleMember() -- see renderPersonView(). -->
+          <div class="view-couple" id="viewCouple" hidden></div>
           <div class="view-spouse-avatars" id="viewSpouseAvatars" hidden></div>
-          <h3 class="view-name" id="viewName"></h3>
-          <p class="view-dates" id="viewDates" hidden></p>
           <p class="view-location" id="viewLocation" hidden></p>
         </div>
         <p class="view-notes" id="viewNotes" hidden></p>
@@ -278,7 +283,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907e"></script>
-  <script src="app.js?v=20260907e"></script>
+  <script src="config.js?v=20260907f"></script>
+  <script src="app.js?v=20260907f"></script>
 </body>
 </html>
