@@ -993,7 +993,7 @@
   // landing on. See verticalGoUp/Down below for the thread itself.
   function openViewModal(personId) {
     if (!data.people[personId]) return;
-    verticalPath = [{ ids: [personId], selected: personId }];
+    verticalPath = [{ ids: coupleIdsFor(personId), selected: personId }];
     verticalIndex = 0;
     renderThreadPosition();
   }
@@ -1197,15 +1197,36 @@
   // younger -- anchored at this person's own position in it, and leaving
   // via a sibling starts an entirely new vertical thread on them, per
   // openViewModal(). A spouse married in from outside the lineage isn't on
-  // this axis at all -- reach them via their avatar under the photo
-  // instead, per the click handler in buildSpouseAvatar().
+  // this axis at all -- whoever's "selected" shows on the couple card
+  // alongside them instead (see coupleIdsFor), and any additional spouse
+  // beyond that first one is reached via the avatar row under the photo,
+  // per the click handler in buildSpouseAvatar().
 
-  // A person's recorded parents, filtered to ones that still exist -- 0, 1,
-  // or 2 ids. Rendered together as a couple card (or a single card, or
-  // hidden entirely) by renderPersonView -- see verticalGoDown/goToParents.
+  // A person's current partner to pair them with on a couple card -- just
+  // the first recorded spouse for now; see BACKLOG.md for more than one.
+  function partnerIdOf(personId) {
+    const p = data.people[personId];
+    return ((p && p.spouses) || []).find(id => data.people[id]) || null;
+  }
+
+  // The ids to render for a single anchor person: paired with their partner
+  // when they have one, so anyone with a recorded spouse always gets the
+  // couple card, not just when viewed as "the parents" of someone else.
+  // personId is always first, and the default selected.
+  function coupleIdsFor(personId) {
+    const partnerId = partnerIdOf(personId);
+    return partnerId ? [personId, partnerId] : [personId];
+  }
+
+  // A person's recorded parents, filtered to ones that still exist. Two
+  // recorded parents are shown together as-is; a single recorded parent is
+  // still paired with THEIR partner if they have one (e.g. a step-parent),
+  // per coupleIdsFor. Rendered by renderPersonView -- see
+  // verticalGoDown/goToParents.
   function parentIdsOf(personId) {
     const p = data.people[personId];
-    return ((p && p.parents) || []).filter(id => data.people[id]);
+    const recorded = ((p && p.parents) || []).filter(id => data.people[id]);
+    return recorded.length === 1 ? coupleIdsFor(recorded[0]) : recorded;
   }
 
   function firstChildId(personId) {
@@ -1245,7 +1266,7 @@
     }
     const childId = firstChildId(verticalPath[verticalIndex].selected);
     if (!childId) return;
-    verticalPath.push({ ids: [childId], selected: childId });
+    verticalPath.push({ ids: coupleIdsFor(childId), selected: childId });
     verticalIndex++;
     renderThreadPosition();
   }
