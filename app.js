@@ -1750,7 +1750,9 @@
       .map(([y, ids]) => ({ year: Number(y), ids }))
       .sort((a, b) => a.year - b.year);
 
-    const MIN_GAP = 14;
+    // Reuse the traditional tree's own generation gap as the floor, so a
+    // parent/child pair is never squeezed closer here than they'd be there.
+    const MIN_GAP = ROW_GAP;
     const placedBoxes = [];
     const top = {};
 
