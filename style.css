@@ -530,6 +530,11 @@ body {
   font-size: 0.87rem;
 }
 .combo-option:hover { background: #f1ead9; }
+.combo-option-create {
+  font-weight: 600;
+  color: var(--accent-dark);
+  border-bottom: 1px solid var(--card-border);
+}
 .combo-option-empty {
   padding: 9px 10px;
   font-size: 0.85rem;
