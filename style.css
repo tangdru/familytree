@@ -634,6 +634,82 @@ body {
 .crop-zoom-row input[type=range] { flex: 1; }
 .crop-modal .hint { display: block; text-align: center; margin-bottom: 4px; }
 
+/* ---------- Person view (read-only detail) modal ---------- */
+.view-modal { max-width: 420px; }
+.view-photo {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: #eee2c9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #b79f7c;
+}
+.view-photo img { width: 100%; height: 100%; object-fit: cover; }
+#viewPhotoPlaceholder { display: flex; }
+/* See #photoPlaceholder above: an #id rule needs its own [hidden] override
+   to not beat the UA stylesheet once the img is shown instead. */
+#viewPhotoPlaceholder[hidden] { display: none; }
+#viewPhotoPlaceholder svg { width: 56px; height: 56px; }
+
+.view-name {
+  margin: 0 0 2px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+}
+.view-dates, .view-location {
+  margin: 0 0 2px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+.view-notes {
+  margin: 12px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.view-section { margin-top: 18px; }
+.view-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.view-relation-list { list-style: none; margin: 0; padding: 0; }
+.view-relation-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--card-border);
+}
+.view-relation-list li:last-child { border-bottom: none; }
+.view-relation-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-dark);
+  cursor: pointer;
+  text-align: left;
+}
+.view-relation-link:hover { text-decoration: underline; }
+.view-relation-age {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #201c16;
@@ -645,4 +721,5 @@ body {
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
+  .view-photo { background: #3a3324; color: #6f6650; }
 }
