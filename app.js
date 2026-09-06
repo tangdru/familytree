@@ -1605,6 +1605,59 @@
     }
   }
 
+  // Places each person at their own natural chronological Y (grouped by
+  // exact resolved year, so a married-in couple -- which always shares one
+  // -- moves together), nudging a group straight down, never sideways,
+  // just enough to clear any earlier-placed card whose X-range it would
+  // otherwise overlap. Processing oldest-year-first means a nudge is never
+  // undone by a later group. Returns a top-position map.
+  function chronoResolvePositions(cardEls, year, minYear) {
+    const groupsByYear = new Map();
+    for (const id of Object.keys(cardEls)) {
+      const y = year[id];
+      if (!groupsByYear.has(y)) groupsByYear.set(y, []);
+      groupsByYear.get(y).push(id);
+    }
+    const groups = Array.from(groupsByYear.entries())
+      .map(([y, ids]) => ({ year: Number(y), ids }))
+      .sort((a, b) => a.year - b.year);
+
+    const placedBoxes = [];
+    const top = {};
+
+    for (const group of groups) {
+      const members = group.ids.map(id => ({
+        id,
+        left: cardEls[id].offsetLeft,
+        right: cardEls[id].offsetLeft + cardEls[id].offsetWidth,
+        height: cardEls[id].offsetHeight,
+      }));
+      let center = chronoYToPixel(group.year, minYear);
+
+      let adjusted = true;
+      while (adjusted) {
+        adjusted = false;
+        for (const m of members) {
+          const mTop = center - m.height / 2;
+          for (const box of placedBoxes) {
+            if (m.right > box.left && m.left < box.right && mTop < box.bottom + ROW_GAP) {
+              const needed = box.bottom + ROW_GAP + m.height / 2;
+              if (needed > center) { center = needed; adjusted = true; }
+            }
+          }
+        }
+      }
+
+      for (const m of members) {
+        const mTop = center - m.height / 2;
+        top[m.id] = mTop;
+        placedBoxes.push({ left: m.left, right: m.right, bottom: mTop + m.height });
+      }
+    }
+
+    return top;
+  }
+
   function renderChronological() {
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
@@ -1614,8 +1667,8 @@
     if (!hasPeople) return;
 
     // Same X-layout as the traditional tree: identical generation grouping,
-    // ordering, and sibling/spouse clustering -- only the Y axis (and the
-    // row gap it drives) differs below.
+    // ordering, and sibling/spouse clustering. Y is independent of this --
+    // each person sits at their own birth year, not a shared per-row Y.
     const levels = computeLevels();
     const rows = computeOrder(levels);
     const clustersByLevel = buildClusters(rows);
@@ -1632,24 +1685,8 @@
       }
     }
 
-    // Row heights depend on rendered card height (names can wrap), so
-    // measure now that cards are in the DOM, before positioning them.
-    const rowHeight = rows.map(row => row.reduce((max, id) => Math.max(max, cardEls[id].offsetHeight), 0));
-
-    // One representative year per row: the latest resolved birth year among
-    // that row's people, so a row is never placed earlier than anyone in
-    // it. Each row's Y is the later of its natural chronological spot
-    // (centered on that year) or the traditional tree's own row gap below
-    // the row above -- so a small age gap still gets the traditional
-    // minimum, while a large one lengthens the edge to match real time.
-    const rowYear = rows.map(row => Math.max(...row.map(id => year[id])));
-    const rowY = [];
-    for (let i = 0; i < rows.length; i++) {
-      const naturalTop = chronoYToPixel(rowYear[i], minYear) - rowHeight[i] / 2;
-      const floor = i === 0 ? MARGIN : rowY[i - 1] + rowHeight[i - 1] + ROW_GAP;
-      rowY.push(Math.max(naturalTop, floor));
-    }
-
+    // X first (fixed by generation/lineage), then measure real card heights
+    // (names can wrap) before resolving Y.
     let maxRight = 0;
     for (const row of clustersByLevel) {
       for (const cluster of row) {
@@ -1657,14 +1694,19 @@
         cluster.members.forEach((id, i) => {
           const left = leftEdge + i * (CARD_WIDTH + SPOUSE_GAP);
           cardEls[id].style.left = `${left}px`;
-          cardEls[id].style.top = `${rowY[cluster.level]}px`;
           maxRight = Math.max(maxRight, left + CARD_WIDTH);
         });
       }
     }
 
-    const contentBottom = rowY[rowY.length - 1] + rowHeight[rowHeight.length - 1];
-    const contentHeight = Math.max(contentBottom, chronoYToPixel(maxYear, minYear)) + MARGIN;
+    const topById = chronoResolvePositions(cardEls, year, minYear);
+    let maxBottom = 0;
+    for (const id of Object.keys(cardEls)) {
+      cardEls[id].style.top = `${topById[id]}px`;
+      maxBottom = Math.max(maxBottom, topById[id] + cardEls[id].offsetHeight);
+    }
+
+    const contentHeight = Math.max(maxBottom, chronoYToPixel(maxYear, minYear)) + MARGIN;
     els.content.style.width = `${maxRight + MARGIN}px`;
     els.content.style.height = `${contentHeight}px`;
 
