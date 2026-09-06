@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907a">
+<link rel="stylesheet" href="style.css?v=20260907b">
 </head>
 <body>
   <header class="toolbar">
@@ -257,6 +257,10 @@
           <h4>Siblings</h4>
           <ul class="view-relation-list" id="viewSiblingsList"></ul>
         </div>
+        <div class="view-section" id="viewSpousesSection" hidden>
+          <h4>Spouses</h4>
+          <ul class="view-relation-list" id="viewSpousesList"></ul>
+        </div>
         <div class="view-section" id="viewChildrenSection" hidden>
           <h4>Children</h4>
           <ul class="view-relation-list" id="viewChildrenList"></ul>
@@ -271,7 +275,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907a"></script>
-  <script src="app.js?v=20260907a"></script>
+  <script src="config.js?v=20260907b"></script>
+  <script src="app.js?v=20260907b"></script>
 </body>
 </html>
