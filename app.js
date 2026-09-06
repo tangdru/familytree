@@ -1049,8 +1049,9 @@
   //
   // Down -> Parent 1 (the family this person's own branch hangs off of).
   // Up -> their first child by birth order. Left/right -> step through the
-  // full sibling set (anyone sharing a recorded parent), oldest to
-  // youngest, anchored at this person's own position in it. A spouse
+  // full sibling set (anyone sharing a recorded parent) -- right toward
+  // older, left toward younger -- anchored at this person's own position
+  // in it. A spouse
   // married in from outside that lineage isn't part of this axis at all --
   // reach them via their avatar under the photo instead, per the click
   // handler in buildSpouseAvatar(). Whichever person is on screen is what
@@ -1130,7 +1131,7 @@
 
     let targetId = null;
     if (Math.abs(dx) > Math.abs(dy)) {
-      targetId = siblingNeighborId(currentViewId, dx > 0 ? 1 : -1);
+      targetId = siblingNeighborId(currentViewId, dx > 0 ? -1 : 1);
     } else if (dy < 0) {
       targetId = firstChildId(currentViewId);
     } else {
