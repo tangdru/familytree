@@ -2020,10 +2020,11 @@
   // above lengthens to reflect real elapsed time, and never compresses
   // below the traditional tree's own row gap.
   //
-  // Y = birth year, except a spouse with no recorded parents in the tree
-  // "marries in": instead of using their own birth year, they inherit the
-  // same year as the partner they married, since the timeline only encodes
-  // parent/child time, not a married-in spouse's own ancestry.
+  // Y = birth year, always, when it's known -- a married-in spouse (no
+  // recorded parents in the tree) sits at their own age same as anyone
+  // else. Only when a married-in spouse's OWN birth year is unknown do
+  // they inherit their partner's year as a placeholder, since the timeline
+  // otherwise has nothing to place them by.
 
   const CHRONO_PX_PER_YEAR = 12; // 120px per decade
   const CHRONO_Y_TOP = 60; // top margin above the earliest year
@@ -2041,17 +2042,29 @@
     return Number.isFinite(y) ? y : null;
   }
 
-  // Resolves every person's chronological Y-year, plus which ids "married
-  // in" (inherited their Y from a spouse rather than their own birth year).
+  // Resolves every person's chronological Y-year, plus two independent
+  // flags per id: marriedIn (no recorded parents -- purely a relationship
+  // fact, used for the dashed card styling) and yearFromSpouse (their Y
+  // had to be borrowed from a partner because their OWN birth year is
+  // unknown -- used to decide whether their position may be pulled to
+  // align with that partner; see chronoResolvePositions). A married-in
+  // spouse whose birth year IS known gets marriedIn without
+  // yearFromSpouse, so their card sits at their own age, not their
+  // partner's.
   function computeChronoYears() {
     const ids = Object.keys(data.people);
     const year = {};
     const marriedIn = {};
+    const yearFromSpouse = {};
+    for (const id of ids) {
+      if (data.people[id].parents.length === 0 && data.people[id].spouses.length > 0) marriedIn[id] = true;
+    }
 
-    // Fixed-point pass: apply whichever rule is resolvable this round
-    // (own birth year, inherit from an already-resolved spouse, or average
-    // of already-resolved parents) until nothing changes. Order-independent
-    // by construction, so it doesn't matter which rule "should" fire first.
+    // Fixed-point pass: apply whichever rule is resolvable this round (own
+    // birth year first and always, else average of already-resolved
+    // parents, else inherit from an already-resolved spouse as a last
+    // resort) until nothing changes. Order-independent by construction, so
+    // it doesn't matter which rule "should" fire first.
     let changed = true;
     let guard = 0;
     while (changed && guard++ < ids.length * 3 + 10) {
@@ -2059,36 +2072,32 @@
       for (const id of ids) {
         if (year[id] != null) continue;
         const p = data.people[id];
-        if (p.parents.length > 0 || p.spouses.length === 0) {
-          const by = chronoBirthYear(id);
-          if (by != null) { year[id] = by; changed = true; continue; }
-        }
-        if (p.parents.length === 0) {
-          let inherited = false;
-          for (const sid of p.spouses) {
-            if (data.people[sid] && year[sid] != null) {
-              year[id] = year[sid];
-              marriedIn[id] = true;
-              changed = true;
-              inherited = true;
-              break;
-            }
-          }
-          if (inherited) continue;
-        }
+        const by = chronoBirthYear(id);
+        if (by != null) { year[id] = by; changed = true; continue; }
         if (p.parents.length > 0) {
           const parentYears = p.parents.map(pid => year[pid]).filter(y => y != null);
           if (parentYears.length) {
             year[id] = Math.round(parentYears.reduce((a, b) => a + b, 0) / parentYears.length) + 25;
             changed = true;
+            continue;
+          }
+        } else {
+          for (const sid of p.spouses) {
+            if (data.people[sid] && year[sid] != null) {
+              year[id] = year[sid];
+              yearFromSpouse[id] = true;
+              changed = true;
+              break;
+            }
           }
         }
       }
     }
 
     // Any fully-mutual, unanchored spouse group left over (nobody in the
-    // connected component resolved above) gets anchored on whoever in it
-    // was born earliest; everyone else in the group marries in to them.
+    // connected component resolved above -- i.e. no one in it has a known
+    // birth year or recorded parents) gets anchored on whoever in it was
+    // born earliest; everyone else in the group marries in to them.
     const visited = new Set();
     for (const id of ids) {
       if (year[id] != null || visited.has(id)) continue;
@@ -2113,7 +2122,7 @@
       const anchorYear = chronoBirthYear(anchor) != null ? chronoBirthYear(anchor) : new Date().getFullYear();
       for (const gid of group) {
         year[gid] = anchorYear;
-        if (gid !== anchor) marriedIn[gid] = true;
+        if (gid !== anchor) yearFromSpouse[gid] = true;
       }
     }
 
@@ -2122,7 +2131,7 @@
     const thisYear = new Date().getFullYear();
     for (const id of ids) if (year[id] == null) year[id] = thisYear;
 
-    return { year, marriedIn };
+    return { year, marriedIn, yearFromSpouse };
   }
 
   function chronoYearRange(year) {
@@ -2183,7 +2192,7 @@
   // Checking generic X-overlap against every other already-placed card
   // let one branch's push cascade into an unrelated branch, drifting later
   // generations further and further from their true birth year.
-  function chronoResolvePositions(cardEls, year, marriedIn, minYear) {
+  function chronoResolvePositions(cardEls, year, yearFromSpouse, minYear) {
     const top = {};
     const height = {};
     const ids = Object.keys(cardEls);
@@ -2212,16 +2221,17 @@
     // fall back to each remaining person's own natural position.
     for (const id of ids) if (!resolved.has(id)) top[id] = naturalTop(id);
 
-    // Married-in spouses (no blood parents, so no floor of their own)
-    // align exactly to their partner's final top, so a tie between them
-    // is always perfectly horizontal even though the partner may have
-    // been pushed down by their own blood ancestors.
+    // Only a spouse whose OWN birth year is unknown (so their Y is already
+    // just a borrowed placeholder, not a real age) aligns to their
+    // partner's final top -- anyone with a known birth year keeps their
+    // own natural position, even if that puts them above or below their
+    // partner.
     changed = true;
     guard = 0;
     while (changed && guard++ < ids.length + 5) {
       changed = false;
       for (const id of ids) {
-        if (!marriedIn[id]) continue;
+        if (!yearFromSpouse[id]) continue;
         for (const sid of data.people[id].spouses || []) {
           if (cardEls[sid] && top[sid] > top[id]) { top[id] = top[sid]; changed = true; }
         }
@@ -2246,7 +2256,7 @@
     const rows = computeOrder(levels);
     const clustersByLevel = buildClusters(rows);
 
-    const { year, marriedIn } = computeChronoYears();
+    const { year, marriedIn, yearFromSpouse } = computeChronoYears();
     const { minYear, maxYear } = chronoYearRange(year);
 
     const cardEls = {};
@@ -2272,7 +2282,7 @@
       }
     }
 
-    const topById = chronoResolvePositions(cardEls, year, marriedIn, minYear);
+    const topById = chronoResolvePositions(cardEls, year, yearFromSpouse, minYear);
     let maxBottom = 0;
     for (const id of Object.keys(cardEls)) {
       cardEls[id].style.top = `${topById[id]}px`;
