@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260905j">
+<link rel="stylesheet" href="style.css?v=20260906a">
 </head>
 <body>
   <header class="toolbar">
@@ -19,6 +19,10 @@
       <input id="searchInput" class="search-input" type="search" placeholder="Search people…" autocomplete="off">
     </div>
     <div class="toolbar-spacer"></div>
+    <select id="viewModeSelect" class="view-mode-select" aria-label="Tree view">
+      <option value="traditional">Traditional Tree</option>
+      <option value="chronological">Chronological Tree</option>
+    </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
     <h1 class="toolbar-title">Family Tree</h1>
     <button id="exportBtn" class="btn" hidden>Export JSON</button>
@@ -28,6 +32,9 @@
     <div id="treeCanvas" class="tree-canvas">
       <svg id="linesSvg" class="lines-svg"></svg>
       <div id="treeContent" class="tree-content"></div>
+    </div>
+    <div id="chronoRuler" class="chrono-ruler" hidden>
+      <div id="chronoRulerInner" class="chrono-ruler-inner"></div>
     </div>
     <p id="emptyState" class="empty-state" hidden>
       No one in the tree yet. Click <strong>+ Add Person</strong> to start building your family tree.
@@ -221,7 +228,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260905j"></script>
-  <script src="app.js?v=20260905j"></script>
+  <script src="config.js?v=20260906a"></script>
+  <script src="app.js?v=20260906a"></script>
 </body>
 </html>
