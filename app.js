@@ -1632,26 +1632,26 @@
         right: cardEls[id].offsetLeft + cardEls[id].offsetWidth,
         height: cardEls[id].offsetHeight,
       }));
-      let center = chronoYToPixel(group.year, minYear);
+      // The card's TOP edge -- not its center -- sits on the birth-year
+      // line, so a card visually "hangs" below the year it was born.
+      let groupTop = chronoYToPixel(group.year, minYear);
 
       let adjusted = true;
       while (adjusted) {
         adjusted = false;
         for (const m of members) {
-          const mTop = center - m.height / 2;
           for (const box of placedBoxes) {
-            if (m.right > box.left && m.left < box.right && mTop < box.bottom + ROW_GAP) {
-              const needed = box.bottom + ROW_GAP + m.height / 2;
-              if (needed > center) { center = needed; adjusted = true; }
+            if (m.right > box.left && m.left < box.right && groupTop < box.bottom + ROW_GAP) {
+              const needed = box.bottom + ROW_GAP;
+              if (needed > groupTop) { groupTop = needed; adjusted = true; }
             }
           }
         }
       }
 
       for (const m of members) {
-        const mTop = center - m.height / 2;
-        top[m.id] = mTop;
-        placedBoxes.push({ left: m.left, right: m.right, bottom: mTop + m.height });
+        top[m.id] = groupTop;
+        placedBoxes.push({ left: m.left, right: m.right, bottom: groupTop + m.height });
       }
     }
 
