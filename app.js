@@ -9,6 +9,11 @@
   const CROP_MIN_ZOOM = 1;
   const CROP_MAX_ZOOM = 3;
 
+  // Matches the placeholder markup baked into #viewPhotoPlaceholder in
+  // index.html -- needed again here so a couple card's dynamically-built
+  // member photos (see buildCoupleMember) can show the same placeholder.
+  const PERSON_PLACEHOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
+
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -177,9 +182,11 @@
     viewCloseBtn: document.getElementById('viewCloseBtn'),
     viewEditBtn: document.getElementById('viewEditBtn'),
     viewSwipeZone: document.getElementById('viewSwipeZone'),
+    viewPersonSingle: document.getElementById('viewPersonSingle'),
     viewPhoto: document.getElementById('viewPhoto'),
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
+    viewCouple: document.getElementById('viewCouple'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
@@ -926,7 +933,10 @@
     return age >= 0 ? age : null;
   }
 
-  function buildRelationRow(personId) {
+  // onNavigate defaults to a full reset (openViewModal); the Parents section
+  // passes goToParents instead, so following a parent link extends the
+  // vertical thread (and lands on a couple card) rather than discarding it.
+  function buildRelationRow(personId, onNavigate) {
     const p = data.people[personId];
     if (!p) return null;
     const li = document.createElement('li');
@@ -934,7 +944,7 @@
     link.type = 'button';
     link.className = 'view-relation-link';
     link.textContent = p.name || '(unnamed)';
-    link.addEventListener('click', () => openViewModal(personId));
+    link.addEventListener('click', () => (onNavigate || openViewModal)(personId));
     const age = computeAge(p);
     const ageSpan = document.createElement('span');
     ageSpan.className = 'view-relation-age';
@@ -944,7 +954,7 @@
     return li;
   }
 
-  function fillRelationSection(sectionEl, listEl, ids) {
+  function fillRelationSection(sectionEl, listEl, ids, onNavigate) {
     listEl.innerHTML = '';
     const valid = ids.filter(id => data.people[id]);
     if (!valid.length) { sectionEl.hidden = true; return; }
@@ -952,81 +962,189 @@
       .slice()
       .sort((a, b) => compareByBirth(data.people[a], data.people[b]))
       .forEach(id => {
-        const row = buildRelationRow(id);
+        const row = buildRelationRow(id, onNavigate);
         if (row) listEl.appendChild(row);
       });
     sectionEl.hidden = false;
   }
 
+  // Whoever's "selected" right now -- the person Edit/the sibling swipe/
+  // relation links act on. On a couple card that's whichever of the two is
+  // ringed.
   let currentViewId = null;
 
-  // The vertical (up/down) navigation thread: the sequence of people
+  // The vertical (up/down) navigation thread: the sequence of "positions"
   // visited by swiping up/down, oldest-explored-ancestor first, with
   // verticalIndex pointing at whoever's currently shown. Swiping down then
   // up (or vice versa) retraces this exactly, the way browser back/forward
-  // does, instead of recomputing a generic default every time. See
-  // verticalGoUp/verticalGoDown below.
+  // does, instead of recomputing a generic default every time. Each position
+  // is { ids, selected }: ids is the card shown there (a lone person, or a
+  // couple -- someone's own recorded parents, shown together instead of
+  // guessing which one the swipe "meant"), and selected is whichever of ids
+  // drives further navigation from that position. See verticalGoUp/Down and
+  // selectCoupleMember below.
   let verticalPath = [];
   let verticalIndex = 0;
 
   // The public entry point: anything that isn't a vertical (up/down) swipe
-  // -- a sibling swipe, a spouse avatar, a relation-list link, opening a
-  // card from the tree -- lands here and starts a brand new vertical
-  // thread anchored on whoever it's landing on. See verticalGoUp/Down
-  // below for the thread itself.
+  // -- a sibling swipe, a spouse avatar, a relation-list link (other than a
+  // Parents link, see goToParents), opening a card from the tree -- lands
+  // here and starts a brand new vertical thread anchored on whoever it's
+  // landing on. See verticalGoUp/Down below for the thread itself.
   function openViewModal(personId) {
     if (!data.people[personId]) return;
-    verticalPath = [personId];
+    verticalPath = [{ ids: [personId], selected: personId }];
     verticalIndex = 0;
-    renderPersonView(personId);
+    renderThreadPosition();
   }
 
-  function renderPersonView(personId) {
-    const p = data.people[personId];
-    if (!p) return;
-    currentViewId = personId;
+  function renderThreadPosition() {
+    const node = verticalPath[verticalIndex];
+    if (!node) return;
+    renderPersonView(node.ids, node.selected);
+  }
 
+  // A couple's shared location: shown once for both, since they usually live
+  // together -- the selected member's location if the two differ or only one
+  // is known, otherwise the (matching) value both share.
+  function sharedLocation(ids, selectedId) {
+    const selLoc = (data.people[selectedId] && data.people[selectedId].location) || '';
+    const otherId = ids.find(id => id !== selectedId);
+    const otherLoc = (otherId && data.people[otherId] && data.people[otherId].location) || '';
+    return selLoc || otherLoc;
+  }
+
+  function personDatesText(p) {
+    const born = formatDateDisplay(p.birthDate);
+    const died = formatDateDisplay(p.deathDate);
+    return born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
+  }
+
+  function personDatesAndAgeText(p) {
+    const text = personDatesText(p);
+    const age = computeAge(p);
+    if (age == null) return text;
+    return text ? `${text} · Age ${age}` : `Age ${age}`;
+  }
+
+  // One half of a couple card: photo, name, dates+age, ringed when selected.
+  // Clicking a member switches which side of the couple drives navigation,
+  // without touching the vertical thread itself -- see selectCoupleMember.
+  function buildCoupleMember(personId, isSelected) {
+    const p = data.people[personId];
+    const wrap = document.createElement('div');
+    wrap.className = 'view-couple-member';
+    const photo = document.createElement('div');
+    photo.className = 'view-couple-photo' + (isSelected ? ' selected' : '');
     if (p.photo) {
-      els.viewPhotoImg.src = p.photo;
-      els.viewPhotoImg.alt = p.name || '';
-      els.viewPhotoImg.hidden = false;
-      els.viewPhotoPlaceholder.hidden = true;
+      const img = document.createElement('img');
+      img.src = p.photo;
+      img.alt = p.name || '';
+      photo.appendChild(img);
     } else {
-      els.viewPhotoImg.hidden = true;
-      els.viewPhotoImg.removeAttribute('src');
-      els.viewPhotoPlaceholder.hidden = false;
+      photo.innerHTML = PERSON_PLACEHOLDER_SVG;
+    }
+    const name = document.createElement('div');
+    name.className = 'view-couple-name';
+    name.textContent = p.name || '(unnamed)';
+    const dates = document.createElement('div');
+    dates.className = 'view-couple-dates';
+    dates.textContent = personDatesAndAgeText(p);
+    wrap.appendChild(photo);
+    wrap.appendChild(name);
+    wrap.appendChild(dates);
+    wrap.addEventListener('click', () => selectCoupleMember(personId));
+    return wrap;
+  }
+
+  // Switches which half of the current couple card is "selected" -- i.e.
+  // whose parents/siblings show and whose tree further swipes follow. This
+  // is a lateral change within the current thread position, not a
+  // navigation: it doesn't touch verticalPath/verticalIndex.
+  function selectCoupleMember(personId) {
+    const node = verticalPath[verticalIndex];
+    if (!node || node.selected === personId || !node.ids.includes(personId)) return;
+    node.selected = personId;
+    renderThreadPosition();
+  }
+
+  // Following a link from the Parents section: instead of resetting to a
+  // single-person view of just that parent (forcing a guess at which parent
+  // "the" swipe-up-to-parent means), extend the vertical thread with BOTH of
+  // the current person's recorded parents as a couple card, selecting
+  // whichever one was actually clicked. An explicit choice like this
+  // overwrites any previously-explored path above it, same as a browser
+  // history navigation would.
+  function goToParents(clickedParentId) {
+    const node = verticalPath[verticalIndex];
+    const fromId = node ? node.selected : currentViewId;
+    const parentIds = parentIdsOf(fromId);
+    if (!parentIds.length) { openViewModal(clickedParentId); return; }
+    verticalPath = verticalPath.slice(0, verticalIndex + 1);
+    verticalPath.push({ ids: parentIds, selected: clickedParentId });
+    verticalIndex++;
+    renderThreadPosition();
+  }
+
+  function renderPersonView(ids, selectedId) {
+    const p = data.people[selectedId];
+    if (!p) return;
+    currentViewId = selectedId;
+
+    const isCouple = ids.length > 1;
+    els.viewPersonSingle.hidden = isCouple;
+    els.viewCouple.hidden = !isCouple;
+
+    if (isCouple) {
+      els.viewCouple.innerHTML = '';
+      ids.forEach(id => els.viewCouple.appendChild(buildCoupleMember(id, id === selectedId)));
+    } else {
+      if (p.photo) {
+        els.viewPhotoImg.src = p.photo;
+        els.viewPhotoImg.alt = p.name || '';
+        els.viewPhotoImg.hidden = false;
+        els.viewPhotoPlaceholder.hidden = true;
+      } else {
+        els.viewPhotoImg.hidden = true;
+        els.viewPhotoImg.removeAttribute('src');
+        els.viewPhotoPlaceholder.hidden = false;
+      }
+      els.viewName.textContent = p.name || '(unnamed)';
+      els.viewDates.textContent = personDatesText(p);
+      els.viewDates.hidden = !els.viewDates.textContent;
     }
 
+    // Spouses already shown as the other half of a couple card don't need
+    // repeating in the small avatar row -- that row is for reaching anyone
+    // else the selected person married, e.g. a second marriage.
     els.viewSpouseAvatars.innerHTML = '';
-    const spouseIds = (p.spouses || []).filter(sid => data.people[sid]);
+    const spouseIds = (p.spouses || []).filter(sid => data.people[sid] && !ids.includes(sid));
     spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
     els.viewSpouseAvatars.hidden = !spouseIds.length;
 
-    els.viewName.textContent = p.name || '(unnamed)';
-
-    const born = formatDateDisplay(p.birthDate);
-    const died = formatDateDisplay(p.deathDate);
-    const datesText = born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
-    els.viewDates.textContent = datesText;
-    els.viewDates.hidden = !datesText;
-
-    els.viewLocation.textContent = p.location || '';
-    els.viewLocation.hidden = !p.location;
+    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : (p.location || '');
+    els.viewLocation.hidden = !els.viewLocation.textContent;
 
     els.viewNotes.textContent = p.notes || '';
     els.viewNotes.hidden = !p.notes;
 
-    fillRelationSection(els.viewParentsSection, els.viewParentsList, p.parents || []);
+    fillRelationSection(els.viewParentsSection, els.viewParentsList, p.parents || [], goToParents);
 
     const siblingIds = Object.keys(data.people).filter(id => {
-      if (id === personId) return false;
+      if (id === selectedId) return false;
       return data.people[id].parents.some(pid => p.parents.includes(pid));
     });
     fillRelationSection(els.viewSiblingsSection, els.viewSiblingsList, siblingIds);
 
-    fillRelationSection(els.viewSpousesSection, els.viewSpousesList, p.spouses || []);
+    // A couple card already shows both partners directly -- a Spouses list
+    // repeating "the other one" underneath adds nothing.
+    if (isCouple) {
+      els.viewSpousesSection.hidden = true;
+    } else {
+      fillRelationSection(els.viewSpousesSection, els.viewSpousesList, p.spouses || []);
+    }
 
-    const childIds = Object.keys(data.people).filter(id => data.people[id].parents.includes(personId));
+    const childIds = Object.keys(data.people).filter(id => ids.some(pid => data.people[id].parents.includes(pid)));
     fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds);
 
     els.viewModal.hidden = false;
@@ -1082,10 +1200,12 @@
   // this axis at all -- reach them via their avatar under the photo
   // instead, per the click handler in buildSpouseAvatar().
 
-  function primaryParentId(personId) {
+  // A person's recorded parents, filtered to ones that still exist -- 0, 1,
+  // or 2 ids. Rendered together as a couple card (or a single card, or
+  // hidden entirely) by renderPersonView -- see verticalGoDown/goToParents.
+  function parentIdsOf(personId) {
     const p = data.people[personId];
-    const parentId = p && p.parents[0];
-    return parentId && data.people[parentId] ? parentId : null;
+    return ((p && p.parents) || []).filter(id => data.people[id]);
   }
 
   function firstChildId(personId) {
@@ -1113,37 +1233,38 @@
     return idx >= 0 && idx < set.length ? set[idx] : null;
   }
 
-  // Step toward a child: replay the remembered one if we've been this way
-  // before, otherwise fall back to the default (first child by birth
-  // order) and extend the thread with it.
+  // Step toward a child: replay the remembered position if we've been this
+  // way before, otherwise fall back to the default (first child by birth
+  // order, shown alone) and extend the thread with it.
   function verticalGoUp() {
     if (!verticalPath.length) return;
     if (verticalIndex + 1 < verticalPath.length) {
       verticalIndex++;
-      renderPersonView(verticalPath[verticalIndex]);
+      renderThreadPosition();
       return;
     }
-    const childId = firstChildId(verticalPath[verticalIndex]);
+    const childId = firstChildId(verticalPath[verticalIndex].selected);
     if (!childId) return;
-    verticalPath.push(childId);
+    verticalPath.push({ ids: [childId], selected: childId });
     verticalIndex++;
-    renderPersonView(childId);
+    renderThreadPosition();
   }
 
-  // Step toward a parent: replay the remembered one (i.e. undo the last
-  // "up") if there is one, otherwise fall back to the default (Parent 1)
-  // and extend the thread with it.
+  // Step toward a parent: replay the remembered position (i.e. undo the
+  // last "up") if there is one, otherwise fall back to the default -- both
+  // recorded parents as a couple card, Parent 1 selected -- and extend the
+  // thread with it.
   function verticalGoDown() {
     if (!verticalPath.length) return;
     if (verticalIndex > 0) {
       verticalIndex--;
-      renderPersonView(verticalPath[verticalIndex]);
+      renderThreadPosition();
       return;
     }
-    const parentId = primaryParentId(verticalPath[0]);
-    if (!parentId) return;
-    verticalPath.unshift(parentId);
-    renderPersonView(parentId);
+    const parentIds = parentIdsOf(verticalPath[0].selected);
+    if (!parentIds.length) return;
+    verticalPath.unshift({ ids: parentIds, selected: parentIds[0] });
+    renderThreadPosition();
   }
 
   const SWIPE_THRESHOLD = 48;  // px; smaller drags are taps, not swipes
