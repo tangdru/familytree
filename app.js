@@ -171,6 +171,24 @@
     cropCloseBtn: document.getElementById('cropCloseBtn'),
     cropCancelBtn: document.getElementById('cropCancelBtn'),
     cropApplyBtn: document.getElementById('cropApplyBtn'),
+
+    viewModal: document.getElementById('personViewModal'),
+    viewCloseModalBtn: document.getElementById('viewCloseModalBtn'),
+    viewCloseBtn: document.getElementById('viewCloseBtn'),
+    viewEditBtn: document.getElementById('viewEditBtn'),
+    viewPhoto: document.getElementById('viewPhoto'),
+    viewPhotoImg: document.getElementById('viewPhotoImg'),
+    viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
+    viewName: document.getElementById('viewName'),
+    viewDates: document.getElementById('viewDates'),
+    viewLocation: document.getElementById('viewLocation'),
+    viewNotes: document.getElementById('viewNotes'),
+    viewParentsSection: document.getElementById('viewParentsSection'),
+    viewParentsList: document.getElementById('viewParentsList'),
+    viewSiblingsSection: document.getElementById('viewSiblingsSection'),
+    viewSiblingsList: document.getElementById('viewSiblingsList'),
+    viewChildrenSection: document.getElementById('viewChildrenSection'),
+    viewChildrenList: document.getElementById('viewChildrenList'),
   };
 
   let pendingPhoto = null; // dataURL currently staged in the form
@@ -886,6 +904,117 @@
     if (e.key !== 'Escape') return;
     if (!els.cropModal.hidden) cancelCropper();
     else if (!els.modal.hidden) closeModal();
+    else if (!els.viewModal.hidden) closeViewModal();
+  });
+
+  // ---------- Person view (read-only detail) modal ----------
+
+  // Age in whole years as of death (if deceased) or today (if living).
+  function computeAge(person) {
+    if (!person.birthDate) return null;
+    const birth = new Date(person.birthDate);
+    if (Number.isNaN(birth.getTime())) return null;
+    const end = person.deathDate ? new Date(person.deathDate) : new Date();
+    let age = end.getFullYear() - birth.getFullYear();
+    const beforeBirthday = end.getMonth() < birth.getMonth() ||
+      (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate());
+    if (beforeBirthday) age--;
+    return age >= 0 ? age : null;
+  }
+
+  function buildRelationRow(personId) {
+    const p = data.people[personId];
+    if (!p) return null;
+    const li = document.createElement('li');
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'view-relation-link';
+    link.textContent = p.name || '(unnamed)';
+    link.addEventListener('click', () => openViewModal(personId));
+    const age = computeAge(p);
+    const ageSpan = document.createElement('span');
+    ageSpan.className = 'view-relation-age';
+    ageSpan.textContent = age == null ? '' : p.deathDate ? `${age} (d. ${formatYear(p.deathDate)})` : `${age}`;
+    li.appendChild(link);
+    li.appendChild(ageSpan);
+    return li;
+  }
+
+  function fillRelationSection(sectionEl, listEl, ids) {
+    listEl.innerHTML = '';
+    const valid = ids.filter(id => data.people[id]);
+    if (!valid.length) { sectionEl.hidden = true; return; }
+    valid
+      .slice()
+      .sort((a, b) => compareByBirth(data.people[a], data.people[b]))
+      .forEach(id => {
+        const row = buildRelationRow(id);
+        if (row) listEl.appendChild(row);
+      });
+    sectionEl.hidden = false;
+  }
+
+  let currentViewId = null;
+
+  function openViewModal(personId) {
+    const p = data.people[personId];
+    if (!p) return;
+    currentViewId = personId;
+
+    if (p.photo) {
+      els.viewPhotoImg.src = p.photo;
+      els.viewPhotoImg.alt = p.name || '';
+      els.viewPhotoImg.hidden = false;
+      els.viewPhotoPlaceholder.hidden = true;
+    } else {
+      els.viewPhotoImg.hidden = true;
+      els.viewPhotoImg.removeAttribute('src');
+      els.viewPhotoPlaceholder.hidden = false;
+    }
+
+    els.viewName.textContent = p.name || '(unnamed)';
+
+    const born = formatDateDisplay(p.birthDate);
+    const died = formatDateDisplay(p.deathDate);
+    const datesText = born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
+    els.viewDates.textContent = datesText;
+    els.viewDates.hidden = !datesText;
+
+    els.viewLocation.textContent = p.location || '';
+    els.viewLocation.hidden = !p.location;
+
+    els.viewNotes.textContent = p.notes || '';
+    els.viewNotes.hidden = !p.notes;
+
+    fillRelationSection(els.viewParentsSection, els.viewParentsList, p.parents || []);
+
+    const siblingIds = Object.keys(data.people).filter(id => {
+      if (id === personId) return false;
+      return data.people[id].parents.some(pid => p.parents.includes(pid));
+    });
+    fillRelationSection(els.viewSiblingsSection, els.viewSiblingsList, siblingIds);
+
+    const childIds = Object.keys(data.people).filter(id => data.people[id].parents.includes(personId));
+    fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds);
+
+    els.viewModal.hidden = false;
+  }
+
+  function closeViewModal() {
+    if (document.activeElement && els.viewModal.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+    els.viewModal.hidden = true;
+    resetPageScroll();
+  }
+
+  els.viewCloseModalBtn.addEventListener('click', closeViewModal);
+  els.viewCloseBtn.addEventListener('click', closeViewModal);
+  els.viewModal.addEventListener('click', (e) => { if (e.target === els.viewModal) closeViewModal(); });
+  els.viewEditBtn.addEventListener('click', () => {
+    const id = currentViewId;
+    closeViewModal();
+    if (id) openModalForEdit(id);
   });
 
   function populateSelectOptions(excludeId) {
@@ -1346,7 +1475,7 @@
     card.appendChild(photo);
     card.appendChild(info);
 
-    card.addEventListener('click', () => openModalForEdit(person.id));
+    card.addEventListener('click', () => openViewModal(person.id));
     return card;
   }
 

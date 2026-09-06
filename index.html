@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260906k">
+<link rel="stylesheet" href="style.css?v=20260907a">
 </head>
 <body>
   <header class="toolbar">
@@ -227,8 +227,51 @@
     </div>
   </div>
 
+  <!-- Person View (read-only detail) Modal -->
+  <div id="personViewModal" class="modal-overlay" hidden>
+    <div class="modal view-modal">
+      <div class="modal-header">
+        <h2>Person</h2>
+        <button id="viewCloseModalBtn" type="button" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="view-photo" id="viewPhoto">
+          <span id="viewPhotoPlaceholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </span>
+          <img id="viewPhotoImg" alt="" hidden>
+        </div>
+        <h3 class="view-name" id="viewName"></h3>
+        <p class="view-dates" id="viewDates" hidden></p>
+        <p class="view-location" id="viewLocation" hidden></p>
+        <p class="view-notes" id="viewNotes" hidden></p>
+
+        <div class="view-section" id="viewParentsSection" hidden>
+          <h4>Parents</h4>
+          <ul class="view-relation-list" id="viewParentsList"></ul>
+        </div>
+        <div class="view-section" id="viewSiblingsSection" hidden>
+          <h4>Siblings</h4>
+          <ul class="view-relation-list" id="viewSiblingsList"></ul>
+        </div>
+        <div class="view-section" id="viewChildrenSection" hidden>
+          <h4>Children</h4>
+          <ul class="view-relation-list" id="viewChildrenList"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="spacer"></div>
+        <button type="button" id="viewCloseBtn" class="btn">Close</button>
+        <button type="button" id="viewEditBtn" class="btn btn-primary">Edit</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260906k"></script>
-  <script src="app.js?v=20260906k"></script>
+  <script src="config.js?v=20260907a"></script>
+  <script src="app.js?v=20260907a"></script>
 </body>
 </html>
