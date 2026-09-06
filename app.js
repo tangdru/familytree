@@ -2025,7 +2025,7 @@
   // same year as the partner they married, since the timeline only encodes
   // parent/child time, not a married-in spouse's own ancestry.
 
-  const CHRONO_PX_PER_YEAR = 8; // 80px per decade
+  const CHRONO_PX_PER_YEAR = 12; // 120px per decade
   const CHRONO_Y_TOP = 60; // top margin above the earliest year
   // Just enough breathing room to keep a parent and child's cards from
   // visually touching -- NOT the traditional tree's generation gap (70px).
