@@ -176,9 +176,11 @@
     viewCloseModalBtn: document.getElementById('viewCloseModalBtn'),
     viewCloseBtn: document.getElementById('viewCloseBtn'),
     viewEditBtn: document.getElementById('viewEditBtn'),
+    viewSwipeZone: document.getElementById('viewSwipeZone'),
     viewPhoto: document.getElementById('viewPhoto'),
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
+    viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
     viewLocation: document.getElementById('viewLocation'),
@@ -974,6 +976,11 @@
       els.viewPhotoPlaceholder.hidden = false;
     }
 
+    els.viewSpouseAvatars.innerHTML = '';
+    const spouseIds = (p.spouses || []).filter(sid => data.people[sid]);
+    spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
+    els.viewSpouseAvatars.hidden = !spouseIds.length;
+
     els.viewName.textContent = p.name || '(unnamed)';
 
     const born = formatDateDisplay(p.birthDate);
@@ -1020,6 +1027,130 @@
     closeViewModal();
     if (id) openModalForEdit(id);
   });
+
+  function buildSpouseAvatar(spouseId) {
+    const sp = data.people[spouseId];
+    const el = document.createElement('div');
+    el.className = 'view-spouse-avatar';
+    el.title = sp.name || '(unnamed)';
+    if (sp.photo) {
+      const img = document.createElement('img');
+      img.src = sp.photo;
+      img.alt = sp.name || '';
+      el.appendChild(img);
+    } else {
+      el.textContent = '🧑';
+    }
+    el.addEventListener('click', () => openViewModal(spouseId));
+    return el;
+  }
+
+  // ---------- Person view: swipe navigation ----------
+  //
+  // Down -> Parent 1 (the family this person's own branch hangs off of).
+  // Up -> their first child by birth order. Left/right -> step through the
+  // full sibling set (anyone sharing a recorded parent), oldest to
+  // youngest, anchored at this person's own position in it. A spouse
+  // married in from outside that lineage isn't part of this axis at all --
+  // reach them via their avatar under the photo instead, per the click
+  // handler in buildSpouseAvatar(). Whichever person is on screen is what
+  // every gesture is relative to, so swiping into a spouse's own siblings
+  // naturally re-anchors navigation to their family, with no extra state.
+
+  function primaryParentId(personId) {
+    const p = data.people[personId];
+    const parentId = p && p.parents[0];
+    return parentId && data.people[parentId] ? parentId : null;
+  }
+
+  function firstChildId(personId) {
+    const kids = Object.keys(data.people)
+      .filter(id => data.people[id].parents.includes(personId))
+      .sort((a, b) => compareByBirth(data.people[a], data.people[b]));
+    return kids.length ? kids[0] : null;
+  }
+
+  // The person's full sibling set (anyone sharing a recorded parent),
+  // including themself, oldest to youngest -- so their own index in it
+  // gives a stable anchor for stepping to the next/previous one.
+  function siblingSet(personId) {
+    const p = data.people[personId];
+    if (!p || !p.parents.length) return [personId];
+    const ids = Object.keys(data.people).filter(id =>
+      id === personId || data.people[id].parents.some(pid => p.parents.includes(pid))
+    );
+    return ids.sort((a, b) => compareByBirth(data.people[a], data.people[b]));
+  }
+
+  function siblingNeighborId(personId, step) {
+    const set = siblingSet(personId);
+    const idx = set.indexOf(personId) + step;
+    return idx >= 0 && idx < set.length ? set[idx] : null;
+  }
+
+  const SWIPE_THRESHOLD = 48;  // px; smaller drags are taps, not swipes
+  const SWIPE_DEADZONE = 10;   // px moved before this counts as dragging at all
+  let swipeStart = null;
+  let swipeCaptured = false;
+  let suppressNextClick = false;
+
+  els.viewSwipeZone.addEventListener('pointerdown', (e) => {
+    // A stale true here (a previous swipe whose compensating click never
+    // fired -- not every browser sends one after a large drag) would wrongly
+    // swallow this new, unrelated tap. Starting a fresh gesture is the one
+    // moment we know for certain any earlier suppression is no longer valid.
+    suppressNextClick = false;
+    swipeStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    swipeCaptured = false;
+  });
+  els.viewSwipeZone.addEventListener('pointermove', (e) => {
+    if (!swipeStart || e.pointerId !== swipeStart.id || swipeCaptured) return;
+    const dx = e.clientX - swipeStart.x;
+    const dy = e.clientY - swipeStart.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_DEADZONE) return;
+    // Only capture once we know this is an actual drag, not a tap: while
+    // captured, the browser retargets the *compatibility click event* to
+    // this zone too (per the Pointer Events spec), which would stop a
+    // plain tap on the spouse avatar from ever reaching its own click
+    // listener. A real swipe still needs capture, though -- it moves the
+    // pointer beyond this fairly short zone, and without capture pointerup
+    // would fire on whatever element the cursor ends up over instead.
+    swipeCaptured = true;
+    els.viewSwipeZone.setPointerCapture(e.pointerId);
+  });
+  els.viewSwipeZone.addEventListener('pointerup', (e) => {
+    if (swipeCaptured && els.viewSwipeZone.hasPointerCapture(e.pointerId)) {
+      els.viewSwipeZone.releasePointerCapture(e.pointerId);
+    }
+    if (!swipeStart || e.pointerId !== swipeStart.id) return;
+    const dx = e.clientX - swipeStart.x;
+    const dy = e.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+
+    let targetId = null;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      targetId = siblingNeighborId(currentViewId, dx > 0 ? 1 : -1);
+    } else if (dy < 0) {
+      targetId = firstChildId(currentViewId);
+    } else {
+      targetId = primaryParentId(currentViewId);
+    }
+    if (targetId) {
+      suppressNextClick = true;
+      openViewModal(targetId);
+    }
+  });
+  els.viewSwipeZone.addEventListener('pointercancel', () => { swipeStart = null; swipeCaptured = false; });
+  // A real swipe's pointerup can land on the spouse-avatar row underneath
+  // the pointer's final position -- swallow that one click so it doesn't
+  // also fire the avatar's own navigation on top of the swipe's.
+  els.viewSwipeZone.addEventListener('click', (e) => {
+    if (!suppressNextClick) return;
+    suppressNextClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
 
   function populateSelectOptions(excludeId) {
     const people = Object.values(data.people)
