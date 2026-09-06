@@ -1400,6 +1400,11 @@
         const y = r1.centerY;
         const x1 = r1.right < r2.left ? r1.right : r2.right;
         const x2 = r1.right < r2.left ? r2.left : r1.left;
+        // A hub with 2+ spouses (a remarriage) puts them in the same row --
+        // only tie together cards that are actually next to each other, so
+        // a tie to the far spouse doesn't draw straight through whoever
+        // else's card sits in between.
+        if (Math.abs(x2 - x1) > SPOUSE_GAP + 2) continue;
         svg.appendChild(svgLine(x1, y, x2, y));
       }
     }
