@@ -1463,6 +1463,12 @@
 
   const CHRONO_PX_PER_YEAR = 6;
   const CHRONO_Y_TOP = 60; // top margin above the earliest year
+  // Just enough breathing room to keep a parent and child's cards from
+  // visually touching -- NOT the traditional tree's generation gap (70px).
+  // That would add a fixed cushion on top of every single edge, and over
+  // a long lineage those fixed cushions compound into decades of drift
+  // even when every real gap already comfortably clears a card's height.
+  const CHRONO_MIN_GAP = 12;
 
   function chronoBirthYear(id) {
     const p = data.people[id];
@@ -1637,7 +1643,7 @@
         const parentIds = data.people[id].parents.filter(pid => cardEls[pid]);
         if (parentIds.some(pid => !resolved.has(pid))) continue;
         let t = naturalTop(id);
-        for (const pid of parentIds) t = Math.max(t, top[pid] + height[pid] + ROW_GAP);
+        for (const pid of parentIds) t = Math.max(t, top[pid] + height[pid] + CHRONO_MIN_GAP);
         top[id] = t;
         resolved.add(id);
         changed = true;
