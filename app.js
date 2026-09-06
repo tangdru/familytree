@@ -2139,19 +2139,14 @@
     return CHRONO_Y_TOP + (yr - minYear) * CHRONO_PX_PER_YEAR;
   }
 
-  // Extra decade gridlines + a "Today" line, drawn behind whatever
-  // drawLines() already put in the SVG (it draws first and does not clear
-  // what's appended after it).
+  // Extra decade gridlines, drawn behind whatever drawLines() already put
+  // in the SVG (it draws first and does not clear what's appended after
+  // it). The ruler still marks "Today" as a label -- see renderChronoRuler.
   function drawChronoGridlines(minYear, maxYear, contentWidth) {
     const svg = els.svg;
     for (let y = minYear; y <= maxYear; y += 10) {
       const py = chronoYToPixel(y, minYear);
       svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--card-border)', 1), svg.firstChild);
-    }
-    const thisYear = new Date().getFullYear();
-    if (thisYear >= minYear && thisYear <= maxYear) {
-      const py = chronoYToPixel(thisYear, minYear);
-      svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--accent-dark)', 1.5, '5 4'), svg.firstChild);
     }
   }
 
