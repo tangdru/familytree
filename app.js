@@ -1611,47 +1611,55 @@
   // just enough to clear any earlier-placed card whose X-range it would
   // otherwise overlap. Processing oldest-year-first means a nudge is never
   // undone by a later group. Returns a top-position map.
-  function chronoResolvePositions(cardEls, year, minYear) {
-    const groupsByYear = new Map();
-    for (const id of Object.keys(cardEls)) {
-      const y = year[id];
-      if (!groupsByYear.has(y)) groupsByYear.set(y, []);
-      groupsByYear.get(y).push(id);
-    }
-    const groups = Array.from(groupsByYear.entries())
-      .map(([y, ids]) => ({ year: Number(y), ids }))
-      .sort((a, b) => a.year - b.year);
-
-    const placedBoxes = [];
+  // A card's floor is driven by its ACTUAL recorded parents, not by
+  // whatever else happens to sit nearby: different lineages never share X
+  // (buildClusters reserves each cluster's own width), so the only cards
+  // that can ever legitimately overlap are a parent and its own child.
+  // Checking generic X-overlap against every other already-placed card
+  // let one branch's push cascade into an unrelated branch, drifting later
+  // generations further and further from their true birth year.
+  function chronoResolvePositions(cardEls, year, marriedIn, minYear) {
     const top = {};
+    const height = {};
+    const ids = Object.keys(cardEls);
+    for (const id of ids) height[id] = cardEls[id].offsetHeight;
+    const naturalTop = id => chronoYToPixel(year[id], minYear);
 
-    for (const group of groups) {
-      const members = group.ids.map(id => ({
-        id,
-        left: cardEls[id].offsetLeft,
-        right: cardEls[id].offsetLeft + cardEls[id].offsetWidth,
-        height: cardEls[id].offsetHeight,
-      }));
-      // The card's TOP edge -- not its center -- sits on the birth-year
-      // line, so a card visually "hangs" below the year it was born.
-      let groupTop = chronoYToPixel(group.year, minYear);
-
-      let adjusted = true;
-      while (adjusted) {
-        adjusted = false;
-        for (const m of members) {
-          for (const box of placedBoxes) {
-            if (m.right > box.left && m.left < box.right && groupTop < box.bottom + ROW_GAP) {
-              const needed = box.bottom + ROW_GAP;
-              if (needed > groupTop) { groupTop = needed; adjusted = true; }
-            }
-          }
-        }
+    // Process a person only once every recorded parent of theirs is
+    // resolved, so a child's floor can look up its parents' final tops.
+    const resolved = new Set();
+    let changed = true;
+    let guard = 0;
+    while (changed && guard++ < ids.length + 5) {
+      changed = false;
+      for (const id of ids) {
+        if (resolved.has(id)) continue;
+        const parentIds = data.people[id].parents.filter(pid => cardEls[pid]);
+        if (parentIds.some(pid => !resolved.has(pid))) continue;
+        let t = naturalTop(id);
+        for (const pid of parentIds) t = Math.max(t, top[pid] + height[pid] + ROW_GAP);
+        top[id] = t;
+        resolved.add(id);
+        changed = true;
       }
+    }
+    // A parent-reference cycle (bad data) would otherwise loop forever --
+    // fall back to each remaining person's own natural position.
+    for (const id of ids) if (!resolved.has(id)) top[id] = naturalTop(id);
 
-      for (const m of members) {
-        top[m.id] = groupTop;
-        placedBoxes.push({ left: m.left, right: m.right, bottom: groupTop + m.height });
+    // Married-in spouses (no blood parents, so no floor of their own)
+    // align exactly to their partner's final top, so a tie between them
+    // is always perfectly horizontal even though the partner may have
+    // been pushed down by their own blood ancestors.
+    changed = true;
+    guard = 0;
+    while (changed && guard++ < ids.length + 5) {
+      changed = false;
+      for (const id of ids) {
+        if (!marriedIn[id]) continue;
+        for (const sid of data.people[id].spouses || []) {
+          if (cardEls[sid] && top[sid] > top[id]) { top[id] = top[sid]; changed = true; }
+        }
       }
     }
 
@@ -1699,7 +1707,7 @@
       }
     }
 
-    const topById = chronoResolvePositions(cardEls, year, minYear);
+    const topById = chronoResolvePositions(cardEls, year, marriedIn, minYear);
     let maxBottom = 0;
     for (const id of Object.keys(cardEls)) {
       cardEls[id].style.top = `${topById[id]}px`;
