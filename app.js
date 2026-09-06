@@ -187,6 +187,8 @@
     viewParentsList: document.getElementById('viewParentsList'),
     viewSiblingsSection: document.getElementById('viewSiblingsSection'),
     viewSiblingsList: document.getElementById('viewSiblingsList'),
+    viewSpousesSection: document.getElementById('viewSpousesSection'),
+    viewSpousesList: document.getElementById('viewSpousesList'),
     viewChildrenSection: document.getElementById('viewChildrenSection'),
     viewChildrenList: document.getElementById('viewChildrenList'),
   };
@@ -993,6 +995,8 @@
       return data.people[id].parents.some(pid => p.parents.includes(pid));
     });
     fillRelationSection(els.viewSiblingsSection, els.viewSiblingsList, siblingIds);
+
+    fillRelationSection(els.viewSpousesSection, els.viewSpousesList, p.spouses || []);
 
     const childIds = Object.keys(data.people).filter(id => data.people[id].parents.includes(personId));
     fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds);
