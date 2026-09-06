@@ -960,7 +960,28 @@
 
   let currentViewId = null;
 
+  // The vertical (up/down) navigation thread: the sequence of people
+  // visited by swiping up/down, oldest-explored-ancestor first, with
+  // verticalIndex pointing at whoever's currently shown. Swiping down then
+  // up (or vice versa) retraces this exactly, the way browser back/forward
+  // does, instead of recomputing a generic default every time. See
+  // verticalGoUp/verticalGoDown below.
+  let verticalPath = [];
+  let verticalIndex = 0;
+
+  // The public entry point: anything that isn't a vertical (up/down) swipe
+  // -- a sibling swipe, a spouse avatar, a relation-list link, opening a
+  // card from the tree -- lands here and starts a brand new vertical
+  // thread anchored on whoever it's landing on. See verticalGoUp/Down
+  // below for the thread itself.
   function openViewModal(personId) {
+    if (!data.people[personId]) return;
+    verticalPath = [personId];
+    verticalIndex = 0;
+    renderPersonView(personId);
+  }
+
+  function renderPersonView(personId) {
     const p = data.people[personId];
     if (!p) return;
     currentViewId = personId;
@@ -1047,16 +1068,19 @@
 
   // ---------- Person view: swipe navigation ----------
   //
-  // Down -> Parent 1 (the family this person's own branch hangs off of).
-  // Up -> their first child by birth order. Left/right -> step through the
-  // full sibling set (anyone sharing a recorded parent) -- right toward
-  // older, left toward younger -- anchored at this person's own position
-  // in it. A spouse
-  // married in from outside that lineage isn't part of this axis at all --
-  // reach them via their avatar under the photo instead, per the click
-  // handler in buildSpouseAvatar(). Whichever person is on screen is what
-  // every gesture is relative to, so swiping into a spouse's own siblings
-  // naturally re-anchors navigation to their family, with no extra state.
+  // Down/up move along one continuous vertical thread and remember it: the
+  // first down goes to Parent 1, the first up goes to the first child by
+  // birth order, but once you've stepped somewhere, retracing your steps
+  // (down then up, or up then down) returns to exactly the person you came
+  // from -- not just whatever's structurally "first" -- the way browser
+  // back/forward works. Only stepping past the end you've already explored
+  // computes a fresh default. Left/right step through the full sibling set
+  // (anyone sharing a recorded parent) -- right toward older, left toward
+  // younger -- anchored at this person's own position in it, and leaving
+  // via a sibling starts an entirely new vertical thread on them, per
+  // openViewModal(). A spouse married in from outside the lineage isn't on
+  // this axis at all -- reach them via their avatar under the photo
+  // instead, per the click handler in buildSpouseAvatar().
 
   function primaryParentId(personId) {
     const p = data.people[personId];
@@ -1087,6 +1111,39 @@
     const set = siblingSet(personId);
     const idx = set.indexOf(personId) + step;
     return idx >= 0 && idx < set.length ? set[idx] : null;
+  }
+
+  // Step toward a child: replay the remembered one if we've been this way
+  // before, otherwise fall back to the default (first child by birth
+  // order) and extend the thread with it.
+  function verticalGoUp() {
+    if (!verticalPath.length) return;
+    if (verticalIndex + 1 < verticalPath.length) {
+      verticalIndex++;
+      renderPersonView(verticalPath[verticalIndex]);
+      return;
+    }
+    const childId = firstChildId(verticalPath[verticalIndex]);
+    if (!childId) return;
+    verticalPath.push(childId);
+    verticalIndex++;
+    renderPersonView(childId);
+  }
+
+  // Step toward a parent: replay the remembered one (i.e. undo the last
+  // "up") if there is one, otherwise fall back to the default (Parent 1)
+  // and extend the thread with it.
+  function verticalGoDown() {
+    if (!verticalPath.length) return;
+    if (verticalIndex > 0) {
+      verticalIndex--;
+      renderPersonView(verticalPath[verticalIndex]);
+      return;
+    }
+    const parentId = primaryParentId(verticalPath[0]);
+    if (!parentId) return;
+    verticalPath.unshift(parentId);
+    renderPersonView(parentId);
   }
 
   const SWIPE_THRESHOLD = 48;  // px; smaller drags are taps, not swipes
@@ -1129,17 +1186,19 @@
     swipeStart = null;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
 
-    let targetId = null;
+    suppressNextClick = true;
     if (Math.abs(dx) > Math.abs(dy)) {
-      targetId = siblingNeighborId(currentViewId, dx > 0 ? -1 : 1);
+      const siblingId = siblingNeighborId(currentViewId, dx > 0 ? -1 : 1);
+      if (siblingId) openViewModal(siblingId); // a fresh vertical thread, per spec
+      else suppressNextClick = false; // no-op: nothing actually navigated, so don't eat the next tap
     } else if (dy < 0) {
-      targetId = firstChildId(currentViewId);
+      const before = currentViewId;
+      verticalGoUp();
+      if (currentViewId === before) suppressNextClick = false;
     } else {
-      targetId = primaryParentId(currentViewId);
-    }
-    if (targetId) {
-      suppressNextClick = true;
-      openViewModal(targetId);
+      const before = currentViewId;
+      verticalGoDown();
+      if (currentViewId === before) suppressNextClick = false;
     }
   });
   els.viewSwipeZone.addEventListener('pointercancel', () => { swipeStart = null; swipeCaptured = false; });
