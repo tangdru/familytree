@@ -49,6 +49,47 @@
     'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
     'District of Columbia'];
 
+  // Best-effort country-name -> ISO 3166-1 alpha-2 lookup, for guessing a
+  // default country for the Contact field's phone formatting from a
+  // person's location instead of always assuming US. Not exhaustive --
+  // covers common countries likely to actually show up in a family tree;
+  // an unmapped or oddly-spelled name just falls back to no guess (caller
+  // defaults to US, same as before this existed).
+  const COUNTRY_NAME_TO_ISO = {
+    'United States': 'US', 'United States of America': 'US', 'USA': 'US',
+    'United Kingdom': 'GB', 'UK': 'GB', 'Great Britain': 'GB', 'England': 'GB', 'Scotland': 'GB', 'Wales': 'GB', 'Northern Ireland': 'GB',
+    'Canada': 'CA', 'Mexico': 'MX',
+    'France': 'FR', 'Germany': 'DE', 'Italy': 'IT', 'Spain': 'ES', 'Portugal': 'PT',
+    'Netherlands': 'NL', 'Belgium': 'BE', 'Switzerland': 'CH', 'Austria': 'AT', 'Ireland': 'IE',
+    'Sweden': 'SE', 'Norway': 'NO', 'Denmark': 'DK', 'Finland': 'FI', 'Iceland': 'IS',
+    'Poland': 'PL', 'Czech Republic': 'CZ', 'Czechia': 'CZ', 'Hungary': 'HU', 'Romania': 'RO',
+    'Bulgaria': 'BG', 'Greece': 'GR', 'Croatia': 'HR', 'Serbia': 'RS', 'Ukraine': 'UA', 'Russia': 'RU',
+    'Turkey': 'TR', 'Israel': 'IL', 'Saudi Arabia': 'SA', 'United Arab Emirates': 'AE', 'Egypt': 'EG',
+    'China': 'CN', 'Japan': 'JP', 'South Korea': 'KR', 'Korea': 'KR', 'North Korea': 'KP',
+    'Taiwan': 'TW', 'Hong Kong': 'HK', 'Vietnam': 'VN', 'Viet Nam': 'VN', 'Thailand': 'TH',
+    'Philippines': 'PH', 'Indonesia': 'ID', 'Malaysia': 'MY', 'Singapore': 'SG',
+    'India': 'IN', 'Pakistan': 'PK', 'Bangladesh': 'BD', 'Sri Lanka': 'LK', 'Nepal': 'NP',
+    'South Africa': 'ZA', 'Nigeria': 'NG', 'Kenya': 'KE', 'Ethiopia': 'ET', 'Ghana': 'GH',
+    'Morocco': 'MA', 'Algeria': 'DZ',
+    'Brazil': 'BR', 'Argentina': 'AR', 'Chile': 'CL', 'Colombia': 'CO', 'Peru': 'PE',
+    'Venezuela': 'VE', 'Ecuador': 'EC', 'Cuba': 'CU', 'Dominican Republic': 'DO', 'Haiti': 'HT',
+    'Jamaica': 'JM', 'Puerto Rico': 'PR',
+    'Australia': 'AU', 'New Zealand': 'NZ', 'Luxembourg': 'LU',
+  };
+
+  // Guesses a default country from a location string ("City, State" for a
+  // US location per shortenLocationText, "City, Country" otherwise) by
+  // matching its last comma-separated segment. Returns null (caller
+  // defaults to US) when nothing recognizable is found.
+  function guessCountryFromLocationText(text) {
+    if (!text) return null;
+    const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const last = parts[parts.length - 1];
+    if (US_STATE_NAMES.includes(last)) return 'US';
+    return COUNTRY_NAME_TO_ISO[last] || null;
+  }
+
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -641,17 +682,19 @@
   // when it unambiguously looks like one or the other; anything else (or
   // an unset value) just shows as plain text, per whatever mode it was
   // last saved in -- see the Contact field's live phone/email detection.
-  function contactHref(value) {
+  function contactHref(value, defaultCountry) {
     if (!value) return null;
     if (value.includes('@') && /[a-zA-Z]/.test(value)) return `mailto:${value}`;
     if (/\d/.test(value) && !/[a-zA-Z]/.test(value)) {
       // Prefer libphonenumber-js's own E.164 number (e.g. "+16175551234")
       // over just stripping punctuation -- it's the properly normalized,
       // always-dialable form regardless of which country's grouping the
-      // display text is in.
+      // display text is in. defaultCountry only matters when `value` has
+      // no leading "+" (a domestic-style number) -- with one, the library
+      // infers the country from the calling code regardless.
       if (window.libphonenumber && window.libphonenumber.parsePhoneNumberFromString) {
         try {
-          const parsed = window.libphonenumber.parsePhoneNumberFromString(value, 'US');
+          const parsed = window.libphonenumber.parsePhoneNumberFromString(value, defaultCountry || 'US');
           if (parsed) return `tel:${parsed.number}`;
         } catch (e) {
           console.warn('libphonenumber-js parsing failed, falling back to plain digits.', e);
@@ -1318,16 +1361,18 @@
 
   // Proper live phone formatting via libphonenumber-js's AsYouType (loaded
   // from CDN in index.html): a leading "+" plus country calling code picks
-  // the right country's own grouping (e.g. "+44 20 7946 0958"); without a
-  // "+" it assumes US grouping for a plain domestic number, matching the
-  // old behavior. `cleaned` is digits with an optional leading "+" only --
-  // any dashes/spaces/parens already in the field are stripped first so
-  // AsYouType re-derives the grouping from scratch each time rather than
-  // compounding old formatting with new.
-  function formatPhoneLive(cleaned) {
+  // the right country's own grouping (e.g. "+44 20 7946 0958") regardless
+  // of defaultCountry; without a "+" it groups a plain domestic number per
+  // defaultCountry (guessed from the person's location -- see
+  // guessCountryFromLocationText -- falling back to US). `cleaned` is
+  // digits with an optional leading "+" only -- any dashes/spaces/parens
+  // already in the field are stripped first so AsYouType re-derives the
+  // grouping from scratch each time rather than compounding old formatting
+  // with new.
+  function formatPhoneLive(cleaned, defaultCountry) {
     if (window.libphonenumber && window.libphonenumber.AsYouType) {
       try {
-        return new window.libphonenumber.AsYouType('US').input(cleaned);
+        return new window.libphonenumber.AsYouType(defaultCountry || 'US').input(cleaned);
       } catch (e) {
         console.warn('libphonenumber-js formatting failed, falling back to simple grouping.', e);
       }
@@ -1335,18 +1380,29 @@
     return groupPhoneDigitsFallback(cleaned.replace(/\D/g, ''));
   }
 
+  // Best guess at the person-being-edited's country, from whatever's
+  // currently in the form: current location (first Location(s) row) takes
+  // priority since it's more likely to match where their phone number is
+  // from, falling back to birth location. Read live from the DOM rather
+  // than cached, since the user could still be editing those fields too.
+  function currentFormLocationHint() {
+    const firstRow = els.locationsList.querySelector('.location-row-input');
+    const current = firstRow ? getEditableText(firstRow) : '';
+    return current || getEditableText(els.birthLocationInput);
+  }
+
   // Reformats a contenteditable's digits(+leading "+")-only content in
   // place, keeping the caret sitting after the same digit it was after
   // before -- otherwise re-writing textContent on every keystroke would
   // bounce the caret to the end and make typing in the middle of a number
   // unusable.
-  function reformatPhoneField(el) {
+  function reformatPhoneField(el, defaultCountry) {
     const sel = window.getSelection();
     const caretOffset = (sel.rangeCount && el.contains(sel.anchorNode)) ? sel.getRangeAt(0).startOffset : el.textContent.length;
     const raw = el.textContent;
     const isSignificant = (ch) => /[\d+]/.test(ch);
     const sigBeforeCaret = (raw.slice(0, caretOffset).match(/[\d+]/g) || []).length;
-    const formatted = formatPhoneLive(raw.replace(/[^\d+]/g, ''));
+    const formatted = formatPhoneLive(raw.replace(/[^\d+]/g, ''), defaultCountry);
     el.textContent = formatted;
     let newPos = formatted.length;
     let seen = 0;
@@ -1374,7 +1430,8 @@
   els.contactInput.addEventListener('input', () => {
     const value = getEditableText(els.contactInput);
     if (value && !/[a-zA-Z]/.test(value) && /\d/.test(value)) {
-      reformatPhoneField(els.contactInput);
+      const country = guessCountryFromLocationText(currentFormLocationHint()) || 'US';
+      reformatPhoneField(els.contactInput, country);
     }
     updateContactGmailBtn();
   });
@@ -1783,7 +1840,8 @@
       els.viewZodiac.hidden = !els.viewZodiac.textContent;
       els.viewContact.innerHTML = '';
       if (p.contact) {
-        const href = contactHref(p.contact);
+        const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
+        const href = contactHref(p.contact, countryHint);
         if (href) {
           const a = document.createElement('a');
           a.href = href;
