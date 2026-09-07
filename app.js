@@ -1919,6 +1919,38 @@
     return line;
   }
 
+  const CONNECTOR_CORNER_RADIUS = 12; // px, rounding at each elbow bend
+
+  // A parent/child connector, drawn as one right-angle path (each
+  // consecutive pair of points purely horizontal or vertical) with a
+  // rounded corner at every interior bend, quadratic-curved through the
+  // original corner point. A corner's radius shrinks to fit when either
+  // adjacent segment is shorter than 2x radius, so short stubs never
+  // overshoot past their own endpoint or the next bend.
+  function svgElbowPath(rawPoints, radius, color, width) {
+    // Collapse any zero-length segment (e.g. a child sitting exactly under
+    // the parent's anchor X) so it doesn't produce a degenerate corner.
+    const points = rawPoints.filter((pt, i) => i === 0 || pt.x !== rawPoints[i - 1].x || pt.y !== rawPoints[i - 1].y);
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = points[i - 1], cur = points[i], next = points[i + 1];
+      const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+      const outLen = Math.hypot(next.x - cur.x, next.y - cur.y);
+      const r = Math.min(radius, inLen / 2, outLen / 2);
+      const before = { x: cur.x - Math.sign(cur.x - prev.x) * r, y: cur.y - Math.sign(cur.y - prev.y) * r };
+      const after = { x: cur.x + Math.sign(next.x - cur.x) * r, y: cur.y + Math.sign(next.y - cur.y) * r };
+      d += ` L ${before.x} ${before.y} Q ${cur.x} ${cur.y} ${after.x} ${after.y}`;
+    }
+    const last = points[points.length - 1];
+    d += ` L ${last.x} ${last.y}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color || 'var(--line)');
+    path.setAttribute('stroke-width', width || 2);
+    return path;
+  }
+
   function drawLines() {
     const svg = els.svg;
     svg.innerHTML = '';
@@ -1991,16 +2023,62 @@
       const childTopY = Math.min(...childRects.map(r => r.top));
       const busY = parentY + (childTopY - parentY) / 2;
 
-      // stub down from parent(s)
-      svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
+      const sortedChildren = childRects.slice().sort((a, b) => a.centerX - b.centerX);
+      const leftmost = sortedChildren[0];
+      const rightmost = sortedChildren[sortedChildren.length - 1];
+      // Only true when the trunk lands between the outermost children (the
+      // normal case) -- otherwise the bus extends past a child's own X and
+      // that "outer" corner is really a T-junction too, not a plain bend.
+      const trunkIsInboard = parentAnchorX >= leftmost.centerX && parentAnchorX <= rightmost.centerX;
 
-      const childXs = childRects.map(r => r.centerX);
-      const minX = Math.min(...childXs, parentAnchorX);
-      const maxX = Math.max(...childXs, parentAnchorX);
-      svg.appendChild(svgLine(minX, busY, maxX, busY));
-
-      for (const r of childRects) {
-        svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
+      if (childRects.length > 2 && trunkIsInboard) {
+        // 3+ children sharing one bus: the trunk (and any middle child)
+        // meets the bus at a three-way T-junction, not a plain corner --
+        // rounding those independently makes neighboring branches' curves
+        // visibly overlap right at that shared point, so they stay sharp.
+        // Only the two OUTERMOST children sit at a genuine two-segment
+        // elbow (bus-then-stub, nothing else meeting there), so only those
+        // get rounded.
+        svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
+        for (const r of sortedChildren.slice(1, -1)) {
+          svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
+        }
+        svg.appendChild(svgElbowPath([
+          { x: rightmost.centerX, y: busY },
+          { x: leftmost.centerX, y: busY },
+          { x: leftmost.centerX, y: leftmost.top },
+        ], CONNECTOR_CORNER_RADIUS));
+        svg.appendChild(svgElbowPath([
+          { x: leftmost.centerX, y: busY },
+          { x: rightmost.centerX, y: busY },
+          { x: rightmost.centerX, y: rightmost.top },
+        ], CONNECTOR_CORNER_RADIUS));
+        svg.appendChild(svgLine(leftmost.centerX, busY, rightmost.centerX, busY));
+      } else if (childRects.length > 2) {
+        // Rare layout where the trunk sticks out past every child -- every
+        // corner along the bus is a T-junction, so keep all of them sharp.
+        svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
+        const minX = Math.min(leftmost.centerX, parentAnchorX);
+        const maxX = Math.max(rightmost.centerX, parentAnchorX);
+        svg.appendChild(svgLine(minX, busY, maxX, busY));
+        for (const r of childRects) {
+          svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
+        }
+      } else {
+        // One or two children: the trunk splits cleanly without landing on
+        // either branch, so a rounded elbow path per child (trunk down,
+        // across the bus, down to the child) reads fine -- every bend gets
+        // its own rounded corner. Overlapping trunk/bus segments between
+        // the two children's paths draw identically on top of each other,
+        // so it still reads as a single shared bus visually.
+        for (const r of childRects) {
+          svg.appendChild(svgElbowPath([
+            { x: parentAnchorX, y: parentY },
+            { x: parentAnchorX, y: busY },
+            { x: r.centerX, y: busY },
+            { x: r.centerX, y: r.top },
+          ], CONNECTOR_CORNER_RADIUS));
+        }
       }
     }
   }
