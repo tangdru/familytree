@@ -41,9 +41,12 @@ The single free-text `contact` field (Add/Edit form, `formatPhoneLive` /
 `reformatPhoneField` in `app.js`) live-formats digits as you type using
 libphonenumber-js (loaded from jsdelivr in index.html) -- a leading "+"
 plus country calling code gets that country's own grouping (e.g.
-"+44 20 7946 0958"), a plain domestic number defaults to US grouping. It
-shows a quick "+ @gmail.com" button once it looks like an email being
-typed instead.
+"+44 20 7946 0958"); a plain domestic number (no "+") defaults to
+whichever country `guessCountryFromLocationText` recognizes from the
+person's current location (falling back to birth location, then plain US)
+-- see `COUNTRY_NAME_TO_ISO` for the (non-exhaustive) list of country
+names it knows. It shows a quick "+ @gmail.com" button once it looks like
+an email being typed instead.
 
 If the CDN script fails to load (offline, blocked), it falls back to
 `groupPhoneDigitsFallback` -- crude, always-US-style `XXX-XXX-XXXX`
