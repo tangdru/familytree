@@ -514,6 +514,17 @@
   // and guarded against out-of-order responses with a request token, since
   // a slow earlier request could otherwise resolve after a newer one.
 
+  // Nominatim's own display_name spells out the full address hierarchy
+  // (county, zip, etc.) -- too long for a location field. Show just
+  // "City, State" for US results (state reads better than the country
+  // here) and "City, Country" everywhere else.
+  function formatLocationSuggestion(result) {
+    const addr = result.address || {};
+    const city = addr.city || addr.town || addr.village || addr.hamlet || addr.municipality || addr.county || '';
+    const region = addr.country_code === 'us' ? (addr.state || '') : (addr.country || '');
+    return [city, region].filter(Boolean).join(', ') || result.display_name;
+  }
+
   function setupLocationAutocomplete(input, list) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
@@ -553,12 +564,14 @@
       const token = ++requestToken;
       showMessage('Searching…');
       try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=${encodeURIComponent(query)}`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(query)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Nominatim request failed (${res.status})`);
         const results = await res.json();
         if (token !== requestToken) return; // superseded by a newer query
-        renderSuggestions(results.map(r => r.display_name));
+        // Different results (e.g. two zip codes in the same city) can format
+        // to the same short label -- dedupe while keeping relevance order.
+        renderSuggestions([...new Set(results.map(formatLocationSuggestion))]);
       } catch (e) {
         console.warn('Location lookup failed', e);
         if (token === requestToken) showMessage("Couldn't load suggestions — you can still type a location");
