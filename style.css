@@ -505,8 +505,30 @@ body {
   padding: 4px 0;
 }
 
-.contact-field { display: flex; align-items: center; gap: 8px; }
-.contact-field .editable-text { flex: 1; }
+.contacts-list { display: flex; flex-direction: column; gap: 8px; }
+.contact-row { display: flex; align-items: center; gap: 8px; }
+.contact-field { flex: 1; }
+.contact-row-remove {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 4px 6px;
+}
+.contact-row-remove:hover { color: var(--danger); }
+.add-contact-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  border: none;
+  background: none;
+  color: var(--accent-dark);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
 .contact-gmail-btn {
   flex-shrink: 0;
   white-space: nowrap;
@@ -844,14 +866,14 @@ body {
   font-weight: 700;
   text-align: center;
 }
-.view-dates, .view-location, .view-birth-location, .view-zodiac, .view-contact {
+.view-dates, .view-location, .view-birth-location, .view-zodiac, .view-contact-line {
   margin: 0 0 2px;
   text-align: center;
   color: var(--ink-soft);
   font-size: 0.88rem;
 }
-.view-contact a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
-.view-contact a:hover { text-decoration: underline; }
+.view-contact-line a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
+.view-contact-line a:hover { text-decoration: underline; }
 .view-notes {
   margin: 12px 0 0;
   font-size: 0.88rem;
