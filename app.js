@@ -17,6 +17,26 @@
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
   const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
 
+  // Matches the emoji baked into #zodiacInput's <option> labels in
+  // index.html -- needed again here to show the same emoji on the
+  // read-only Person View card.
+  const ZODIAC_EMOJI = {
+    Rat: '🐀', Ox: '🐂', Tiger: '🐅', Rabbit: '🐇', Dragon: '🐉', Snake: '🐍',
+    Horse: '🐎', Goat: '🐐', Monkey: '🐒', Rooster: '🐓', Dog: '🐕', Pig: '🐖',
+  };
+  const ZODIAC_CYCLE = Object.keys(ZODIAC_EMOJI); // insertion order above == the 12-year cycle order
+
+  // Simple by-birth-year inference (2020 -> Rat, matching the well-known
+  // reference years like 1984/1996/2008/2020) -- not the real, more precise
+  // rule, which flips on the lunar Chinese New Year date (roughly Jan 21 -
+  // Feb 20) rather than Jan 1, so anyone born in that window is off by one
+  // animal here. Deliberately deferred; this is just a starting default.
+  function inferZodiacFromBirthYear(birthDate) {
+    const year = birthDate ? parseInt(birthDate.slice(0, 4), 10) : NaN;
+    if (!Number.isFinite(year)) return '';
+    return ZODIAC_CYCLE[((year - 4) % 12 + 12) % 12];
+  }
+
   // For recognizing a US state name inside an already-saved full address
   // string -- see shortenLocationText.
   const US_STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
@@ -176,6 +196,7 @@
     birthLocationSuggestions: document.getElementById('birthLocationSuggestions'),
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
+    zodiacInput: document.getElementById('zodiacInput'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -207,6 +228,7 @@
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
     viewBirthLocation: document.getElementById('viewBirthLocation'),
+    viewZodiac: document.getElementById('viewZodiac'),
     viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
     viewParentsSection: document.getElementById('viewParentsSection'),
@@ -1172,7 +1194,23 @@
     textEl.closest('.date-display').classList.toggle('placeholder', !formatted);
   }
 
-  els.birthInput.addEventListener('change', () => updateDateDisplay(els.birthInput, els.birthDisplayText));
+  // Auto-fills the zodiac dropdown from the birth year as a starting
+  // default, but only until the user actually touches that dropdown
+  // themselves -- from then on (for the rest of this modal session) their
+  // choice wins, even if they go back and adjust the birth date.
+  let zodiacManuallySet = false;
+
+  function maybeAutoSetZodiac() {
+    if (zodiacManuallySet) return;
+    els.zodiacInput.value = inferZodiacFromBirthYear(els.birthInput.value);
+  }
+
+  els.zodiacInput.addEventListener('change', () => { zodiacManuallySet = true; });
+
+  els.birthInput.addEventListener('change', () => {
+    updateDateDisplay(els.birthInput, els.birthDisplayText);
+    maybeAutoSetZodiac();
+  });
   els.deathInput.addEventListener('change', () => updateDateDisplay(els.deathInput, els.deathDisplayText));
 
   // ---------- Modal open/close ----------
@@ -1187,6 +1225,7 @@
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
+    zodiacManuallySet = false;
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
@@ -1208,6 +1247,8 @@
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
     setLocationRows(locationsOf(p));
+    els.zodiacInput.value = p.zodiac || '';
+    zodiacManuallySet = false;
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1240,6 +1281,8 @@
       death: els.deathInput.value,
       birthLocation: getEditableText(els.birthLocationInput),
       locations: getLocationsFromForm(),
+      zodiac: els.zodiacInput.value,
+      zodiacManuallySet,
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1260,6 +1303,8 @@
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     setEditableText(els.birthLocationInput, snap.birthLocation);
     setLocationRows(snap.locations);
+    els.zodiacInput.value = snap.zodiac;
+    zodiacManuallySet = snap.zodiacManuallySet;
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
@@ -1546,6 +1591,9 @@
       const shortBirthLocation = shortenLocationText(p.birthLocation || '');
       els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
       els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
+      const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
+      els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
+      els.viewZodiac.hidden = !els.viewZodiac.textContent;
     }
 
     // Spouses already shown as the other half of a couple card don't need
@@ -1844,6 +1892,7 @@
     person.locations = getLocationsFromForm();
     delete person.location; // superseded by locations -- see locationsOf()
     person.birthLocation = getEditableText(els.birthLocationInput);
+    person.zodiac = els.zodiacInput.value;
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
     person.parents = parents;

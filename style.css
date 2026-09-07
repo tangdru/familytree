@@ -828,7 +828,7 @@ body {
   font-weight: 700;
   text-align: center;
 }
-.view-dates, .view-location, .view-birth-location {
+.view-dates, .view-location, .view-birth-location, .view-zodiac {
   margin: 0 0 2px;
   text-align: center;
   color: var(--ink-soft);

@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907y">
+<link rel="stylesheet" href="style.css?v=20260908a">
 </head>
 <body>
   <header class="toolbar">
@@ -129,6 +129,25 @@
         </div>
 
         <div class="form-row">
+          <label for="zodiacInput">Chinese zodiac</label>
+          <select id="zodiacInput">
+            <option value="">—</option>
+            <option value="Rat">🐀 Rat</option>
+            <option value="Ox">🐂 Ox</option>
+            <option value="Tiger">🐅 Tiger</option>
+            <option value="Rabbit">🐇 Rabbit</option>
+            <option value="Dragon">🐉 Dragon</option>
+            <option value="Snake">🐍 Snake</option>
+            <option value="Horse">🐎 Horse</option>
+            <option value="Goat">🐐 Goat</option>
+            <option value="Monkey">🐒 Monkey</option>
+            <option value="Rooster">🐓 Rooster</option>
+            <option value="Dog">🐕 Dog</option>
+            <option value="Pig">🐖 Pig</option>
+          </select>
+        </div>
+
+        <div class="form-row">
           <label id="locationsLabel">Location(s)</label>
           <div class="locations-list" id="locationsList"></div>
           <button type="button" class="add-location-btn" id="addLocationBtn">+ Add location</button>
@@ -242,6 +261,7 @@
             <h3 class="view-name" id="viewName"></h3>
             <p class="view-dates" id="viewDates" hidden></p>
             <p class="view-birth-location" id="viewBirthLocation" hidden></p>
+            <p class="view-zodiac" id="viewZodiac" hidden></p>
           </div>
           <!-- A couple's shared card: two equal-size member blocks, built and
                populated in JS by buildCoupleMember() -- see renderPersonView(). -->
@@ -281,7 +301,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907y"></script>
-  <script src="app.js?v=20260907y"></script>
+  <script src="config.js?v=20260908a"></script>
+  <script src="app.js?v=20260908a"></script>
 </body>
 </html>
