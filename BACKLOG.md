@@ -21,3 +21,18 @@ Revisit if the couple card itself should ever show more than two members
 at once (would need its own layout redesign), or if `partnerIdOf` should
 handle multiple simultaneous `current` spouses (e.g. picking among them)
 rather than just the first.
+
+## Location history: date ranges + drag-to-reorder
+
+A person now has an ordered `locations` list (index 0 = "current") plus a
+separate `birthLocation`, replacing the old singular `location` field (see
+`locationsOf`/`currentLocationOf` in `app.js`). Order alone decides which
+location is "current" for now, set purely by whichever row is first in the
+Location(s) list on the Add/Edit form.
+
+Deliberately deferred, to be added as a follow-up:
+
+- A date range (with a calendar-icon picker) per location, shown alongside
+  each row and in the Person View's Locations history section.
+- Drag-and-drop reordering of the Location(s) rows in the Add/Edit form, so
+  "current" can be changed without deleting and re-adding rows.

@@ -455,8 +455,43 @@ body {
 
 .location-field {
   position: relative;
+  flex: 1;
 }
 .location-suggestions .combo-options { max-height: 220px; }
+
+.locations-list { display: flex; flex-direction: column; gap: 8px; }
+.location-row { display: flex; align-items: center; gap: 8px; }
+.location-current-tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  border: 1px solid var(--accent-dark);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.location-row-remove {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 4px 6px;
+}
+.location-row-remove:hover { color: var(--danger); }
+.add-location-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  border: none;
+  background: none;
+  color: var(--accent-dark);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
 /* A real <button>, not a text input: tapping it must never raise the
    on-screen keyboard — only the .combo-filter inside the open dropdown
    should do that, and only once someone deliberately taps it. */
@@ -781,7 +816,7 @@ body {
   font-weight: 700;
   text-align: center;
 }
-.view-dates, .view-location {
+.view-dates, .view-location, .view-birth-location {
   margin: 0 0 2px;
   text-align: center;
   color: var(--ink-soft);
@@ -828,6 +863,13 @@ body {
   flex-shrink: 0;
   color: var(--ink-soft);
   font-size: 0.82rem;
+}
+.view-location-text { font-weight: 600; }
+.view-location-tag {
+  flex-shrink: 0;
+  color: var(--accent-dark);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 @media (prefers-color-scheme: dark) {
