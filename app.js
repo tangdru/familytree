@@ -1343,8 +1343,8 @@
     els.saveToast.classList.add('visible');
     saveToastTimer = setTimeout(() => {
       els.saveToast.classList.remove('visible');
-      setTimeout(() => { els.saveToast.hidden = true; }, 200);
-    }, 1500);
+      setTimeout(() => { els.saveToast.hidden = true; }, 150);
+    }, 800);
   }
 
   function closeModal() {
@@ -1972,7 +1972,14 @@
 
     closeModal();
     renderTree();
-    if (isNew) highlightPerson(id);
+    if (isNew) {
+      highlightPerson(id);
+    } else {
+      // Edit is only ever reached from the read-only Person View's Edit
+      // button -- saving should hand you back there, not drop you all the
+      // way out to the tree.
+      openViewModal(id);
+    }
     showSaveToast();
   });
 

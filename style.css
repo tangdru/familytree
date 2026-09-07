@@ -904,7 +904,7 @@ body {
   z-index: 200;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 .save-toast svg { width: 16px; height: 16px; color: #8fd19e; flex-shrink: 0; }
 .save-toast.visible { opacity: 1; transform: translate(-50%, 0); }
