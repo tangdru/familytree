@@ -293,8 +293,8 @@
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
     zodiacInput: document.getElementById('zodiacInput'),
-    contactInput: document.getElementById('contactInput'),
-    contactGmailBtn: document.getElementById('contactGmailBtn'),
+    contactsList: document.getElementById('contactsList'),
+    addContactBtn: document.getElementById('addContactBtn'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -377,7 +377,6 @@
 
   setupEditableText(els.nameInput);
   setupEditableText(els.birthLocationInput);
-  setupEditableText(els.contactInput);
 
   // ---------- Searchable combo (parent / spouse pickers) ----------
 
@@ -1421,33 +1420,100 @@
     sel.addRange(range);
   }
 
-  function updateContactGmailBtn() {
-    const value = getEditableText(els.contactInput);
+  function updateContactGmailBtn(input, gmailBtn) {
+    const value = getEditableText(input);
     const looksLikeEmail = /[a-zA-Z]/.test(value) && !value.includes('@');
-    els.contactGmailBtn.hidden = !looksLikeEmail;
+    gmailBtn.hidden = !looksLikeEmail;
   }
 
-  els.contactInput.addEventListener('input', () => {
-    const value = getEditableText(els.contactInput);
-    if (value && !/[a-zA-Z]/.test(value) && /\d/.test(value)) {
-      const country = guessCountryFromLocationText(currentFormLocationHint()) || 'US';
-      reformatPhoneField(els.contactInput, country);
-    }
-    updateContactGmailBtn();
-  });
+  // Wires the phone/email live-detection behavior onto one contact row's
+  // input + its own "+ @gmail.com" button -- shared by every row, since a
+  // person can now record more than one (see addContactRow below).
+  function setupContactRowBehavior(input, gmailBtn) {
+    input.addEventListener('input', () => {
+      const value = getEditableText(input);
+      if (value && !/[a-zA-Z]/.test(value) && /\d/.test(value)) {
+        const country = guessCountryFromLocationText(currentFormLocationHint()) || 'US';
+        reformatPhoneField(input, country);
+      }
+      updateContactGmailBtn(input, gmailBtn);
+    });
 
-  els.contactGmailBtn.addEventListener('click', () => {
-    const current = getEditableText(els.contactInput);
-    if (current.includes('@')) return;
-    setEditableText(els.contactInput, current + '@gmail.com');
-    els.contactInput.focus();
-    const range = document.createRange();
-    range.selectNodeContents(els.contactInput);
-    range.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-    updateContactGmailBtn();
+    gmailBtn.addEventListener('click', () => {
+      const current = getEditableText(input);
+      if (current.includes('@')) return;
+      setEditableText(input, current + '@gmail.com');
+      input.focus();
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      updateContactGmailBtn(input, gmailBtn);
+    });
+  }
+
+  // ---------- Contact(s) list (repeatable rows) ----------
+  // A person can record more than one (home phone, cell, personal email,
+  // work email, ...) -- unlike Location(s), order carries no meaning here,
+  // so there's no "current" tag or drag-to-reorder, just add/remove.
+
+  function addContactRow(value) {
+    const row = document.createElement('div');
+    row.className = 'contact-row';
+
+    const field = document.createElement('div');
+    field.className = 'contact-field';
+    const input = document.createElement('div');
+    input.className = 'editable-text contact-row-input';
+    input.contentEditable = 'true';
+    input.setAttribute('role', 'textbox');
+    input.setAttribute('data-placeholder', 'Phone or email');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('spellcheck', 'false');
+    field.appendChild(input);
+
+    const gmailBtn = document.createElement('button');
+    gmailBtn.type = 'button';
+    gmailBtn.className = 'contact-gmail-btn';
+    gmailBtn.hidden = true;
+    gmailBtn.textContent = '+ @gmail.com';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'contact-row-remove';
+    removeBtn.setAttribute('aria-label', 'Remove contact');
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', () => row.remove());
+
+    row.appendChild(field);
+    row.appendChild(gmailBtn);
+    row.appendChild(removeBtn);
+    els.contactsList.appendChild(row);
+
+    setupEditableText(input);
+    setEditableText(input, value || '');
+    setupContactRowBehavior(input, gmailBtn);
+    return row;
+  }
+
+  function setContactRows(values) {
+    els.contactsList.innerHTML = '';
+    (values && values.length ? values : ['']).forEach(v => addContactRow(v));
+  }
+
+  function getContactsFromForm() {
+    return Array.from(els.contactsList.querySelectorAll('.contact-row-input'))
+      .map(getEditableText)
+      .filter(Boolean);
+  }
+
+  els.addContactBtn.addEventListener('click', () => {
+    addContactRow('');
+    const inputs = els.contactsList.querySelectorAll('.contact-row-input');
+    const last = inputs[inputs.length - 1];
+    if (last) last.focus();
   });
 
   // ---------- Modal open/close ----------
@@ -1458,8 +1524,7 @@
     setEditableText(els.nameInput, '');
     setEditableText(els.birthLocationInput, '');
     setLocationRows([]);
-    setEditableText(els.contactInput, '');
-    updateContactGmailBtn();
+    setContactRows([]);
     pendingPhoto = null;
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
@@ -1488,8 +1553,7 @@
     setLocationRows(locationsOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
-    setEditableText(els.contactInput, p.contact || '');
-    updateContactGmailBtn();
+    setContactRows(contactsOf(p));
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1524,7 +1588,7 @@
       locations: getLocationsFromForm(),
       zodiac: els.zodiacInput.value,
       zodiacManuallySet,
-      contact: getEditableText(els.contactInput),
+      contacts: getContactsFromForm(),
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1547,8 +1611,7 @@
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
     zodiacManuallySet = snap.zodiacManuallySet;
-    setEditableText(els.contactInput, snap.contact);
-    updateContactGmailBtn();
+    setContactRows(snap.contacts);
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
@@ -1724,6 +1787,16 @@
     return locationsOf(person)[0] || '';
   }
 
+  // A person's contact entries (phone/email, in whatever order they were
+  // added -- order carries no meaning here, unlike locations). Falls back
+  // to the old singular `contact` field for pre-existing data that hasn't
+  // been re-saved yet.
+  function contactsOf(person) {
+    if (!person) return [];
+    if (Array.isArray(person.contacts) && person.contacts.length) return person.contacts;
+    return person.contact ? [person.contact] : [];
+  }
+
   // A couple's shared location: shown once for both, since they usually live
   // together -- the selected member's location if the two differ or only one
   // is known, otherwise the (matching) value both share.
@@ -1839,19 +1912,25 @@
       els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
       els.viewZodiac.hidden = !els.viewZodiac.textContent;
       els.viewContact.innerHTML = '';
-      if (p.contact) {
+      const contacts = contactsOf(p);
+      if (contacts.length) {
         const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
-        const href = contactHref(p.contact, countryHint);
-        if (href) {
-          const a = document.createElement('a');
-          a.href = href;
-          a.textContent = p.contact;
-          els.viewContact.appendChild(a);
-        } else {
-          els.viewContact.textContent = p.contact;
-        }
+        contacts.forEach(contact => {
+          const line = document.createElement('p');
+          line.className = 'view-contact-line';
+          const href = contactHref(contact, countryHint);
+          if (href) {
+            const a = document.createElement('a');
+            a.href = href;
+            a.textContent = contact;
+            line.appendChild(a);
+          } else {
+            line.textContent = contact;
+          }
+          els.viewContact.appendChild(line);
+        });
       }
-      els.viewContact.hidden = !p.contact;
+      els.viewContact.hidden = !contacts.length;
     }
 
     // Spouses already shown as the other half of a couple card don't need
@@ -2183,7 +2262,8 @@
       delete person.location; // superseded by locations -- see locationsOf()
       person.birthLocation = getEditableText(els.birthLocationInput);
       person.zodiac = els.zodiacInput.value;
-      person.contact = getEditableText(els.contactInput);
+      person.contacts = getContactsFromForm();
+      delete person.contact; // superseded by contacts -- see contactsOf()
       person.notes = els.notesInput.value.trim();
       person.photo = photoUrl;
       person.parents = parents;

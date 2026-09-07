@@ -37,8 +37,8 @@ Person View's Locations history section.
 
 ## Contact field: phone formatting needs the CDN to load
 
-The single free-text `contact` field (Add/Edit form, `formatPhoneLive` /
-`reformatPhoneField` in `app.js`) live-formats digits as you type using
+Each row in the repeatable Contact(s) list (Add/Edit form, `formatPhoneLive` /
+`reformatPhoneField` in `app.js` -- see `addContactRow`) live-formats digits as you type using
 libphonenumber-js (loaded from jsdelivr in index.html) -- a leading "+"
 plus country calling code gets that country's own grouping (e.g.
 "+44 20 7946 0958"); a plain domestic number (no "+") defaults to
