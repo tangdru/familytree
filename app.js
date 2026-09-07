@@ -644,7 +644,21 @@
   function contactHref(value) {
     if (!value) return null;
     if (value.includes('@') && /[a-zA-Z]/.test(value)) return `mailto:${value}`;
-    if (/\d/.test(value) && !/[a-zA-Z]/.test(value)) return `tel:${value.replace(/[^\d+]/g, '')}`;
+    if (/\d/.test(value) && !/[a-zA-Z]/.test(value)) {
+      // Prefer libphonenumber-js's own E.164 number (e.g. "+16175551234")
+      // over just stripping punctuation -- it's the properly normalized,
+      // always-dialable form regardless of which country's grouping the
+      // display text is in.
+      if (window.libphonenumber && window.libphonenumber.parsePhoneNumberFromString) {
+        try {
+          const parsed = window.libphonenumber.parsePhoneNumberFromString(value, 'US');
+          if (parsed) return `tel:${parsed.number}`;
+        } catch (e) {
+          console.warn('libphonenumber-js parsing failed, falling back to plain digits.', e);
+        }
+      }
+      return `tel:${value.replace(/[^\d+]/g, '')}`;
+    }
     return null;
   }
 
@@ -1290,36 +1304,59 @@
   // quick "+ @gmail.com" button (hidden again once an @ has been typed, on
   // the assumption you're now typing a different domain yourself).
 
-  function groupPhoneDigits(digits) {
+  // Crude digit grouping used only if libphonenumber-js failed to load (no
+  // network, CDN blocked, etc.) -- always US-style, no real awareness of
+  // other countries' conventions. See formatPhoneLive below.
+  function groupPhoneDigitsFallback(digits) {
     const len = digits.length;
     if (len <= 3) return digits;
     if (len <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
     if (len <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-    // 11+ digits: treat everything past the last 10 as a country code.
     const rest = digits.slice(len - 10);
     return `${digits.slice(0, len - 10)}-${rest.slice(0, 3)}-${rest.slice(3, 6)}-${rest.slice(6)}`;
   }
 
-  // Reformats a contenteditable's digits-only content in place, keeping the
-  // caret sitting after the same digit it was after before -- otherwise
-  // re-writing textContent on every keystroke would bounce the caret to the
-  // end and make typing in the middle of a number unusable.
+  // Proper live phone formatting via libphonenumber-js's AsYouType (loaded
+  // from CDN in index.html): a leading "+" plus country calling code picks
+  // the right country's own grouping (e.g. "+44 20 7946 0958"); without a
+  // "+" it assumes US grouping for a plain domestic number, matching the
+  // old behavior. `cleaned` is digits with an optional leading "+" only --
+  // any dashes/spaces/parens already in the field are stripped first so
+  // AsYouType re-derives the grouping from scratch each time rather than
+  // compounding old formatting with new.
+  function formatPhoneLive(cleaned) {
+    if (window.libphonenumber && window.libphonenumber.AsYouType) {
+      try {
+        return new window.libphonenumber.AsYouType('US').input(cleaned);
+      } catch (e) {
+        console.warn('libphonenumber-js formatting failed, falling back to simple grouping.', e);
+      }
+    }
+    return groupPhoneDigitsFallback(cleaned.replace(/\D/g, ''));
+  }
+
+  // Reformats a contenteditable's digits(+leading "+")-only content in
+  // place, keeping the caret sitting after the same digit it was after
+  // before -- otherwise re-writing textContent on every keystroke would
+  // bounce the caret to the end and make typing in the middle of a number
+  // unusable.
   function reformatPhoneField(el) {
     const sel = window.getSelection();
     const caretOffset = (sel.rangeCount && el.contains(sel.anchorNode)) ? sel.getRangeAt(0).startOffset : el.textContent.length;
     const raw = el.textContent;
-    const digitsBeforeCaret = (raw.slice(0, caretOffset).match(/\d/g) || []).length;
-    const formatted = groupPhoneDigits(raw.replace(/\D/g, ''));
+    const isSignificant = (ch) => /[\d+]/.test(ch);
+    const sigBeforeCaret = (raw.slice(0, caretOffset).match(/[\d+]/g) || []).length;
+    const formatted = formatPhoneLive(raw.replace(/[^\d+]/g, ''));
     el.textContent = formatted;
     let newPos = formatted.length;
     let seen = 0;
     for (let i = 0; i < formatted.length; i++) {
-      if (/\d/.test(formatted[i])) {
+      if (isSignificant(formatted[i])) {
         seen++;
-        if (seen === digitsBeforeCaret) { newPos = i + 1; break; }
+        if (seen === sigBeforeCaret) { newPos = i + 1; break; }
       }
     }
-    if (digitsBeforeCaret === 0) newPos = 0;
+    if (sigBeforeCaret === 0) newPos = 0;
     const textNode = el.firstChild || el.appendChild(document.createTextNode(''));
     const range = document.createRange();
     range.setStart(textNode, Math.min(newPos, textNode.length));
