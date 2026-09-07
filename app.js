@@ -24,6 +24,18 @@
     Rat: '🐀', Ox: '🐂', Tiger: '🐅', Rabbit: '🐇', Dragon: '🐉', Snake: '🐍',
     Horse: '🐎', Goat: '🐐', Monkey: '🐒', Rooster: '🐓', Dog: '🐕', Pig: '🐖',
   };
+  const ZODIAC_CYCLE = Object.keys(ZODIAC_EMOJI); // insertion order above == the 12-year cycle order
+
+  // Simple by-birth-year inference (2020 -> Rat, matching the well-known
+  // reference years like 1984/1996/2008/2020) -- not the real, more precise
+  // rule, which flips on the lunar Chinese New Year date (roughly Jan 21 -
+  // Feb 20) rather than Jan 1, so anyone born in that window is off by one
+  // animal here. Deliberately deferred; this is just a starting default.
+  function inferZodiacFromBirthYear(birthDate) {
+    const year = birthDate ? parseInt(birthDate.slice(0, 4), 10) : NaN;
+    if (!Number.isFinite(year)) return '';
+    return ZODIAC_CYCLE[((year - 4) % 12 + 12) % 12];
+  }
 
   // For recognizing a US state name inside an already-saved full address
   // string -- see shortenLocationText.
@@ -1182,7 +1194,23 @@
     textEl.closest('.date-display').classList.toggle('placeholder', !formatted);
   }
 
-  els.birthInput.addEventListener('change', () => updateDateDisplay(els.birthInput, els.birthDisplayText));
+  // Auto-fills the zodiac dropdown from the birth year as a starting
+  // default, but only until the user actually touches that dropdown
+  // themselves -- from then on (for the rest of this modal session) their
+  // choice wins, even if they go back and adjust the birth date.
+  let zodiacManuallySet = false;
+
+  function maybeAutoSetZodiac() {
+    if (zodiacManuallySet) return;
+    els.zodiacInput.value = inferZodiacFromBirthYear(els.birthInput.value);
+  }
+
+  els.zodiacInput.addEventListener('change', () => { zodiacManuallySet = true; });
+
+  els.birthInput.addEventListener('change', () => {
+    updateDateDisplay(els.birthInput, els.birthDisplayText);
+    maybeAutoSetZodiac();
+  });
   els.deathInput.addEventListener('change', () => updateDateDisplay(els.deathInput, els.deathDisplayText));
 
   // ---------- Modal open/close ----------
@@ -1197,6 +1225,7 @@
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
+    zodiacManuallySet = false;
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
@@ -1219,6 +1248,7 @@
     setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
     setLocationRows(locationsOf(p));
     els.zodiacInput.value = p.zodiac || '';
+    zodiacManuallySet = false;
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1252,6 +1282,7 @@
       birthLocation: getEditableText(els.birthLocationInput),
       locations: getLocationsFromForm(),
       zodiac: els.zodiacInput.value,
+      zodiacManuallySet,
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1273,6 +1304,7 @@
     setEditableText(els.birthLocationInput, snap.birthLocation);
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
+    zodiacManuallySet = snap.zodiacManuallySet;
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
