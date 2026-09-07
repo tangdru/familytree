@@ -26,7 +26,18 @@ create policy "Allow public update" on family_tree
   for update using (true) with check (true);
 
 -- Enable realtime so every open browser tab sees edits from others live.
-alter publication supabase_realtime add table family_tree;
+-- Guarded (unlike a plain ALTER PUBLICATION ... ADD TABLE) so re-running
+-- this whole script -- e.g. to pick up the storage bucket added below --
+-- doesn't fail with "already member of publication" on a second run.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'family_tree'
+  ) then
+    alter publication supabase_realtime add table family_tree;
+  end if;
+end $$;
 
 -- Photo storage: photos are uploaded here instead of being embedded as
 -- base64 directly in family_tree.data, which used to mean every single
