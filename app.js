@@ -1919,7 +1919,7 @@
     return line;
   }
 
-  const CONNECTOR_CORNER_RADIUS = 8; // px, rounding at each elbow bend
+  const CONNECTOR_CORNER_RADIUS = 12; // px, rounding at each elbow bend
 
   // A parent/child connector, drawn as one right-angle path (each
   // consecutive pair of points purely horizontal or vertical) with a
