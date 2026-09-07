@@ -3,6 +3,7 @@
 
   const STORAGE_KEY = 'familytree.data.v1';
   const SUPABASE_ROW_ID = 'main';
+  const PHOTO_BUCKET = 'photos'; // Supabase Storage bucket -- see supabase-schema.sql
   const MAX_EDIT_DIM = 1600; // cap the source image loaded into the crop editor
   const CROP_OUT_W = 450; // 3x the rendered card photo size, for crispness
   const CROP_OUT_H = 330; // matches the card photo's 150:110 aspect ratio
@@ -117,6 +118,59 @@
     if (error) throw error;
   }
 
+  // ---------- Photo storage ----------
+  // Photos used to be embedded as base64 directly in `data.people[id].photo`,
+  // which meant every single save -- even a one-letter name fix -- re-wrote
+  // every photo in the whole tree as part of that one big JSON blob. Now a
+  // freshly-cropped photo is uploaded to its own Supabase Storage object
+  // (see PHOTO_BUCKET / supabase-schema.sql) and only its public URL string
+  // goes in the JSON, so an edit's save size no longer scales with however
+  // many photos anyone has ever added. Local-only mode (no Supabase) has
+  // nowhere to upload to, so it keeps embedding data URLs as before.
+
+  function isDataUrl(value) {
+    return typeof value === 'string' && value.startsWith('data:');
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const [header, base64] = dataUrl.split(',');
+    const mime = (header.match(/data:(.*?);base64/) || [])[1] || 'image/jpeg';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  async function uploadPhoto(personId, dataUrl) {
+    const blob = dataUrlToBlob(dataUrl);
+    const path = `${personId}-${Date.now()}.jpg`;
+    const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(path, blob, {
+      contentType: blob.type || 'image/jpeg',
+      upsert: true,
+    });
+    if (error) throw error;
+    return supabaseClient.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+
+  // Best-effort cleanup of a photo this app previously uploaded -- silently
+  // does nothing for a local data URL, an already-deleted object, or
+  // anything outside our own bucket. Failures are logged, not surfaced:
+  // a stray leftover file in Storage is harmless and not worth blocking or
+  // alarming the user over.
+  async function deletePhotoIfStored(url) {
+    if (!usingSupabase || !url) return;
+    const marker = `/storage/v1/object/public/${PHOTO_BUCKET}/`;
+    const idx = url.indexOf(marker);
+    if (idx === -1) return;
+    const path = url.slice(idx + marker.length);
+    try {
+      const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).remove([path]);
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Failed to delete an old photo from storage (leaving it orphaned).', e);
+    }
+  }
+
   async function saveData() {
     if (!usingSupabase) {
       saveLocal();
@@ -206,7 +260,6 @@
     updatePhotoLabel: document.getElementById('updatePhotoLabel'),
     removePhotoBtn: document.getElementById('removePhotoBtn'),
     deletePersonBtn: document.getElementById('deletePersonBtn'),
-    saveToast: document.getElementById('saveToast'),
 
     cropModal: document.getElementById('cropModal'),
     cropViewport: document.getElementById('cropViewport'),
@@ -1330,24 +1383,6 @@
     els.modalTitle.textContent = 'Add Spouse';
   }
 
-  // Brief non-blocking confirmation that a save actually went through --
-  // otherwise the only feedback is the modal closing and the tree
-  // re-rendering, which for an edit that doesn't change the collapsed
-  // card (a new zodiac, a location) can look like nothing happened at all.
-  let saveToastTimer = null;
-  function showSaveToast() {
-    clearTimeout(saveToastTimer);
-    els.saveToast.hidden = false;
-    // Force layout so the following class add starts its transition from
-    // the hidden state instead of jumping straight to visible.
-    void els.saveToast.offsetWidth;
-    els.saveToast.classList.add('visible');
-    saveToastTimer = setTimeout(() => {
-      els.saveToast.classList.remove('visible');
-      setTimeout(() => { els.saveToast.hidden = true; }, 150);
-    }, 800);
-  }
-
   function closeModal() {
     if (pendingSpouseSnapshot) {
       const snap = pendingSpouseSnapshot;
@@ -1918,6 +1953,25 @@
         return;
       }
 
+      // A freshly-cropped photo is still a local data URL at this point --
+      // upload it to Storage now and store just the resulting public URL.
+      // An unchanged photo is already either a Storage URL (left as-is) or,
+      // for a person not yet touched since this feature shipped, still a
+      // legacy data URL -- which this same upload step opportunistically
+      // migrates too, since isDataUrl() doesn't care why the value is a
+      // data URL, only that it is one.
+      const originalPhoto = (data.people[id] && data.people[id].photo) || '';
+      let photoUrl = pendingPhoto || '';
+      if (usingSupabase && isDataUrl(photoUrl)) {
+        try {
+          photoUrl = await uploadPhoto(id, photoUrl);
+        } catch (err) {
+          console.error('Failed to upload photo to storage.', err);
+          alert('Could not upload the photo. Please try saving again.');
+          return;
+        }
+      }
+
       const person = data.people[id] || { id, parents: [], spouses: [] };
       person.name = name;
       person.birthDate = els.birthInput.value || '';
@@ -1927,7 +1981,7 @@
       person.birthLocation = getEditableText(els.birthLocationInput);
       person.zodiac = els.zodiacInput.value;
       person.notes = els.notesInput.value.trim();
-      person.photo = pendingPhoto || '';
+      person.photo = photoUrl;
       person.parents = parents;
 
       data.people[id] = person;
@@ -1967,6 +2021,12 @@
 
       await saveData();
 
+      // The old photo (if any) is only safe to delete once the record
+      // pointing at the new one has actually saved.
+      if (originalPhoto && originalPhoto !== person.photo) {
+        deletePhotoIfStored(originalPhoto);
+      }
+
       // Finishing the nested "+ Add new spouse" step: the new person is
       // already saved as their own record above. Pick up the original edit
       // where it left off, then ask current-or-former for them too, same as
@@ -1994,7 +2054,6 @@
         // way out to the tree.
         openViewModal(id);
       }
-      showSaveToast();
     } finally {
       isSavingPerson = false;
       els.saveBtn.disabled = false;
@@ -2030,6 +2089,7 @@
     }
     delete data.people[id];
     await saveData();
+    deletePhotoIfStored(person.photo);
     closeModal();
     renderTree();
   });
