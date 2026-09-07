@@ -244,7 +244,7 @@
   // on-screen keyboard — the trigger is a <button>, not a text input. The
   // keyboard only appears if someone deliberately taps the filter field
   // inside the open dropdown to search a long list.
-  function createCombo(rootEl, { multiple, placeholder, createLabel, onCreateNew, chipDecorator }) {
+  function createCombo(rootEl, { multiple, placeholder, createLabel, onCreateNew, chipDecorator, onSelect, onOpen }) {
     const trigger = rootEl.querySelector('.combo-trigger');
     const triggerText = trigger.querySelector('.combo-trigger-text');
     const dropdown = rootEl.querySelector('.combo-dropdown');
@@ -309,6 +309,10 @@
     }
 
     function openDropdown() {
+      // Resets any stray state left behind by an abandoned onSelect
+      // confirmation (e.g. the user tapped away mid-confirm last time),
+      // so a fresh open always starts from the normal filter+options view.
+      if (onOpen) onOpen();
       filterInput.value = '';
       renderOptions('');
       dropdown.hidden = false;
@@ -354,12 +358,19 @@
       }
     }
 
+    function commitAdd(opt) {
+      if (!selectedIds.includes(opt.id)) selectedIds.push(opt.id);
+      renderChips();
+      filterInput.value = '';
+      renderOptions('');
+    }
+
     function choose(opt) {
       if (multiple) {
-        if (!selectedIds.includes(opt.id)) selectedIds.push(opt.id);
-        renderChips();
-        filterInput.value = '';
-        renderOptions('');
+        // onSelect can defer the actual add (e.g. to ask "current or
+        // former?" first) -- it decides when/whether to call commitAdd.
+        if (onSelect) onSelect(opt, () => commitAdd(opt));
+        else commitAdd(opt);
       } else {
         selectedId = opt.id;
         setTriggerText(opt.name, false);
@@ -438,12 +449,54 @@
     return btn;
   }
 
+  // Asks "current or former?" right when a spouse is picked or created,
+  // in the spouses dropdown's own panel -- Current pre-highlighted as the
+  // common case, but the choice is never assumed silently. onChoose is
+  // called with the picked status once the user answers; nothing else
+  // happens (no chip, no draft entry) until they do.
+  function showSpouseConfirm(name, onChoose) {
+    const dropdown = document.getElementById('spousesDropdown');
+    const filterWrap = dropdown.querySelector('.combo-filter-wrap');
+    const optionsEl = dropdown.querySelector('.combo-options');
+    const confirmEl = document.getElementById('spousesConfirm');
+    const trigger = document.querySelector('#spousesCombo .combo-trigger');
+
+    document.getElementById('spousesConfirmName').textContent = name;
+    filterWrap.hidden = true;
+    optionsEl.hidden = true;
+    confirmEl.hidden = false;
+    dropdown.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+
+    function pick(status) {
+      filterWrap.hidden = false;
+      optionsEl.hidden = false;
+      confirmEl.hidden = true;
+      onChoose(status);
+    }
+    document.getElementById('spousesConfirmCurrent').onclick = () => pick('current');
+    document.getElementById('spousesConfirmFormer').onclick = () => pick('former');
+  }
+
   const spousesCombo = createCombo(document.getElementById('spousesCombo'), {
     multiple: true,
     placeholder: 'Add spouse/partner…',
     createLabel: '+ Add new spouse',
     onCreateNew: startAddSpouseFlow,
     chipDecorator: buildSpouseStatusToggle,
+    onSelect: (opt, commit) => {
+      showSpouseConfirm(opt.name, (status) => {
+        spouseStatusDraft[opt.id] = status;
+        commit();
+      });
+    },
+    onOpen: () => {
+      // Reset any confirm panel left showing from an abandoned pick.
+      const dropdown = document.getElementById('spousesDropdown');
+      dropdown.querySelector('.combo-filter-wrap').hidden = false;
+      dropdown.querySelector('.combo-options').hidden = false;
+      document.getElementById('spousesConfirm').hidden = true;
+    },
   });
 
   // ---------- Location autocomplete ----------
@@ -1571,16 +1624,19 @@
     await saveData();
 
     // Finishing the nested "+ Add new spouse" step: the new person is
-    // already saved as their own record above, so just add them to the
-    // stashed form's spouse chips and pick up the original edit where it
-    // left off, instead of closing the whole modal.
+    // already saved as their own record above. Pick up the original edit
+    // where it left off, then ask current-or-former for them too, same as
+    // picking an existing person from the list -- they aren't added to
+    // the spouse chips until answered.
     if (pendingSpouseSnapshot) {
       const snap = pendingSpouseSnapshot;
       pendingSpouseSnapshot = null;
-      if (!snap.spouses.includes(id)) snap.spouses.push(id);
-      if (!snap.spouseStatusDraft[id]) snap.spouseStatusDraft[id] = 'current';
       renderTree();
       restorePersonForm(snap);
+      showSpouseConfirm(name, (status) => {
+        spouseStatusDraft[id] = status;
+        spousesCombo.setValues([...spousesCombo.getValues(), id]);
+      });
       return;
     }
 
