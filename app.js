@@ -17,6 +17,14 @@
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
   const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
 
+  // Matches the emoji baked into #zodiacInput's <option> labels in
+  // index.html -- needed again here to show the same emoji on the
+  // read-only Person View card.
+  const ZODIAC_EMOJI = {
+    Rat: '🐀', Ox: '🐂', Tiger: '🐅', Rabbit: '🐇', Dragon: '🐉', Snake: '🐍',
+    Horse: '🐎', Goat: '🐐', Monkey: '🐒', Rooster: '🐓', Dog: '🐕', Pig: '🐖',
+  };
+
   // For recognizing a US state name inside an already-saved full address
   // string -- see shortenLocationText.
   const US_STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
@@ -176,6 +184,7 @@
     birthLocationSuggestions: document.getElementById('birthLocationSuggestions'),
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
+    zodiacInput: document.getElementById('zodiacInput'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -207,6 +216,7 @@
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
     viewBirthLocation: document.getElementById('viewBirthLocation'),
+    viewZodiac: document.getElementById('viewZodiac'),
     viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
     viewParentsSection: document.getElementById('viewParentsSection'),
@@ -1208,6 +1218,7 @@
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
     setLocationRows(locationsOf(p));
+    els.zodiacInput.value = p.zodiac || '';
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1240,6 +1251,7 @@
       death: els.deathInput.value,
       birthLocation: getEditableText(els.birthLocationInput),
       locations: getLocationsFromForm(),
+      zodiac: els.zodiacInput.value,
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1260,6 +1272,7 @@
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     setEditableText(els.birthLocationInput, snap.birthLocation);
     setLocationRows(snap.locations);
+    els.zodiacInput.value = snap.zodiac;
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
@@ -1546,6 +1559,9 @@
       const shortBirthLocation = shortenLocationText(p.birthLocation || '');
       els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
       els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
+      const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
+      els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
+      els.viewZodiac.hidden = !els.viewZodiac.textContent;
     }
 
     // Spouses already shown as the other half of a couple card don't need
@@ -1844,6 +1860,7 @@
     person.locations = getLocationsFromForm();
     delete person.location; // superseded by locations -- see locationsOf()
     person.birthLocation = getEditableText(els.birthLocationInput);
+    person.zodiac = els.zodiacInput.value;
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
     person.parents = parents;
