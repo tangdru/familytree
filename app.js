@@ -158,8 +158,10 @@
     deathInput: document.getElementById('deathInput'),
     birthDisplayText: document.querySelector('#birthDisplay .date-display-text'),
     deathDisplayText: document.querySelector('#deathDisplay .date-display-text'),
-    locationInput: document.getElementById('locationInput'),
-    locationSuggestions: document.getElementById('locationSuggestions'),
+    birthLocationInput: document.getElementById('birthLocationInput'),
+    birthLocationSuggestions: document.getElementById('birthLocationSuggestions'),
+    locationsList: document.getElementById('locationsList'),
+    addLocationBtn: document.getElementById('addLocationBtn'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -190,6 +192,7 @@
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
+    viewBirthLocation: document.getElementById('viewBirthLocation'),
     viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
     viewParentsSection: document.getElementById('viewParentsSection'),
@@ -200,6 +203,8 @@
     viewSpousesList: document.getElementById('viewSpousesList'),
     viewChildrenSection: document.getElementById('viewChildrenSection'),
     viewChildrenList: document.getElementById('viewChildrenList'),
+    viewLocationsSection: document.getElementById('viewLocationsSection'),
+    viewLocationsList: document.getElementById('viewLocationsList'),
   };
 
   let pendingPhoto = null; // dataURL currently staged in the form
@@ -236,7 +241,7 @@
   }
 
   setupEditableText(els.nameInput);
-  setupEditableText(els.locationInput);
+  setupEditableText(els.birthLocationInput);
 
   // ---------- Searchable combo (parent / spouse pickers) ----------
 
@@ -506,9 +511,7 @@
   // and guarded against out-of-order responses with a request token, since
   // a slow earlier request could otherwise resolve after a newer one.
 
-  function setupLocationAutocomplete() {
-    const input = els.locationInput;
-    const list = els.locationSuggestions;
+  function setupLocationAutocomplete(input, list) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
     let requestToken = 0;
@@ -569,12 +572,99 @@
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') hideSuggestions();
     });
-    document.addEventListener('click', (e) => {
-      if (!list.hidden && !e.target.closest('.location-field')) hideSuggestions();
+  }
+
+  // Closes any open location-suggestions dropdown when a click lands outside
+  // every location field. Registered once (not inside setupLocationAutocomplete
+  // itself) since location fields come and go dynamically -- the birth
+  // location field plus a variable number of location rows -- and a
+  // per-field listener would pile up a stale one every time a row is added.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.location-field')) return;
+    document.querySelectorAll('.location-suggestions:not([hidden])').forEach(list => {
+      list.hidden = true;
+      list.querySelector('.combo-options').innerHTML = '';
+    });
+  });
+
+  setupLocationAutocomplete(els.birthLocationInput, els.birthLocationSuggestions);
+
+  // ---------- Location(s) list (repeatable rows) ----------
+  // An ordered list of free-text locations -- index 0 is "current" (order
+  // decides that, not dates; see locationsOf/currentLocationOf below and
+  // BACKLOG.md for the planned date-range + drag-to-reorder follow-up).
+
+  function addLocationRow(value) {
+    const row = document.createElement('div');
+    row.className = 'location-row';
+
+    const field = document.createElement('div');
+    field.className = 'location-field';
+    const input = document.createElement('div');
+    input.className = 'editable-text location-row-input';
+    input.contentEditable = 'true';
+    input.setAttribute('role', 'textbox');
+    input.setAttribute('data-placeholder', 'City, Country');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('spellcheck', 'false');
+    const suggestions = document.createElement('div');
+    suggestions.className = 'combo-dropdown location-suggestions';
+    suggestions.hidden = true;
+    const optionsEl = document.createElement('div');
+    optionsEl.className = 'combo-options';
+    suggestions.appendChild(optionsEl);
+    field.appendChild(input);
+    field.appendChild(suggestions);
+
+    const tag = document.createElement('span');
+    tag.className = 'location-current-tag';
+    tag.textContent = 'Current';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'location-row-remove';
+    removeBtn.setAttribute('aria-label', 'Remove location');
+    removeBtn.textContent = '✕';
+    removeBtn.addEventListener('click', () => {
+      row.remove();
+      refreshLocationCurrentTags();
+    });
+
+    row.appendChild(field);
+    row.appendChild(tag);
+    row.appendChild(removeBtn);
+    els.locationsList.appendChild(row);
+
+    setupEditableText(input);
+    setEditableText(input, value || '');
+    setupLocationAutocomplete(input, suggestions);
+    refreshLocationCurrentTags();
+    return row;
+  }
+
+  function refreshLocationCurrentTags() {
+    els.locationsList.querySelectorAll('.location-row').forEach((row, i) => {
+      row.querySelector('.location-current-tag').hidden = i !== 0;
     });
   }
 
-  setupLocationAutocomplete();
+  function setLocationRows(values) {
+    els.locationsList.innerHTML = '';
+    (values && values.length ? values : ['']).forEach(v => addLocationRow(v));
+  }
+
+  function getLocationsFromForm() {
+    return Array.from(els.locationsList.querySelectorAll('.location-row-input'))
+      .map(getEditableText)
+      .filter(Boolean);
+  }
+
+  els.addLocationBtn.addEventListener('click', () => {
+    addLocationRow('');
+    const inputs = els.locationsList.querySelectorAll('.location-row-input');
+    const last = inputs[inputs.length - 1];
+    if (last) last.focus();
+  });
 
   // ---------- View state (pan/zoom) ----------
 
@@ -971,7 +1061,8 @@
     els.form.reset();
     els.personId.value = '';
     setEditableText(els.nameInput, '');
-    setEditableText(els.locationInput, '');
+    setEditableText(els.birthLocationInput, '');
+    setLocationRows([]);
     pendingPhoto = null;
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
@@ -995,7 +1086,8 @@
     els.deathInput.value = p.deathDate || '';
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    setEditableText(els.locationInput, p.location || '');
+    setEditableText(els.birthLocationInput, p.birthLocation || '');
+    setLocationRows(locationsOf(p));
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1026,7 +1118,8 @@
       name: getEditableText(els.nameInput),
       birth: els.birthInput.value,
       death: els.deathInput.value,
-      location: getEditableText(els.locationInput),
+      birthLocation: getEditableText(els.birthLocationInput),
+      locations: getLocationsFromForm(),
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1045,7 +1138,8 @@
     els.deathInput.value = snap.death;
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    setEditableText(els.locationInput, snap.location);
+    setEditableText(els.birthLocationInput, snap.birthLocation);
+    setLocationRows(snap.locations);
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
@@ -1130,6 +1224,29 @@
     return li;
   }
 
+  // A location-history row: plain text (not a link, unlike relation rows --
+  // a location isn't a tree person to navigate to), tagged "Current" for
+  // whichever entry is first (see currentLocationOf).
+  function buildLocationRow(location, isCurrent) {
+    const li = document.createElement('li');
+    const text = document.createElement('span');
+    text.className = 'view-location-text';
+    text.textContent = location;
+    const tag = document.createElement('span');
+    tag.className = 'view-location-tag';
+    tag.textContent = isCurrent ? 'Current' : '';
+    li.appendChild(text);
+    li.appendChild(tag);
+    return li;
+  }
+
+  function fillLocationsSection(sectionEl, listEl, locations) {
+    listEl.innerHTML = '';
+    if (!locations.length) { sectionEl.hidden = true; return; }
+    locations.forEach((loc, i) => listEl.appendChild(buildLocationRow(loc, i === 0)));
+    sectionEl.hidden = false;
+  }
+
   function fillRelationSection(sectionEl, listEl, ids, onNavigate) {
     listEl.innerHTML = '';
     const valid = ids.filter(id => data.people[id]);
@@ -1180,13 +1297,27 @@
     renderPersonView(node.ids, node.selected);
   }
 
+  // A person's ordered location history -- locations[0] is "current" (order
+  // decides that, not dates; see BACKLOG.md for the planned date-range +
+  // drag-to-reorder follow-up). Falls back to the old singular `location`
+  // field for pre-existing data that hasn't been re-saved yet.
+  function locationsOf(person) {
+    if (!person) return [];
+    if (Array.isArray(person.locations) && person.locations.length) return person.locations;
+    return person.location ? [person.location] : [];
+  }
+
+  function currentLocationOf(person) {
+    return locationsOf(person)[0] || '';
+  }
+
   // A couple's shared location: shown once for both, since they usually live
   // together -- the selected member's location if the two differ or only one
   // is known, otherwise the (matching) value both share.
   function sharedLocation(ids, selectedId) {
-    const selLoc = (data.people[selectedId] && data.people[selectedId].location) || '';
+    const selLoc = currentLocationOf(data.people[selectedId]);
     const otherId = ids.find(id => id !== selectedId);
-    const otherLoc = (otherId && data.people[otherId] && data.people[otherId].location) || '';
+    const otherLoc = currentLocationOf(data.people[otherId]);
     return selLoc || otherLoc;
   }
 
@@ -1288,6 +1419,8 @@
       els.viewName.textContent = p.name || '(unnamed)';
       els.viewDates.textContent = personDatesText(p);
       els.viewDates.hidden = !els.viewDates.textContent;
+      els.viewBirthLocation.textContent = p.birthLocation ? `Born in ${p.birthLocation}` : '';
+      els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
     }
 
     // Spouses already shown as the other half of a couple card don't need
@@ -1298,7 +1431,7 @@
     spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
     els.viewSpouseAvatars.hidden = !spouseIds.length;
 
-    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : (p.location || '');
+    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : currentLocationOf(p);
     els.viewLocation.hidden = !els.viewLocation.textContent;
 
     els.viewNotes.textContent = p.notes || '';
@@ -1322,6 +1455,8 @@
 
     const childIds = Object.keys(data.people).filter(id => ids.some(pid => data.people[id].parents.includes(pid)));
     fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds);
+
+    fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
 
     els.viewModal.hidden = false;
   }
@@ -1581,7 +1716,9 @@
     person.name = name;
     person.birthDate = els.birthInput.value || '';
     person.deathDate = els.deathInput.value || '';
-    person.location = getEditableText(els.locationInput);
+    person.locations = getLocationsFromForm();
+    delete person.location; // superseded by locations -- see locationsOf()
+    person.birthLocation = getEditableText(els.birthLocationInput);
     person.notes = els.notesInput.value.trim();
     person.photo = pendingPhoto || '';
     person.parents = parents;

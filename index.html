@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907u">
+<link rel="stylesheet" href="style.css?v=20260907v">
 </head>
 <body>
   <header class="toolbar">
@@ -119,13 +119,19 @@
         </div>
 
         <div class="form-row">
-          <label id="locationLabel">Location</label>
+          <label id="birthLocationLabel">Birth location</label>
           <div class="location-field">
-            <div id="locationInput" class="editable-text" contenteditable="true" role="textbox" aria-labelledby="locationLabel" data-placeholder="City, Country" autocorrect="off" spellcheck="false"></div>
-            <div class="combo-dropdown location-suggestions" id="locationSuggestions" hidden>
+            <div id="birthLocationInput" class="editable-text" contenteditable="true" role="textbox" aria-labelledby="birthLocationLabel" data-placeholder="City, Country" autocorrect="off" spellcheck="false"></div>
+            <div class="combo-dropdown location-suggestions" id="birthLocationSuggestions" hidden>
               <div class="combo-options"></div>
             </div>
           </div>
+        </div>
+
+        <div class="form-row">
+          <label id="locationsLabel">Location(s)</label>
+          <div class="locations-list" id="locationsList"></div>
+          <button type="button" class="add-location-btn" id="addLocationBtn">+ Add location</button>
         </div>
 
         <div class="form-row">
@@ -235,6 +241,7 @@
             </div>
             <h3 class="view-name" id="viewName"></h3>
             <p class="view-dates" id="viewDates" hidden></p>
+            <p class="view-birth-location" id="viewBirthLocation" hidden></p>
           </div>
           <!-- A couple's shared card: two equal-size member blocks, built and
                populated in JS by buildCoupleMember() -- see renderPersonView(). -->
@@ -260,6 +267,10 @@
           <h4>Children</h4>
           <ul class="view-relation-list" id="viewChildrenList"></ul>
         </div>
+        <div class="view-section" id="viewLocationsSection" hidden>
+          <h4>Locations</h4>
+          <ul class="view-relation-list" id="viewLocationsList"></ul>
+        </div>
       </div>
       <div class="modal-footer">
         <div class="spacer"></div>
@@ -270,7 +281,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907u"></script>
-  <script src="app.js?v=20260907u"></script>
+  <script src="config.js?v=20260907v"></script>
+  <script src="app.js?v=20260907v"></script>
 </body>
 </html>
