@@ -2023,19 +2023,35 @@
       const childTopY = Math.min(...childRects.map(r => r.top));
       const busY = parentY + (childTopY - parentY) / 2;
 
-      // One elbow path per child -- from the shared parent trunk, along the
-      // bus row, down to that child -- rather than a shared bus line plus
-      // separate stubs, so every bend (trunk-to-bus, bus-to-child-stub) has
-      // its own rounded corner. Overlapping trunk/bus segments between
-      // children's paths draw identically on top of each other, so it
-      // still reads as a single shared bus visually.
-      for (const r of childRects) {
-        svg.appendChild(svgElbowPath([
-          { x: parentAnchorX, y: parentY },
-          { x: parentAnchorX, y: busY },
-          { x: r.centerX, y: busY },
-          { x: r.centerX, y: r.top },
-        ], CONNECTOR_CORNER_RADIUS));
+      if (childRects.length > 2) {
+        // 3+ children sharing one bus: the trunk usually lands exactly on
+        // one child's own X (often the middle one), so rounding every
+        // branch's corner independently makes their curves visibly overlap
+        // right at that shared point. Sharp corners avoid it -- back to a
+        // single shared bus line plus a straight stub per child.
+        svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
+        const childXs = childRects.map(r => r.centerX);
+        const minX = Math.min(...childXs, parentAnchorX);
+        const maxX = Math.max(...childXs, parentAnchorX);
+        svg.appendChild(svgLine(minX, busY, maxX, busY));
+        for (const r of childRects) {
+          svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
+        }
+      } else {
+        // One or two children: the trunk splits cleanly without landing on
+        // either branch, so a rounded elbow path per child (trunk down,
+        // across the bus, down to the child) reads fine -- every bend gets
+        // its own rounded corner. Overlapping trunk/bus segments between
+        // the two children's paths draw identically on top of each other,
+        // so it still reads as a single shared bus visually.
+        for (const r of childRects) {
+          svg.appendChild(svgElbowPath([
+            { x: parentAnchorX, y: parentY },
+            { x: parentAnchorX, y: busY },
+            { x: r.centerX, y: busY },
+            { x: r.centerX, y: r.top },
+          ], CONNECTOR_CORNER_RADIUS));
+        }
       }
     }
   }
