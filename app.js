@@ -17,6 +17,17 @@
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
   const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
 
+  // For recognizing a US state name inside an already-saved full address
+  // string -- see shortenLocationText.
+  const US_STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+    'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana',
+    'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
+    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
+    'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma',
+    'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee',
+    'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
+    'District of Columbia'];
+
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -523,6 +534,26 @@
     const city = addr.city || addr.town || addr.village || addr.hamlet || addr.municipality || addr.county || '';
     const region = addr.country_code === 'us' ? (addr.state || '') : (addr.country || '');
     return [city, region].filter(Boolean).join(', ') || result.display_name;
+  }
+
+  // Cleans up a location string saved before the shortening above existed
+  // (or one a suggestion click filled in before that point), so records
+  // saved with the old full Nominatim address self-heal on next display --
+  // no structured address fields to work from here, just heuristics over
+  // the comma-separated text: first segment is the city, last is (loosely)
+  // the country, and a US state is recognized by name among the segments
+  // in between. Left untouched if it doesn't look like a full address
+  // (fewer than 3 comma-separated segments) or no state can be found.
+  function shortenLocationText(text) {
+    const parts = (text || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length < 3) return text || '';
+    const city = parts[0];
+    const country = parts[parts.length - 1];
+    if (/united states/i.test(country)) {
+      const state = parts.find(p => US_STATE_NAMES.includes(p));
+      return state ? `${city}, ${state}` : text;
+    }
+    return `${city}, ${country}`;
   }
 
   function setupLocationAutocomplete(input, list) {
@@ -1175,7 +1206,7 @@
     els.deathInput.value = p.deathDate || '';
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    setEditableText(els.birthLocationInput, p.birthLocation || '');
+    setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
     setLocationRows(locationsOf(p));
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
@@ -1387,13 +1418,17 @@
   }
 
   // A person's ordered location history -- locations[0] is "current" (order
-  // decides that, not dates; see BACKLOG.md for the planned date-range +
-  // drag-to-reorder follow-up). Falls back to the old singular `location`
-  // field for pre-existing data that hasn't been re-saved yet.
+  // decides that, not dates; see BACKLOG.md for the still-deferred
+  // per-location date range). Falls back to the old singular `location`
+  // field for pre-existing data that hasn't been re-saved yet, and runs
+  // every entry through shortenLocationText so a record saved with the old
+  // full-address text (from before that shortening existed) self-heals
+  // wherever it's shown, without needing a resave first.
   function locationsOf(person) {
     if (!person) return [];
-    if (Array.isArray(person.locations) && person.locations.length) return person.locations;
-    return person.location ? [person.location] : [];
+    const raw = Array.isArray(person.locations) && person.locations.length ? person.locations
+      : person.location ? [person.location] : [];
+    return raw.map(shortenLocationText);
   }
 
   function currentLocationOf(person) {
@@ -1508,7 +1543,8 @@
       els.viewName.textContent = p.name || '(unnamed)';
       els.viewDates.textContent = personDatesText(p);
       els.viewDates.hidden = !els.viewDates.textContent;
-      els.viewBirthLocation.textContent = p.birthLocation ? `Born in ${p.birthLocation}` : '';
+      const shortBirthLocation = shortenLocationText(p.birthLocation || '');
+      els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
       els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
     }
 
