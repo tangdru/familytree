@@ -541,6 +541,10 @@ body {
   font-style: italic;
   color: var(--ink-soft);
 }
+.combo-confirm { padding: 10px; }
+.combo-confirm-text { margin: 0 0 8px; font-size: 0.85rem; }
+.combo-confirm-actions { display: flex; gap: 8px; }
+.combo-confirm-actions .btn { flex: 1; padding: 7px 10px; font-size: 0.85rem; }
 .combo-chips {
   display: flex;
   flex-wrap: wrap;

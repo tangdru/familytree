@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907t">
+<link rel="stylesheet" href="style.css?v=20260907u">
 </head>
 <body>
   <header class="toolbar">
@@ -162,6 +162,13 @@
                 <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
               </div>
               <div class="combo-options"></div>
+              <div class="combo-confirm" id="spousesConfirm" hidden>
+                <p class="combo-confirm-text">Add <strong id="spousesConfirmName"></strong> as:</p>
+                <div class="combo-confirm-actions">
+                  <button type="button" class="btn btn-primary" id="spousesConfirmCurrent">Current</button>
+                  <button type="button" class="btn" id="spousesConfirmFormer">Former</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -263,7 +270,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907t"></script>
-  <script src="app.js?v=20260907t"></script>
+  <script src="config.js?v=20260907u"></script>
+  <script src="app.js?v=20260907u"></script>
 </body>
 </html>
