@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908a">
+<link rel="stylesheet" href="style.css?v=20260908b">
 </head>
 <body>
   <header class="toolbar">
@@ -300,8 +300,13 @@
     </div>
   </div>
 
+  <div id="saveToast" class="save-toast" role="status" aria-live="polite" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    Saved
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260908a"></script>
-  <script src="app.js?v=20260908a"></script>
+  <script src="config.js?v=20260908b"></script>
+  <script src="app.js?v=20260908b"></script>
 </body>
 </html>

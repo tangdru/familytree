@@ -884,6 +884,31 @@ body {
   font-weight: 600;
 }
 
+/* Brief, non-blocking confirmation after a save -- fixed colors (like
+   .chip) since it floats over both the tree and either theme equally. */
+.save-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 12px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #2b2620;
+  color: #f3ede0;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.save-toast svg { width: 16px; height: 16px; color: #8fd19e; flex-shrink: 0; }
+.save-toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #201c16;

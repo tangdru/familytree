@@ -205,6 +205,7 @@
     updatePhotoLabel: document.getElementById('updatePhotoLabel'),
     removePhotoBtn: document.getElementById('removePhotoBtn'),
     deletePersonBtn: document.getElementById('deletePersonBtn'),
+    saveToast: document.getElementById('saveToast'),
 
     cropModal: document.getElementById('cropModal'),
     cropViewport: document.getElementById('cropViewport'),
@@ -1328,6 +1329,24 @@
     els.modalTitle.textContent = 'Add Spouse';
   }
 
+  // Brief non-blocking confirmation that a save actually went through --
+  // otherwise the only feedback is the modal closing and the tree
+  // re-rendering, which for an edit that doesn't change the collapsed
+  // card (a new zodiac, a location) can look like nothing happened at all.
+  let saveToastTimer = null;
+  function showSaveToast() {
+    clearTimeout(saveToastTimer);
+    els.saveToast.hidden = false;
+    // Force layout so the following class add starts its transition from
+    // the hidden state instead of jumping straight to visible.
+    void els.saveToast.offsetWidth;
+    els.saveToast.classList.add('visible');
+    saveToastTimer = setTimeout(() => {
+      els.saveToast.classList.remove('visible');
+      setTimeout(() => { els.saveToast.hidden = true; }, 200);
+    }, 1500);
+  }
+
   function closeModal() {
     if (pendingSpouseSnapshot) {
       const snap = pendingSpouseSnapshot;
@@ -1954,6 +1973,7 @@
     closeModal();
     renderTree();
     if (isNew) highlightPerson(id);
+    showSaveToast();
   });
 
   function isDescendant(ancestorCandidateId, personId) {
