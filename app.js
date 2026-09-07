@@ -252,6 +252,8 @@
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
     zodiacInput: document.getElementById('zodiacInput'),
+    contactInput: document.getElementById('contactInput'),
+    contactGmailBtn: document.getElementById('contactGmailBtn'),
     notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
@@ -284,6 +286,7 @@
     viewDates: document.getElementById('viewDates'),
     viewBirthLocation: document.getElementById('viewBirthLocation'),
     viewZodiac: document.getElementById('viewZodiac'),
+    viewContact: document.getElementById('viewContact'),
     viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
     viewParentsSection: document.getElementById('viewParentsSection'),
@@ -333,6 +336,7 @@
 
   setupEditableText(els.nameInput);
   setupEditableText(els.birthLocationInput);
+  setupEditableText(els.contactInput);
 
   // ---------- Searchable combo (parent / spouse pickers) ----------
 
@@ -631,6 +635,17 @@
       return state ? `${city}, ${state}` : text;
     }
     return `${city}, ${country}`;
+  }
+
+  // A contact value renders as a tel:/mailto: link on the read-only card
+  // when it unambiguously looks like one or the other; anything else (or
+  // an unset value) just shows as plain text, per whatever mode it was
+  // last saved in -- see the Contact field's live phone/email detection.
+  function contactHref(value) {
+    if (!value) return null;
+    if (value.includes('@') && /[a-zA-Z]/.test(value)) return `mailto:${value}`;
+    if (/\d/.test(value) && !/[a-zA-Z]/.test(value)) return `tel:${value.replace(/[^\d+]/g, '')}`;
+    return null;
   }
 
   function setupLocationAutocomplete(input, list) {
@@ -1268,6 +1283,79 @@
   });
   els.deathInput.addEventListener('change', () => updateDateDisplay(els.deathInput, els.deathDisplayText));
 
+  // ---------- Contact field (phone or email, free text) ----------
+  // One field for either, since most people only ever record one anyway --
+  // it watches what's actually being typed and adapts: digits get grouped
+  // with dashes as you type (like a phone keypad entry), letters get a
+  // quick "+ @gmail.com" button (hidden again once an @ has been typed, on
+  // the assumption you're now typing a different domain yourself).
+
+  function groupPhoneDigits(digits) {
+    const len = digits.length;
+    if (len <= 3) return digits;
+    if (len <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    if (len <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    // 11+ digits: treat everything past the last 10 as a country code.
+    const rest = digits.slice(len - 10);
+    return `${digits.slice(0, len - 10)}-${rest.slice(0, 3)}-${rest.slice(3, 6)}-${rest.slice(6)}`;
+  }
+
+  // Reformats a contenteditable's digits-only content in place, keeping the
+  // caret sitting after the same digit it was after before -- otherwise
+  // re-writing textContent on every keystroke would bounce the caret to the
+  // end and make typing in the middle of a number unusable.
+  function reformatPhoneField(el) {
+    const sel = window.getSelection();
+    const caretOffset = (sel.rangeCount && el.contains(sel.anchorNode)) ? sel.getRangeAt(0).startOffset : el.textContent.length;
+    const raw = el.textContent;
+    const digitsBeforeCaret = (raw.slice(0, caretOffset).match(/\d/g) || []).length;
+    const formatted = groupPhoneDigits(raw.replace(/\D/g, ''));
+    el.textContent = formatted;
+    let newPos = formatted.length;
+    let seen = 0;
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i])) {
+        seen++;
+        if (seen === digitsBeforeCaret) { newPos = i + 1; break; }
+      }
+    }
+    if (digitsBeforeCaret === 0) newPos = 0;
+    const textNode = el.firstChild || el.appendChild(document.createTextNode(''));
+    const range = document.createRange();
+    range.setStart(textNode, Math.min(newPos, textNode.length));
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function updateContactGmailBtn() {
+    const value = getEditableText(els.contactInput);
+    const looksLikeEmail = /[a-zA-Z]/.test(value) && !value.includes('@');
+    els.contactGmailBtn.hidden = !looksLikeEmail;
+  }
+
+  els.contactInput.addEventListener('input', () => {
+    const value = getEditableText(els.contactInput);
+    if (value && !/[a-zA-Z]/.test(value) && /\d/.test(value)) {
+      reformatPhoneField(els.contactInput);
+    }
+    updateContactGmailBtn();
+  });
+
+  els.contactGmailBtn.addEventListener('click', () => {
+    const current = getEditableText(els.contactInput);
+    if (current.includes('@')) return;
+    setEditableText(els.contactInput, current + '@gmail.com');
+    els.contactInput.focus();
+    const range = document.createRange();
+    range.selectNodeContents(els.contactInput);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    updateContactGmailBtn();
+  });
+
   // ---------- Modal open/close ----------
 
   function openModalForAdd() {
@@ -1276,6 +1364,8 @@
     setEditableText(els.nameInput, '');
     setEditableText(els.birthLocationInput, '');
     setLocationRows([]);
+    setEditableText(els.contactInput, '');
+    updateContactGmailBtn();
     pendingPhoto = null;
     showPhotoPreview(null);
     updateDateDisplay(els.birthInput, els.birthDisplayText);
@@ -1304,6 +1394,8 @@
     setLocationRows(locationsOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
+    setEditableText(els.contactInput, p.contact || '');
+    updateContactGmailBtn();
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
@@ -1338,6 +1430,7 @@
       locations: getLocationsFromForm(),
       zodiac: els.zodiacInput.value,
       zodiacManuallySet,
+      contact: getEditableText(els.contactInput),
       notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
@@ -1360,6 +1453,8 @@
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
     zodiacManuallySet = snap.zodiacManuallySet;
+    setEditableText(els.contactInput, snap.contact);
+    updateContactGmailBtn();
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
@@ -1649,6 +1744,19 @@
       const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
       els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
       els.viewZodiac.hidden = !els.viewZodiac.textContent;
+      els.viewContact.innerHTML = '';
+      if (p.contact) {
+        const href = contactHref(p.contact);
+        if (href) {
+          const a = document.createElement('a');
+          a.href = href;
+          a.textContent = p.contact;
+          els.viewContact.appendChild(a);
+        } else {
+          els.viewContact.textContent = p.contact;
+        }
+      }
+      els.viewContact.hidden = !p.contact;
     }
 
     // Spouses already shown as the other half of a couple card don't need
@@ -1980,6 +2088,7 @@
       delete person.location; // superseded by locations -- see locationsOf()
       person.birthLocation = getEditableText(els.birthLocationInput);
       person.zodiac = els.zodiacInput.value;
+      person.contact = getEditableText(els.contactInput);
       person.notes = els.notesInput.value.trim();
       person.photo = photoUrl;
       person.parents = parents;

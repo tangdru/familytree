@@ -34,3 +34,14 @@ in `app.js`).
 Deliberately deferred, to be added as a follow-up: a date range (with a
 calendar-icon picker) per location, shown alongside each row and in the
 Person View's Locations history section.
+
+## Contact field: US-style phone formatting only
+
+The single free-text `contact` field (Add/Edit form, `groupPhoneDigits` /
+`reformatPhoneField` in `app.js`) live-groups digits as `XXX-XXX-XXXX`
+(with a leading country-code group for 11+ digits) as you type, and shows
+a quick "+ @gmail.com" button once it looks like an email being typed
+instead. The dash grouping is deliberately simple US-style only -- it
+doesn't attempt real international phone formatting (different countries
+group digits differently). Revisit if the tree grows to include people
+whose numbers this formats oddly.

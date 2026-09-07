@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908f">
+<link rel="stylesheet" href="style.css?v=20260908g">
 </head>
 <body>
   <header class="toolbar">
@@ -148,6 +148,14 @@
         </div>
 
         <div class="form-row">
+          <label id="contactLabel">Contact</label>
+          <div class="contact-field">
+            <div id="contactInput" class="editable-text" contenteditable="true" role="textbox" aria-labelledby="contactLabel" data-placeholder="Phone or email" autocorrect="off" spellcheck="false"></div>
+            <button type="button" class="contact-gmail-btn" id="contactGmailBtn" hidden>+ @gmail.com</button>
+          </div>
+        </div>
+
+        <div class="form-row">
           <label id="locationsLabel">Location(s)</label>
           <div class="locations-list" id="locationsList"></div>
           <button type="button" class="add-location-btn" id="addLocationBtn">+ Add location</button>
@@ -262,6 +270,7 @@
             <p class="view-dates" id="viewDates" hidden></p>
             <p class="view-birth-location" id="viewBirthLocation" hidden></p>
             <p class="view-zodiac" id="viewZodiac" hidden></p>
+            <p class="view-contact" id="viewContact" hidden></p>
           </div>
           <!-- A couple's shared card: two equal-size member blocks, built and
                populated in JS by buildCoupleMember() -- see renderPersonView(). -->
@@ -301,7 +310,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260908f"></script>
-  <script src="app.js?v=20260908f"></script>
+  <script src="config.js?v=20260908g"></script>
+  <script src="app.js?v=20260908g"></script>
 </body>
 </html>
