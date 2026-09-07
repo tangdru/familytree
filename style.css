@@ -556,12 +556,16 @@ body {
   border-radius: 999px;
   padding: 3px 6px 3px 10px;
   font-size: 0.8rem;
+  /* Fixed, not var(--ink): the chip's own background stays this same light
+     cream in both themes, so its text needs to stay dark right along with
+     it rather than following dark mode's light --ink. */
+  color: #2b2620;
 }
 .chip button {
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--ink-soft);
+  color: #6b6355; /* fixed, see .chip */
   font-size: 0.75rem;
   line-height: 1;
   padding: 2px;
