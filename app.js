@@ -244,7 +244,7 @@
   // on-screen keyboard — the trigger is a <button>, not a text input. The
   // keyboard only appears if someone deliberately taps the filter field
   // inside the open dropdown to search a long list.
-  function createCombo(rootEl, { multiple, placeholder, createLabel, onCreateNew }) {
+  function createCombo(rootEl, { multiple, placeholder, createLabel, onCreateNew, chipDecorator }) {
     const trigger = rootEl.querySelector('.combo-trigger');
     const triggerText = trigger.querySelector('.combo-trigger-text');
     const dropdown = rootEl.querySelector('.combo-dropdown');
@@ -329,9 +329,20 @@
       for (const id of selectedIds) {
         const chip = document.createElement('span');
         chip.className = 'chip';
-        chip.textContent = labelFor(id) || '(unknown)';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'chip-name';
+        nameEl.textContent = labelFor(id) || '(unknown)';
+        chip.appendChild(nameEl);
+        // Extra per-chip content (e.g. a current/former toggle) that the
+        // caller owns entirely -- it manages its own state and re-renders
+        // itself, independent of this combo's own add/remove/filter cycle.
+        if (chipDecorator) {
+          const extra = chipDecorator(id);
+          if (extra) chip.appendChild(extra);
+        }
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
+        removeBtn.className = 'chip-remove';
         removeBtn.textContent = '✕';
         removeBtn.addEventListener('click', () => {
           selectedIds = selectedIds.filter(x => x !== id);
@@ -400,13 +411,39 @@
     };
   }
 
-  const parent1Combo = createCombo(document.getElementById('parent1Combo'), { multiple: false, placeholder: 'Select…' });
-  const parent2Combo = createCombo(document.getElementById('parent2Combo'), { multiple: false, placeholder: 'Select…' });
+  const parentsCombo = createCombo(document.getElementById('parentsCombo'), { multiple: true, placeholder: 'Add parent…' });
+
+  // Per-open-form-session draft of each spouse chip's relationship status,
+  // keyed by spouse id -- 'current' or 'former'. Populated when the form
+  // opens (see openModalForEdit/restorePersonForm) and read at submit
+  // time; unset means 'current', the default both for a newly-added
+  // spouse and for pre-existing data saved before this field existed.
+  let spouseStatusDraft = {};
+
+  function buildSpouseStatusToggle(spouseId) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip-status';
+    function render() {
+      const isFormer = spouseStatusDraft[spouseId] === 'former';
+      btn.textContent = isFormer ? 'Former' : 'Current';
+      btn.classList.toggle('chip-status-former', isFormer);
+    }
+    render();
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      spouseStatusDraft[spouseId] = spouseStatusDraft[spouseId] === 'former' ? 'current' : 'former';
+      render();
+    });
+    return btn;
+  }
+
   const spousesCombo = createCombo(document.getElementById('spousesCombo'), {
     multiple: true,
     placeholder: 'Add spouse/partner…',
     createLabel: '+ Add new spouse',
     onCreateNew: startAddSpouseFlow,
+    chipDecorator: buildSpouseStatusToggle,
   });
 
   // ---------- Location autocomplete ----------
@@ -889,9 +926,9 @@
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
-    parent1Combo.clear();
-    parent2Combo.clear();
+    parentsCombo.clear();
     spousesCombo.clear();
+    spouseStatusDraft = {};
     els.modal.hidden = false;
   }
 
@@ -912,8 +949,13 @@
     els.modalTitle.textContent = 'Edit Person';
     els.deletePersonBtn.hidden = false;
     populateSelectOptions(p.id);
-    parent1Combo.setValue(p.parents[0] || '');
-    parent2Combo.setValue(p.parents[1] || '');
+    parentsCombo.setValues(p.parents);
+    // Populate the status draft BEFORE setValues() below: setValues()
+    // renders the chips immediately, and each chip's status toggle reads
+    // this draft as it's built -- setting it after would render every
+    // chip with stale (or default) status first.
+    spouseStatusDraft = {};
+    for (const sid of p.spouses) spouseStatusDraft[sid] = spouseStatusOf(p, sid);
     spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
   }
@@ -934,9 +976,9 @@
       location: getEditableText(els.locationInput),
       notes: els.notesInput.value,
       photo: pendingPhoto,
-      parent1: parent1Combo.getValue(),
-      parent2: parent2Combo.getValue(),
+      parents: parentsCombo.getValues(),
       spouses: spousesCombo.getValues(),
+      spouseStatusDraft: { ...spouseStatusDraft },
       title: els.modalTitle.textContent,
       showDelete: !els.deletePersonBtn.hidden,
     };
@@ -957,8 +999,10 @@
     els.modalTitle.textContent = snap.title;
     els.deletePersonBtn.hidden = !snap.showDelete;
     populateSelectOptions(snap.personId || null);
-    parent1Combo.setValue(snap.parent1);
-    parent2Combo.setValue(snap.parent2);
+    parentsCombo.setValues(snap.parents);
+    // Same ordering requirement as openModalForEdit: populate the draft
+    // before setValues() renders the chips off of it.
+    spouseStatusDraft = { ...snap.spouseStatusDraft };
     spousesCombo.setValues(snap.spouses);
   }
 
@@ -1281,31 +1325,44 @@
   // beyond that first one is reached via the avatar row under the photo,
   // per the click handler in buildSpouseAvatar().
 
-  // A person's current partner to pair them with on a couple card -- just
-  // the first recorded spouse for now; see BACKLOG.md for more than one.
+  // 'current' or 'former' -- unset means 'current', the default both for a
+  // freshly-added spouse and for pre-existing data saved before this field
+  // existed.
+  function spouseStatusOf(person, spouseId) {
+    return (person && person.spouseStatus && person.spouseStatus[spouseId]) === 'former' ? 'former' : 'current';
+  }
+
+  // A person's current partner to pair them with on a couple card -- their
+  // first recorded spouse who isn't tagged "former". A former spouse is
+  // still a real recorded relationship (reachable via the avatar row and
+  // relation lists), it just isn't auto-paired -- same as having no spouse
+  // at all, per coupleIdsFor below. See BACKLOG.md for more than one
+  // current partner.
   function partnerIdOf(personId) {
     const p = data.people[personId];
-    return ((p && p.spouses) || []).find(id => data.people[id]) || null;
+    return ((p && p.spouses) || []).find(id => data.people[id] && spouseStatusOf(p, id) === 'current') || null;
   }
 
   // The ids to render for a single anchor person: paired with their partner
-  // when they have one, so anyone with a recorded spouse always gets the
-  // couple card, not just when viewed as "the parents" of someone else.
-  // personId is always first, and the default selected.
+  // when they have one, so anyone with a current recorded spouse always
+  // gets the couple card, not just when viewed as "the parents" of someone
+  // else. personId is always first, and the default selected.
   function coupleIdsFor(personId) {
     const partnerId = partnerIdOf(personId);
     return partnerId ? [personId, partnerId] : [personId];
   }
 
-  // A person's recorded parents, filtered to ones that still exist. Two
-  // recorded parents are shown together as-is; a single recorded parent is
-  // still paired with THEIR partner if they have one (e.g. a step-parent),
-  // per coupleIdsFor. Rendered by renderPersonView -- see
+  // A person's recorded parents, filtered to ones that still exist, capped
+  // to the two the couple card can actually show (their own stored order --
+  // additional parents beyond that still appear in the Parents relation
+  // list, just not on the card itself). A single recorded parent is still
+  // paired with THEIR current partner if they have one (e.g. a
+  // step-parent), per coupleIdsFor. Rendered by renderPersonView -- see
   // verticalGoDown/goToParents.
   function parentIdsOf(personId) {
     const p = data.people[personId];
     const recorded = ((p && p.parents) || []).filter(id => data.people[id]);
-    return recorded.length === 1 ? coupleIdsFor(recorded[0]) : recorded;
+    return recorded.length === 1 ? coupleIdsFor(recorded[0]) : recorded.slice(0, 2);
   }
 
   function firstChildId(personId) {
@@ -1439,8 +1496,7 @@
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(p => ({ id: p.id, name: p.name || '(unnamed)' }));
 
-    parent1Combo.setOptions(people);
-    parent2Combo.setOptions(people);
+    parentsCombo.setOptions(people);
     spousesCombo.setOptions(people);
   }
 
@@ -1457,8 +1513,7 @@
     const id = els.personId.value || uid();
     const isNew = !els.personId.value;
 
-    const parents = [parent1Combo.getValue(), parent2Combo.getValue()].filter(Boolean);
-    if (parents.length === 2 && parents[0] === parents[1]) parents.pop();
+    const parents = parentsCombo.getValues();
     if (parents.includes(id)) { alert('A person cannot be their own parent.'); return; }
 
     const spouses = spousesCombo.getValues().filter(v => v && v !== id);
@@ -1486,6 +1541,7 @@
     for (const otherId of prevSpouses) {
       if (!nextSpouses.has(otherId) && data.people[otherId]) {
         data.people[otherId].spouses = data.people[otherId].spouses.filter(s => s !== id);
+        if (data.people[otherId].spouseStatus) delete data.people[otherId].spouseStatus[id];
       }
     }
     for (const otherId of nextSpouses) {
@@ -1493,6 +1549,24 @@
       if (other && !other.spouses.includes(id)) other.spouses.push(id);
     }
     person.spouses = Array.from(nextSpouses);
+
+    // Sync each remaining spouse's current/former status symmetrically too:
+    // if either side calls it "former", it's former on both records -- one
+    // partner deciding it's over is enough to end it.
+    person.spouseStatus = person.spouseStatus || {};
+    for (const otherId of prevSpouses) {
+      if (!nextSpouses.has(otherId)) delete person.spouseStatus[otherId];
+    }
+    for (const otherId of nextSpouses) {
+      const other = data.people[otherId];
+      if (!other) continue;
+      other.spouseStatus = other.spouseStatus || {};
+      const mine = spouseStatusDraft[otherId] === 'former' ? 'former' : 'current';
+      const theirs = other.spouseStatus[id] === 'former' ? 'former' : 'current';
+      const final = mine === 'former' || theirs === 'former' ? 'former' : 'current';
+      person.spouseStatus[otherId] = final;
+      other.spouseStatus[id] = final;
+    }
 
     await saveData();
 
@@ -1504,6 +1578,7 @@
       const snap = pendingSpouseSnapshot;
       pendingSpouseSnapshot = null;
       if (!snap.spouses.includes(id)) snap.spouses.push(id);
+      if (!snap.spouseStatusDraft[id]) snap.spouseStatusDraft[id] = 'current';
       renderTree();
       restorePersonForm(snap);
       return;

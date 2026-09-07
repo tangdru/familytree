@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260907r">
+<link rel="stylesheet" href="style.css?v=20260907t">
 </head>
 <body>
   <header class="toolbar">
@@ -128,41 +128,21 @@
           </div>
         </div>
 
-        <div class="form-row two-col">
-          <div>
-            <label id="parent1Label">Parent 1</label>
-            <div class="combo" id="parent1Combo">
-              <button type="button" class="combo-trigger placeholder" aria-labelledby="parent1Label" aria-haspopup="listbox" aria-expanded="false">
-                <span class="combo-trigger-text">Select…</span>
-              </button>
-              <button type="button" class="combo-clear" id="parent1Clear" aria-label="Clear parent 1" hidden>✕</button>
-              <div class="combo-dropdown" id="parent1Dropdown" hidden>
-                <div class="combo-filter-wrap">
-                  <span class="combo-filter-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                  </span>
-                  <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
-                </div>
-                <div class="combo-options"></div>
+        <div class="form-row">
+          <label id="parentsLabel">Parent(s)</label>
+          <div class="combo combo-multi" id="parentsCombo">
+            <div class="combo-chips" id="parentsChips"></div>
+            <button type="button" class="combo-trigger placeholder" aria-labelledby="parentsLabel" aria-haspopup="listbox" aria-expanded="false">
+              <span class="combo-trigger-text">Add parent…</span>
+            </button>
+            <div class="combo-dropdown" id="parentsDropdown" hidden>
+              <div class="combo-filter-wrap">
+                <span class="combo-filter-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
               </div>
-            </div>
-          </div>
-          <div>
-            <label id="parent2Label">Parent 2</label>
-            <div class="combo" id="parent2Combo">
-              <button type="button" class="combo-trigger placeholder" aria-labelledby="parent2Label" aria-haspopup="listbox" aria-expanded="false">
-                <span class="combo-trigger-text">Select…</span>
-              </button>
-              <button type="button" class="combo-clear" id="parent2Clear" aria-label="Clear parent 2" hidden>✕</button>
-              <div class="combo-dropdown" id="parent2Dropdown" hidden>
-                <div class="combo-filter-wrap">
-                  <span class="combo-filter-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                  </span>
-                  <input type="text" class="combo-filter" placeholder="" aria-label="Filter" autocomplete="off">
-                </div>
-                <div class="combo-options"></div>
-              </div>
+              <div class="combo-options"></div>
             </div>
           </div>
         </div>
@@ -283,7 +263,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20260907r"></script>
-  <script src="app.js?v=20260907r"></script>
+  <script src="config.js?v=20260907t"></script>
+  <script src="app.js?v=20260907t"></script>
 </body>
 </html>

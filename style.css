@@ -561,7 +561,7 @@ body {
      it rather than following dark mode's light --ink. */
   color: #2b2620;
 }
-.chip button {
+.chip-remove {
   border: none;
   background: none;
   cursor: pointer;
@@ -570,7 +570,27 @@ body {
   line-height: 1;
   padding: 2px;
 }
-.chip button:hover { color: var(--danger); }
+.chip-remove:hover { color: var(--danger); }
+
+/* The spouse chip's current/former toggle -- a small pill of its own
+   inside the chip, tap to flip. Fixed colors for the same reason as
+   .chip: this whole row sits on the chip's own always-light background,
+   never the theme's surface. */
+.chip-status {
+  border: 1px solid #b79f7c;
+  background: transparent;
+  color: #6b6355;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip-status-former {
+  border-color: var(--danger);
+  color: var(--danger);
+}
 
 .photo-row {
   flex-direction: row;
