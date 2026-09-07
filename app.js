@@ -2043,17 +2043,27 @@
         for (const r of sortedChildren.slice(1, -1)) {
           svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
         }
+        // Each outer corner's path runs only to the bus's own midpoint, not
+        // all the way to the OTHER outer corner: extending that far would
+        // have this path's dead-flat run cut straight through the far
+        // corner's own rounding zone, where that corner's curve has
+        // already started bending away from busY -- the flat run and the
+        // curve would both be visible at once, looking like a small flag
+        // poking out past where the curve visibly begins. Meeting in the
+        // middle instead means the two paths' flat runs butt up exactly
+        // against each other, still reading as one unbroken bus, with each
+        // curve's own rounding zone touched by only its own path.
+        const busMidX = (leftmost.centerX + rightmost.centerX) / 2;
         svg.appendChild(svgElbowPath([
-          { x: rightmost.centerX, y: busY },
+          { x: busMidX, y: busY },
           { x: leftmost.centerX, y: busY },
           { x: leftmost.centerX, y: leftmost.top },
         ], CONNECTOR_CORNER_RADIUS));
         svg.appendChild(svgElbowPath([
-          { x: leftmost.centerX, y: busY },
+          { x: busMidX, y: busY },
           { x: rightmost.centerX, y: busY },
           { x: rightmost.centerX, y: rightmost.top },
         ], CONNECTOR_CORNER_RADIUS));
-        svg.appendChild(svgLine(leftmost.centerX, busY, rightmost.centerX, busY));
       } else if (childRects.length > 2) {
         // Rare layout where the trunk sticks out past every child -- every
         // corner along the bus is a T-junction, so keep all of them sharp.
