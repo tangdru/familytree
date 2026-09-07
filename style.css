@@ -460,7 +460,19 @@ body {
 .location-suggestions .combo-options { max-height: 220px; }
 
 .locations-list { display: flex; flex-direction: column; gap: 8px; }
-.location-row { display: flex; align-items: center; gap: 8px; }
+.location-row { display: flex; align-items: center; gap: 8px; position: relative; z-index: 1; }
+.location-row.dragging { z-index: 2; }
+.location-row-handle {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--ink-soft);
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.location-row-handle svg { width: 18px; height: 18px; }
+.location-row.dragging .location-row-handle { cursor: grabbing; }
 .location-current-tag {
   flex-shrink: 0;
   font-size: 0.68rem;
