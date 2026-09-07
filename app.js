@@ -14,6 +14,9 @@
   // member photos (see buildCoupleMember) can show the same placeholder.
   const PERSON_PLACEHOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
 
+  // A six-dot grip, for the location-row drag handle (see addLocationRow).
+  const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
+
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -511,6 +514,17 @@
   // and guarded against out-of-order responses with a request token, since
   // a slow earlier request could otherwise resolve after a newer one.
 
+  // Nominatim's own display_name spells out the full address hierarchy
+  // (county, zip, etc.) -- too long for a location field. Show just
+  // "City, State" for US results (state reads better than the country
+  // here) and "City, Country" everywhere else.
+  function formatLocationSuggestion(result) {
+    const addr = result.address || {};
+    const city = addr.city || addr.town || addr.village || addr.hamlet || addr.municipality || addr.county || '';
+    const region = addr.country_code === 'us' ? (addr.state || '') : (addr.country || '');
+    return [city, region].filter(Boolean).join(', ') || result.display_name;
+  }
+
   function setupLocationAutocomplete(input, list) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
@@ -550,12 +564,14 @@
       const token = ++requestToken;
       showMessage('Searching…');
       try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=${encodeURIComponent(query)}`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(query)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Nominatim request failed (${res.status})`);
         const results = await res.json();
         if (token !== requestToken) return; // superseded by a newer query
-        renderSuggestions(results.map(r => r.display_name));
+        // Different results (e.g. two zip codes in the same city) can format
+        // to the same short label -- dedupe while keeping relevance order.
+        renderSuggestions([...new Set(results.map(formatLocationSuggestion))]);
       } catch (e) {
         console.warn('Location lookup failed', e);
         if (token === requestToken) showMessage("Couldn't load suggestions — you can still type a location");
@@ -589,14 +605,20 @@
 
   setupLocationAutocomplete(els.birthLocationInput, els.birthLocationSuggestions);
 
-  // ---------- Location(s) list (repeatable rows) ----------
+  // ---------- Location(s) list (repeatable, drag-to-reorder rows) ----------
   // An ordered list of free-text locations -- index 0 is "current" (order
   // decides that, not dates; see locationsOf/currentLocationOf below and
-  // BACKLOG.md for the planned date-range + drag-to-reorder follow-up).
+  // BACKLOG.md for the still-deferred per-location date range).
 
   function addLocationRow(value) {
     const row = document.createElement('div');
     row.className = 'location-row';
+
+    const handle = document.createElement('span');
+    handle.className = 'location-row-handle';
+    handle.setAttribute('aria-hidden', 'true');
+    handle.innerHTML = DRAG_HANDLE_SVG;
+    setupLocationRowDrag(row, handle);
 
     const field = document.createElement('div');
     field.className = 'location-field';
@@ -630,6 +652,7 @@
       refreshLocationCurrentTags();
     });
 
+    row.appendChild(handle);
     row.appendChild(field);
     row.appendChild(tag);
     row.appendChild(removeBtn);
@@ -645,6 +668,72 @@
   function refreshLocationCurrentTags() {
     els.locationsList.querySelectorAll('.location-row').forEach((row, i) => {
       row.querySelector('.location-current-tag').hidden = i !== 0;
+    });
+  }
+
+  // Drag-to-reorder for one location row, driven from its grip handle.
+  // "Current" is just whichever row ends up first (see refreshLocationCurrentTags),
+  // so this is the only way to change which location is current.
+  //
+  // The row is nudged purely with a CSS transform while dragging -- its real
+  // DOM position (and thus layout top) only changes when it's swapped past a
+  // neighbor. Reading the row's rest position fresh (with the transform
+  // briefly cleared) after every such swap means the visual offset needed
+  // to keep it under the pointer can be recomputed from scratch each time,
+  // rather than having to track an accumulating correction by hand.
+  function setupLocationRowDrag(row, handle) {
+    let pointerId = null;
+    let grabOffset = 0; // pointer's distance below the row's rest top, at grab time
+
+    function restTop() {
+      const prevTransform = row.style.transform;
+      row.style.transform = '';
+      const top = row.getBoundingClientRect().top;
+      row.style.transform = prevTransform;
+      return top;
+    }
+
+    function reorderPast(desiredTop) {
+      const rowCenter = desiredTop + row.offsetHeight / 2;
+      const rows = Array.from(els.locationsList.querySelectorAll('.location-row'));
+      const rowIndex = rows.indexOf(row);
+      for (let i = 0; i < rows.length; i++) {
+        const sib = rows[i];
+        if (sib === row) continue;
+        const sibRect = sib.getBoundingClientRect();
+        const sibCenter = sibRect.top + sibRect.height / 2;
+        if (i < rowIndex && rowCenter < sibCenter) { els.locationsList.insertBefore(row, sib); return; }
+        if (i > rowIndex && rowCenter > sibCenter) { els.locationsList.insertBefore(row, sib.nextSibling); return; }
+      }
+    }
+
+    function onPointerMove(e) {
+      if (pointerId === null) return;
+      const desiredTop = e.clientY - grabOffset;
+      reorderPast(desiredTop);
+      row.style.transform = `translateY(${desiredTop - restTop()}px)`;
+      refreshLocationCurrentTags();
+    }
+
+    function endDrag() {
+      if (pointerId === null) return;
+      pointerId = null;
+      row.style.transform = '';
+      row.classList.remove('dragging');
+      handle.removeEventListener('pointermove', onPointerMove);
+      handle.removeEventListener('pointerup', endDrag);
+      handle.removeEventListener('pointercancel', endDrag);
+    }
+
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      pointerId = e.pointerId;
+      handle.setPointerCapture(pointerId);
+      grabOffset = e.clientY - row.getBoundingClientRect().top;
+      row.classList.add('dragging');
+      handle.addEventListener('pointermove', onPointerMove);
+      handle.addEventListener('pointerup', endDrag);
+      handle.addEventListener('pointercancel', endDrag);
     });
   }
 
