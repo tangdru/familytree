@@ -185,6 +185,7 @@
     modalTitle: document.getElementById('modalTitle'),
     closeModalBtn: document.getElementById('closeModalBtn'),
     cancelBtn: document.getElementById('cancelBtn'),
+    saveBtn: document.querySelector('#personForm button[type="submit"]'),
     form: document.getElementById('personForm'),
     personId: document.getElementById('personId'),
     nameInput: document.getElementById('nameInput'),
@@ -1882,105 +1883,123 @@
 
   // ---------- Form submit / delete ----------
 
+  // Guards the whole submit handler against a second tap (or Enter, or
+  // anything else) firing again while an earlier submission's saveData()
+  // is still in flight -- saveData() can take a visible moment (a Supabase
+  // round-trip), and with no guard each extra tap generated its own uid()
+  // and saved as a brand-new person, so an impatient double- or triple-tap
+  // on Save produced that many duplicate cards on the tree.
+  let isSavingPerson = false;
+
   els.form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = getEditableText(els.nameInput);
-    if (!name) { els.nameInput.focus(); return; }
-    // Blur now (rather than waiting for closeModal) so the on-screen
-    // keyboard has the whole saveData() round-trip to finish dismissing.
-    if (document.activeElement) document.activeElement.blur();
+    if (isSavingPerson) return;
+    isSavingPerson = true;
+    els.saveBtn.disabled = true;
+    els.saveBtn.textContent = 'Saving…';
+    try {
+      const name = getEditableText(els.nameInput);
+      if (!name) { els.nameInput.focus(); return; }
+      // Blur now (rather than waiting for closeModal) so the on-screen
+      // keyboard has the whole saveData() round-trip to finish dismissing.
+      if (document.activeElement) document.activeElement.blur();
 
-    const id = els.personId.value || uid();
-    const isNew = !els.personId.value;
+      const id = els.personId.value || uid();
+      const isNew = !els.personId.value;
 
-    const parents = parentsCombo.getValues();
-    if (parents.includes(id)) { alert('A person cannot be their own parent.'); return; }
+      const parents = parentsCombo.getValues();
+      if (parents.includes(id)) { alert('A person cannot be their own parent.'); return; }
 
-    const spouses = spousesCombo.getValues().filter(v => v && v !== id);
+      const spouses = spousesCombo.getValues().filter(v => v && v !== id);
 
-    // Prevent a parent cycle (ancestor being set as descendant)
-    if (parents.some(pid => isDescendant(id, pid))) {
-      alert('That would create a cycle (a descendant cannot be their own ancestor).');
-      return;
-    }
-
-    const person = data.people[id] || { id, parents: [], spouses: [] };
-    person.name = name;
-    person.birthDate = els.birthInput.value || '';
-    person.deathDate = els.deathInput.value || '';
-    person.locations = getLocationsFromForm();
-    delete person.location; // superseded by locations -- see locationsOf()
-    person.birthLocation = getEditableText(els.birthLocationInput);
-    person.zodiac = els.zodiacInput.value;
-    person.notes = els.notesInput.value.trim();
-    person.photo = pendingPhoto || '';
-    person.parents = parents;
-
-    data.people[id] = person;
-
-    // Sync spouse relationships symmetrically
-    const prevSpouses = new Set(person.spouses || []);
-    const nextSpouses = new Set(spouses);
-    for (const otherId of prevSpouses) {
-      if (!nextSpouses.has(otherId) && data.people[otherId]) {
-        data.people[otherId].spouses = data.people[otherId].spouses.filter(s => s !== id);
-        if (data.people[otherId].spouseStatus) delete data.people[otherId].spouseStatus[id];
+      // Prevent a parent cycle (ancestor being set as descendant)
+      if (parents.some(pid => isDescendant(id, pid))) {
+        alert('That would create a cycle (a descendant cannot be their own ancestor).');
+        return;
       }
-    }
-    for (const otherId of nextSpouses) {
-      const other = data.people[otherId];
-      if (other && !other.spouses.includes(id)) other.spouses.push(id);
-    }
-    person.spouses = Array.from(nextSpouses);
 
-    // Sync each remaining spouse's current/former status symmetrically too:
-    // if either side calls it "former", it's former on both records -- one
-    // partner deciding it's over is enough to end it.
-    person.spouseStatus = person.spouseStatus || {};
-    for (const otherId of prevSpouses) {
-      if (!nextSpouses.has(otherId)) delete person.spouseStatus[otherId];
-    }
-    for (const otherId of nextSpouses) {
-      const other = data.people[otherId];
-      if (!other) continue;
-      other.spouseStatus = other.spouseStatus || {};
-      const mine = spouseStatusDraft[otherId] === 'former' ? 'former' : 'current';
-      const theirs = other.spouseStatus[id] === 'former' ? 'former' : 'current';
-      const final = mine === 'former' || theirs === 'former' ? 'former' : 'current';
-      person.spouseStatus[otherId] = final;
-      other.spouseStatus[id] = final;
-    }
+      const person = data.people[id] || { id, parents: [], spouses: [] };
+      person.name = name;
+      person.birthDate = els.birthInput.value || '';
+      person.deathDate = els.deathInput.value || '';
+      person.locations = getLocationsFromForm();
+      delete person.location; // superseded by locations -- see locationsOf()
+      person.birthLocation = getEditableText(els.birthLocationInput);
+      person.zodiac = els.zodiacInput.value;
+      person.notes = els.notesInput.value.trim();
+      person.photo = pendingPhoto || '';
+      person.parents = parents;
 
-    await saveData();
+      data.people[id] = person;
 
-    // Finishing the nested "+ Add new spouse" step: the new person is
-    // already saved as their own record above. Pick up the original edit
-    // where it left off, then ask current-or-former for them too, same as
-    // picking an existing person from the list -- they aren't added to
-    // the spouse chips until answered.
-    if (pendingSpouseSnapshot) {
-      const snap = pendingSpouseSnapshot;
-      pendingSpouseSnapshot = null;
+      // Sync spouse relationships symmetrically
+      const prevSpouses = new Set(person.spouses || []);
+      const nextSpouses = new Set(spouses);
+      for (const otherId of prevSpouses) {
+        if (!nextSpouses.has(otherId) && data.people[otherId]) {
+          data.people[otherId].spouses = data.people[otherId].spouses.filter(s => s !== id);
+          if (data.people[otherId].spouseStatus) delete data.people[otherId].spouseStatus[id];
+        }
+      }
+      for (const otherId of nextSpouses) {
+        const other = data.people[otherId];
+        if (other && !other.spouses.includes(id)) other.spouses.push(id);
+      }
+      person.spouses = Array.from(nextSpouses);
+
+      // Sync each remaining spouse's current/former status symmetrically too:
+      // if either side calls it "former", it's former on both records -- one
+      // partner deciding it's over is enough to end it.
+      person.spouseStatus = person.spouseStatus || {};
+      for (const otherId of prevSpouses) {
+        if (!nextSpouses.has(otherId)) delete person.spouseStatus[otherId];
+      }
+      for (const otherId of nextSpouses) {
+        const other = data.people[otherId];
+        if (!other) continue;
+        other.spouseStatus = other.spouseStatus || {};
+        const mine = spouseStatusDraft[otherId] === 'former' ? 'former' : 'current';
+        const theirs = other.spouseStatus[id] === 'former' ? 'former' : 'current';
+        const final = mine === 'former' || theirs === 'former' ? 'former' : 'current';
+        person.spouseStatus[otherId] = final;
+        other.spouseStatus[id] = final;
+      }
+
+      await saveData();
+
+      // Finishing the nested "+ Add new spouse" step: the new person is
+      // already saved as their own record above. Pick up the original edit
+      // where it left off, then ask current-or-former for them too, same as
+      // picking an existing person from the list -- they aren't added to
+      // the spouse chips until answered.
+      if (pendingSpouseSnapshot) {
+        const snap = pendingSpouseSnapshot;
+        pendingSpouseSnapshot = null;
+        renderTree();
+        restorePersonForm(snap);
+        showSpouseConfirm(name, (status) => {
+          spouseStatusDraft[id] = status;
+          spousesCombo.setValues([...spousesCombo.getValues(), id]);
+        });
+        return;
+      }
+
+      closeModal();
       renderTree();
-      restorePersonForm(snap);
-      showSpouseConfirm(name, (status) => {
-        spouseStatusDraft[id] = status;
-        spousesCombo.setValues([...spousesCombo.getValues(), id]);
-      });
-      return;
+      if (isNew) {
+        highlightPerson(id);
+      } else {
+        // Edit is only ever reached from the read-only Person View's Edit
+        // button -- saving should hand you back there, not drop you all the
+        // way out to the tree.
+        openViewModal(id);
+      }
+      showSaveToast();
+    } finally {
+      isSavingPerson = false;
+      els.saveBtn.disabled = false;
+      els.saveBtn.textContent = 'Save';
     }
-
-    closeModal();
-    renderTree();
-    if (isNew) {
-      highlightPerson(id);
-    } else {
-      // Edit is only ever reached from the read-only Person View's Edit
-      // button -- saving should hand you back there, not drop you all the
-      // way out to the tree.
-      openViewModal(id);
-    }
-    showSaveToast();
   });
 
   function isDescendant(ancestorCandidateId, personId) {
