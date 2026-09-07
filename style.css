@@ -504,6 +504,22 @@ body {
   cursor: pointer;
   padding: 4px 0;
 }
+
+.contact-field { display: flex; align-items: center; gap: 8px; }
+.contact-field .editable-text { flex: 1; }
+.contact-gmail-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  border: 1px solid var(--accent-dark);
+  background: transparent;
+  color: var(--accent-dark);
+  font-weight: 600;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
 /* A real <button>, not a text input: tapping it must never raise the
    on-screen keyboard — only the .combo-filter inside the open dropdown
    should do that, and only once someone deliberately taps it. */
@@ -828,12 +844,14 @@ body {
   font-weight: 700;
   text-align: center;
 }
-.view-dates, .view-location, .view-birth-location, .view-zodiac {
+.view-dates, .view-location, .view-birth-location, .view-zodiac, .view-contact {
   margin: 0 0 2px;
   text-align: center;
   color: var(--ink-soft);
   font-size: 0.88rem;
 }
+.view-contact a { color: var(--accent-dark); font-weight: 600; text-decoration: none; }
+.view-contact a:hover { text-decoration: underline; }
 .view-notes {
   margin: 12px 0 0;
   font-size: 0.88rem;

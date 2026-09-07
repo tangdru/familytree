@@ -34,3 +34,20 @@ in `app.js`).
 Deliberately deferred, to be added as a follow-up: a date range (with a
 calendar-icon picker) per location, shown alongside each row and in the
 Person View's Locations history section.
+
+## Contact field: phone formatting needs the CDN to load
+
+The single free-text `contact` field (Add/Edit form, `formatPhoneLive` /
+`reformatPhoneField` in `app.js`) live-formats digits as you type using
+libphonenumber-js (loaded from jsdelivr in index.html) -- a leading "+"
+plus country calling code gets that country's own grouping (e.g.
+"+44 20 7946 0958"), a plain domestic number defaults to US grouping. It
+shows a quick "+ @gmail.com" button once it looks like an email being
+typed instead.
+
+If the CDN script fails to load (offline, blocked), it falls back to
+`groupPhoneDigitsFallback` -- crude, always-US-style `XXX-XXX-XXXX`
+grouping with no real per-country awareness. Same fallback applies to the
+Person View card's `tel:` link (`contactHref`): normally a properly
+normalized E.164 number from libphonenumber-js, otherwise just digits and
+a leading "+" stripped of other punctuation.
