@@ -2023,16 +2023,43 @@
       const childTopY = Math.min(...childRects.map(r => r.top));
       const busY = parentY + (childTopY - parentY) / 2;
 
-      if (childRects.length > 2) {
-        // 3+ children sharing one bus: the trunk usually lands exactly on
-        // one child's own X (often the middle one), so rounding every
-        // branch's corner independently makes their curves visibly overlap
-        // right at that shared point. Sharp corners avoid it -- back to a
-        // single shared bus line plus a straight stub per child.
+      const sortedChildren = childRects.slice().sort((a, b) => a.centerX - b.centerX);
+      const leftmost = sortedChildren[0];
+      const rightmost = sortedChildren[sortedChildren.length - 1];
+      // Only true when the trunk lands between the outermost children (the
+      // normal case) -- otherwise the bus extends past a child's own X and
+      // that "outer" corner is really a T-junction too, not a plain bend.
+      const trunkIsInboard = parentAnchorX >= leftmost.centerX && parentAnchorX <= rightmost.centerX;
+
+      if (childRects.length > 2 && trunkIsInboard) {
+        // 3+ children sharing one bus: the trunk (and any middle child)
+        // meets the bus at a three-way T-junction, not a plain corner --
+        // rounding those independently makes neighboring branches' curves
+        // visibly overlap right at that shared point, so they stay sharp.
+        // Only the two OUTERMOST children sit at a genuine two-segment
+        // elbow (bus-then-stub, nothing else meeting there), so only those
+        // get rounded.
         svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
-        const childXs = childRects.map(r => r.centerX);
-        const minX = Math.min(...childXs, parentAnchorX);
-        const maxX = Math.max(...childXs, parentAnchorX);
+        for (const r of sortedChildren.slice(1, -1)) {
+          svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
+        }
+        svg.appendChild(svgElbowPath([
+          { x: rightmost.centerX, y: busY },
+          { x: leftmost.centerX, y: busY },
+          { x: leftmost.centerX, y: leftmost.top },
+        ], CONNECTOR_CORNER_RADIUS));
+        svg.appendChild(svgElbowPath([
+          { x: leftmost.centerX, y: busY },
+          { x: rightmost.centerX, y: busY },
+          { x: rightmost.centerX, y: rightmost.top },
+        ], CONNECTOR_CORNER_RADIUS));
+        svg.appendChild(svgLine(leftmost.centerX, busY, rightmost.centerX, busY));
+      } else if (childRects.length > 2) {
+        // Rare layout where the trunk sticks out past every child -- every
+        // corner along the bus is a T-junction, so keep all of them sharp.
+        svg.appendChild(svgLine(parentAnchorX, parentY, parentAnchorX, busY));
+        const minX = Math.min(leftmost.centerX, parentAnchorX);
+        const maxX = Math.max(rightmost.centerX, parentAnchorX);
         svg.appendChild(svgLine(minX, busY, maxX, busY));
         for (const r of childRects) {
           svg.appendChild(svgLine(r.centerX, busY, r.centerX, r.top));
