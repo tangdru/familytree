@@ -1083,10 +1083,11 @@
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
     renderTree();
-    if (viewMode === 'zodiac') {
-      // Zodiac's columns are usually much wider than whatever was framed
-      // before switching into it, so (unlike every other view) always
-      // reframe on entry rather than trying to preserve the old pan/zoom.
+    if (viewMode === 'zodiac' || viewMode === 'centric') {
+      // Zodiac's columns and Centric's rings are usually a completely
+      // different size/shape than whatever was framed before switching
+      // into them, so (unlike Traditional/Chronological) always reframe
+      // on entry rather than trying to preserve the old pan/zoom.
       animateFitToView();
     } else {
       // Deliberately NOT fitToView() here -- switching modes should feel
@@ -1158,6 +1159,9 @@
     centricMetric = btn.dataset.metric;
     els.centricMetricToggle.querySelectorAll('.centric-metric-btn').forEach(b => b.classList.toggle('active', b === btn));
     renderTree();
+    // Switching metric reshuffles who's in which ring entirely, which can
+    // change the layout's overall size just as much as recentering does.
+    animateFitToView();
   });
 
   // Center a card in the viewport by adjusting our own pan transform.
@@ -3243,6 +3247,10 @@
       if (viewMode === 'centric' && person.id !== centricCenterId) {
         centricCenterId = person.id;
         renderTree();
+        // Recentering on someone else can produce a very differently
+        // shaped/sized ring layout (different ring populations entirely),
+        // so reframe every time, same as entering Centric view at all.
+        animateFitToView();
       } else {
         // Zodiac/Centric cards are shown as individuals, regrouped by sign
         // or proximity rather than by relationship -- opening straight
