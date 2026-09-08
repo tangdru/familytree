@@ -907,16 +907,21 @@ body {
 .view-couple-contacts {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 20px;
   margin: 4px 0 8px;
-  flex-wrap: wrap;
 }
 .view-couple-contacts[hidden] { display: none; }
+/* Fixed at the same width as .view-couple-member above (with the same
+   gap) so each person's column of chips stays centered directly under
+   their own photo, regardless of how many/how wide their chips are --
+   otherwise a longer column (e.g. two chips vs one) skews the whole
+   centered row and throws off alignment with the row above it. */
 .view-couple-contact-col {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
+  width: 130px;
 }
 .view-couple-contact-name {
   margin: 0;
