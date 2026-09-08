@@ -765,8 +765,14 @@ body {
 .view-modal { max-width: 420px; }
 /* No title text -- the person's own name is already the first thing in
    the card -- so just the close button remains, right-aligned, in a
-   shorter bar than the Add/Edit modal's header needs for its title. */
-#personViewModal .modal-header { justify-content: flex-end; padding: 8px 20px; }
+   shorter bar than the Add/Edit modal's header needs for its title.
+   Styled by its own class (not "#personViewModal .modal-header") because
+   the swipe-drag overlay clones #personViewCard out to document.body for
+   the gesture's duration (see startSwipeDrag) -- a rule keyed to an
+   ancestor id would stop matching the moment the clone left that
+   ancestor, which is exactly what made the header/close-button briefly
+   revert to its default (taller, space-between) look mid-swipe. */
+.view-modal-header { justify-content: flex-end; padding: 8px 20px; }
 
 /* The photo/name/dates header doubles as a swipe pad -- disabling the
    browser's own touch scrolling here (rather than on the whole modal body,
