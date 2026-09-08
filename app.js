@@ -1946,9 +1946,15 @@
   // Parents link, see goToParents), opening a card from the tree -- lands
   // here and starts a brand new vertical thread anchored on whoever it's
   // landing on. See verticalGoUp/Down below for the thread itself.
-  function openViewModal(personId) {
+  // forceSingle skips coupleIdsFor's spouse-pairing entirely, showing just
+  // this one person even if they have a spouse -- used by Zodiac/Centric
+  // view (see buildCard()), where cards are already deliberately shown as
+  // individuals regrouped by sign/proximity rather than by relationship,
+  // so opening straight into a paired Couple View would cut against that.
+  function openViewModal(personId, options) {
     if (!data.people[personId]) return;
-    verticalPath = [{ ids: coupleIdsFor(personId), selected: personId }];
+    const forceSingle = options && options.forceSingle;
+    verticalPath = [{ ids: forceSingle ? [personId] : coupleIdsFor(personId), selected: personId }];
     verticalIndex = 0;
     renderThreadPosition();
   }
@@ -3238,7 +3244,12 @@
         centricCenterId = person.id;
         renderTree();
       } else {
-        openViewModal(person.id);
+        // Zodiac/Centric cards are shown as individuals, regrouped by sign
+        // or proximity rather than by relationship -- opening straight
+        // into a spouse-paired Couple View would cut against that, so
+        // force the single Person View for just the clicked card instead.
+        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric';
+        openViewModal(person.id, { forceSingle });
       }
     });
     return card;
@@ -3557,6 +3568,57 @@
     return 3;
   }
 
+  // What a ring actually means for the current metric, shown as an axis
+  // label next to its gridline -- ring 0 (the center person) never gets a
+  // label since there's no gridline drawn at radius 0.
+  function centricRingLabel(metric, ringIndex) {
+    const labels = metric === 'location'
+      ? ['Same city', 'Same region', 'Elsewhere']
+      : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
+    return labels[ringIndex - 1] || labels[labels.length - 1];
+  }
+
+  // One dashed circle plus an axis label per ring, centered on the person
+  // at (originX, originY). Reuses #linesSvg (empty in this view otherwise
+  // -- see renderCentric's own note on why no connector lines are drawn)
+  // rather than a separate element, so it pans/zooms with the cards for
+  // free via the same parent transform.
+  function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
+    const svg = els.svg;
+    svg.innerHTML = '';
+    svg.setAttribute('width', els.content.scrollWidth);
+    svg.setAttribute('height', els.content.scrollHeight);
+    svg.style.width = els.content.scrollWidth + 'px';
+    svg.style.height = els.content.scrollHeight + 'px';
+
+    for (const idx of ringIndices) {
+      const radius = radiusByRing[idx];
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', originX);
+      circle.setAttribute('cy', originY);
+      circle.setAttribute('r', radius);
+      circle.setAttribute('fill', 'none');
+      circle.setAttribute('stroke', 'var(--card-border)');
+      circle.setAttribute('stroke-width', 1);
+      circle.setAttribute('stroke-dasharray', '4 6');
+      svg.appendChild(circle);
+
+      // Always along the same fixed axis (straight up), regardless of
+      // where that ring's own cards happen to start (see the per-ring
+      // stagger in renderCentric) -- reading top-to-bottom like a ruler
+      // is clearer than chasing each ring's staggered start angle.
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', originX);
+      label.setAttribute('y', originY - radius - 8);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', 'var(--ink-soft)');
+      label.setAttribute('font-size', '12');
+      label.setAttribute('font-weight', '600');
+      label.textContent = centricRingLabel(centricMetric, idx);
+      svg.appendChild(label);
+    }
+  }
+
   function renderCentric() {
     const oldPositions = captureCardPositions();
     const hasPeople = Object.keys(data.people).length > 0;
@@ -3644,6 +3706,12 @@
 
     els.content.style.width = `${originX + maxRadius + CENTRIC_PAD}px`;
     els.content.style.height = `${originY + maxRadius + CENTRIC_PAD}px`;
+
+    // Grid circles + axis labels, one per ring, showing what each ring
+    // actually means for the current metric -- drawn once at the target
+    // radii (not animated/interpolated), so it previews where the cards
+    // in flight are headed rather than trailing behind them.
+    drawCentricGrid(originX, originY, ringIndices, radiusByRing);
 
     // Cards still glide into their new ring/position like every other
     // view, just with no connector lines to animate alongside them.
