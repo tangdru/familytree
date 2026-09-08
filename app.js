@@ -1000,6 +1000,10 @@
   // last focus instead of resetting.
   let centricCenterId = null;
   let centricMetric = 'age'; // 'age' | 'location'
+  // The grid's own {originX, originY, ringIndices, radiusByRing} from the
+  // last render, so the next one can animate the grid smoothly from there
+  // instead of snapping -- see animateCentricGrid.
+  let prevCentricGrid = null;
 
   // The chrono ruler's own year labels, kept separately from the DOM so
   // their vertical spacing can be rescaled on every pan/zoom without a
@@ -1077,18 +1081,36 @@
   applyTransform();
 
   els.viewModeSelect.addEventListener('change', () => {
+    const previousViewMode = viewMode;
     viewMode = els.viewModeSelect.value;
     // Fades in/out via its own opacity transition (see .chrono-ruler.visible
     // in style.css) rather than the hidden attribute, which can't animate.
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
+    if (previousViewMode === 'centric' && viewMode !== 'centric' && prevCentricGrid) {
+      // Play the collapse over whatever renderTree() is about to build
+      // underneath, rather than just letting the grid vanish the instant
+      // #linesSvg gets cleared for the next view.
+      playCentricExitCollapse(prevCentricGrid);
+      // Reset so the NEXT time Centric view is entered -- from any view,
+      // not just the first time ever -- it's treated as a fresh entry and
+      // gets the same confirmed-correct "build outward" animation, rather
+      // than trying to transition from this now-abandoned grid state.
+      prevCentricGrid = null;
+    }
     renderTree();
-    if (viewMode === 'zodiac' || viewMode === 'centric') {
-      // Zodiac's columns and Centric's rings are usually a completely
-      // different size/shape than whatever was framed before switching
-      // into them, so (unlike Traditional/Chronological) always reframe
-      // on entry rather than trying to preserve the old pan/zoom.
-      animateFitToView();
+    if (viewMode === 'zodiac') {
+      // Fit the columns' width only -- see computeFitTransform's own note
+      // on why height is deliberately left out here.
+      animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'centric') {
+      // renderTree() above already ran renderCentric(), which triggers
+      // its own pan/zoom animation (animateCentricZoom) anchored on this
+      // render's origin -- nothing more to do here. (Unlike Zodiac's
+      // fit-to-view, this can't just be called again from out here: it
+      // needs the exact origin renderCentric() just computed, kept
+      // perfectly centered every frame, not the generic corner-based fit
+      // animateFitToView does.)
     } else {
       // Deliberately NOT fitToView() here -- switching modes should feel
       // like the same content rearranging itself under a still camera, not
@@ -1105,16 +1127,31 @@
 
   // Shared by fitToView() (instant, used on initial load) and
   // animateFitToView() (smooth, used by the on-demand fit button) so both
-  // always agree on what "fit" means.
-  function computeFitTransform() {
+  // always agree on what "fit" means. horizontalOnly fits the content's
+  // width only, ignoring height entirely -- used by Zodiac view, where the
+  // columns (a fixed, meaningful count) are what you actually want framed
+  // at a glance, while a tall column's card count is open-ended and fine
+  // to scroll/pan through rather than shrinking everything to fit it too.
+  function computeFitTransform(options) {
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
     const cw = els.content.offsetWidth;
     const ch = els.content.offsetHeight;
     if (!vw || !vh || !cw || !ch) return null;
     const padding = 24;
-    const scale = Math.max(MIN_ZOOM, Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1));
-    return { scale, x: (vw - cw * scale) / 2, y: (vh - ch * scale) / 2 };
+    const horizontalOnly = options && options.horizontalOnly;
+    const scaleX = (vw - padding * 2) / cw;
+    const scaleY = (vh - padding * 2) / ch;
+    const scale = Math.max(MIN_ZOOM, Math.min(horizontalOnly ? scaleX : Math.min(scaleX, scaleY), 1));
+    return {
+      scale,
+      x: (vw - cw * scale) / 2,
+      // Vertically centering would push a much-taller-than-tall-fits
+      // column's top (and its header) up off-screen -- top-align instead
+      // so headers and each column's oldest (topmost) card are always
+      // the first thing visible, with the rest reachable by panning down.
+      y: horizontalOnly ? padding : (vh - ch * scale) / 2,
+    };
   }
 
   // Zoom/pan so the whole tree is visible, centered in the viewport. Called
@@ -1135,8 +1172,8 @@
   // benefits from the same "settle, don't jump" feel as the rest of the
   // tree's animations.
   const FIT_VIEW_MS = 380; // matches CARD_MOVE_MS's transition duration
-  function animateFitToView() {
-    const target = computeFitTransform();
+  function animateFitToView(options) {
+    const target = computeFitTransform(options);
     if (!target) return;
     const start = { x: view.x, y: view.y, scale: view.scale };
     const startTime = performance.now();
@@ -1151,17 +1188,28 @@
     }
     requestAnimationFrame(step);
   }
-  els.fitViewBtn.addEventListener('click', animateFitToView);
+  els.fitViewBtn.addEventListener('click', () => {
+    if (viewMode === 'zodiac') {
+      animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'centric' && prevCentricGrid) {
+      // Re-fit around the SAME anchored origin renderCentric() last used
+      // -- nothing about the rings changed, just the pan/zoom, so this is
+      // a plain (non-staggered) zoom rather than a full grid transition.
+      const target = computeFitTransform();
+      if (target) animateCentricZoom(target.scale, prevCentricGrid.originX, prevCentricGrid.originY, CARD_MOVE_MS);
+    } else {
+      animateFitToView();
+    }
+  });
 
   els.centricMetricToggle.addEventListener('click', (e) => {
     const btn = e.target.closest('.centric-metric-btn');
     if (!btn || btn.classList.contains('active')) return;
     centricMetric = btn.dataset.metric;
     els.centricMetricToggle.querySelectorAll('.centric-metric-btn').forEach(b => b.classList.toggle('active', b === btn));
+    // Switching metric reshuffles who's in which ring entirely -- renderTree()
+    // (via renderCentric()) reframes itself every time, same as recentering.
     renderTree();
-    // Switching metric reshuffles who's in which ring entirely, which can
-    // change the layout's overall size just as much as recentering does.
-    animateFitToView();
   });
 
   // Center a card in the viewport by adjusting our own pan transform.
@@ -3246,11 +3294,11 @@
     card.addEventListener('click', () => {
       if (viewMode === 'centric' && person.id !== centricCenterId) {
         centricCenterId = person.id;
+        // renderCentric() (via renderTree()) reframes itself every time --
+        // recentering can produce a very differently shaped/sized ring
+        // layout, and it always keeps the new center anchored in the
+        // viewport the same way (see animateCentricZoom).
         renderTree();
-        // Recentering on someone else can produce a very differently
-        // shaped/sized ring layout (different ring populations entirely),
-        // so reframe every time, same as entering Centric view at all.
-        animateFitToView();
       } else {
         // Zodiac/Centric cards are shown as individuals, regrouped by sign
         // or proximity rather than by relationship -- opening straight
@@ -3547,6 +3595,15 @@
   const CENTRIC_RING_GAP = 200; // minimum radial gap between successive rings
   const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
   const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
+  // How far up the light-to-dark scale the OUTERMOST ring of any metric
+  // reaches (see drawCentricGrid) -- leaves room above it (up to t=1) for
+  // the "beyond" background to read as one further, darker step past
+  // whichever ring is actually last, for either metric.
+  const CENTRIC_OUTER_RING_T = 0.85;
+  // Stagger between each successive ring's build-in/out start, so rings
+  // animate in sequence (innermost first) rather than all at once -- see
+  // animateCentricGrid and centricTransitionDuration.
+  const CENTRIC_RING_STAGGER_MS = 70;
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -3586,18 +3643,103 @@
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
 
+  // Reads a --centric-inner/--centric-outer custom property (a plain
+  // #rgb/#rrggbb hex, as authored in style.css) as {r,g,b}, so
+  // drawCentricGrid can compute intermediate step colors in JS -- CSS
+  // alone can't give us a dynamic number of discrete steps.
+  function readHexColorVar(name) {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
+    const hex = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw;
+    const n = parseInt(hex, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function mixColors(a, b, t) {
+    return {
+      r: Math.round(a.r + (b.r - a.r) * t),
+      g: Math.round(a.g + (b.g - a.g) * t),
+      b: Math.round(a.b + (b.b - a.b) * t),
+    };
+  }
+  function rgbCss({ r, g, b }) { return `rgb(${r}, ${g}, ${b})`; }
+
   // One dashed circle plus an axis label per ring, centered on the person
-  // at (originX, originY). Reuses #linesSvg (empty in this view otherwise
-  // -- see renderCentric's own note on why no connector lines are drawn)
-  // rather than a separate element, so it pans/zooms with the cards for
-  // free via the same parent transform.
-  function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
-    const svg = els.svg;
+  // at (originX, originY), backed by DISTINCT flat colors per ring --
+  // deliberately not a smooth blend -- stepping from --centric-inner
+  // (lightest, the innermost ring) toward --centric-outer, one step per
+  // ring. The area beyond the outermost ring continues the exact same
+  // step sequence one step further (rather than reverting to the plain
+  // page background), so the darkening reads as continuing outward, not
+  // stopping abruptly at the last ring. Draws into #linesSvg by default
+  // (empty in this view otherwise -- see renderCentric's own note on why
+  // no connector lines are drawn), so it pans/zooms with the cards for
+  // free via the same parent transform; playCentricExitCollapse passes a
+  // temporary overlay svg instead, so the exit animation can keep playing
+  // after #linesSvg has already been claimed by whatever view comes next
+  // -- also passing skipBackground there, since that overlay sits on top
+  // of the destination view's own content, and the (otherwise opaque,
+  // viewport-filling) background rect would hide it completely for as
+  // long as the collapse takes to finish.
+  function drawCentricGrid(originX, originY, ringIndices, radiusByRing, svg = els.svg, { skipBackground = false } = {}) {
     svg.innerHTML = '';
     svg.setAttribute('width', els.content.scrollWidth);
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+    const svgNS = 'http://www.w3.org/2000/svg';
+
+    if (ringIndices.length) {
+      const lightColor = readHexColorVar('--centric-inner');
+      const darkColor = readHexColorVar('--centric-outer');
+
+      // Beyond the outermost ring: covers the whole VIEWPORT, not just the
+      // content's own (often smaller, or differently-shaped) bounding
+      // box, so there's never a strip of plain page background visible
+      // between the tinted square and the viewport edge. Same generous
+      // overscan technique as the chrono ruler's gridlines -- centered on
+      // the origin and sized to survive any pan/zoom up to MIN_ZOOM,
+      // rather than tied to content-space dimensions that don't track the
+      // actual viewport rectangle. Skipped entirely for the exit-collapse
+      // overlay -- see skipBackground's own note above.
+      if (!skipBackground) {
+        const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
+        const background = document.createElementNS(svgNS, 'rect');
+        background.setAttribute('x', originX - overscan);
+        background.setAttribute('y', originY - overscan);
+        background.setAttribute('width', overscan * 2);
+        background.setAttribute('height', overscan * 2);
+        background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
+        svg.appendChild(background);
+      }
+
+      // Largest ring first, smallest last, so each smaller disc's flat
+      // color paints over the larger one (and the background) within its
+      // own radius -- a clean band per ring, not a blend of everything
+      // inside it. Sorted by actual (possibly mid-animation) radius,
+      // never by ring index -- during a transition an "exiting" ring's
+      // radius can temporarily exceed an "entering" one's, or vice versa.
+      const byRadiusDesc = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
+      // Ring color is relative to the CURRENT metric's own ring count, not
+      // a fixed total -- so the outermost ring always reaches the same
+      // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
+      // ring or Location's 3rd, and "beyond" (t=1, see the background
+      // rect above) always reads as one further, darker step past
+      // whichever ring is actually outermost for this metric. A ring
+      // that's mid-exit (its metric no longer includes it, e.g. Age's 4th
+      // ring animating out after switching to Location) can compute
+      // slightly past 1 here, so it's clamped -- it's on its way off-
+      // screen anyway, so it only needs to not render as an invalid color.
+      const totalRingsForMetric = centricMetric === 'location' ? 3 : 4;
+      for (const idx of byRadiusDesc) {
+        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
+        const disc = document.createElementNS(svgNS, 'circle');
+        disc.setAttribute('cx', originX);
+        disc.setAttribute('cy', originY);
+        disc.setAttribute('r', radiusByRing[idx]);
+        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, t)));
+        disc.setAttribute('stroke', 'none');
+        svg.appendChild(disc);
+      }
+    }
 
     for (const idx of ringIndices) {
       const radius = radiusByRing[idx];
@@ -3627,6 +3769,181 @@
     }
   }
 
+  // Total time for a Centric transition (grid + pan/zoom together, see
+  // renderCentric and animateCentricZoom) covering ringCount rings, each
+  // staggered CENTRIC_RING_STAGGER_MS after the previous one -- so with 1
+  // ring it's exactly CARD_MOVE_MS (same base duration as everything
+  // else), growing modestly as more rings need to build in sequence.
+  function centricTransitionDuration(ringCount) {
+    return CARD_MOVE_MS + Math.max(0, ringCount - 1) * CENTRIC_RING_STAGGER_MS;
+  }
+
+  // Eases the grid from its last drawn state to the new one. The origin
+  // itself is NEVER interpolated (always drawn at the new/final origin
+  // from the very first frame): the origin only moves because the
+  // content's own bounding box resized, and animateCentricZoom re-frames
+  // the pan/zoom around that SAME fixed origin every frame -- blending
+  // the grid's content-space origin independently on top of that too
+  // made the whole thing appear to slide sideways rather than resize in
+  // place, since the two would drift out of sync frame-to-frame.
+  //
+  // Each ring instead animates radius only, and rings are staggered
+  // (innermost first) rather than all moving at once, so they visibly
+  // build into each other outward instead of popping in unison:
+  // - A ring present both before and after (recentering; or a ring index
+  //   that exists in both metrics, e.g. ring 1) eases from its old radius
+  //   to its new one.
+  // - A ring that's newly appearing (didn't exist before -- either the
+  //   very first render, or switching to a metric with more rings) starts
+  //   from a huge offscreen radius and shrinks in.
+  // - A ring that's disappearing (switching to a metric with fewer rings)
+  //   grows out to that same huge offscreen radius rather than just
+  //   vanishing.
+  // Colors come from drawCentricGrid's own metric-relative step, so a
+  // ring that persists across the change barely (if at all) recolors --
+  // mainly its presence (and radius) changes.
+  function animateCentricGrid(from, to) {
+    // First entry ever (from === null) always builds innermost-first,
+    // outward -- the confirmed-correct "radar powering on" feel. Removing
+    // rings (e.g. Age -> Location, ring 4 exiting) also stays
+    // innermost-first: the persisting rings settle first, and the exiting
+    // ring -- the one that would have been built LAST -- leaves last too.
+    // But ADDING rings back on top of an existing grid (e.g. Location ->
+    // Age, ring 4 returning) needs to read as the exact reverse of that
+    // same removal, not a repeat of the from-scratch build: the ring
+    // that's returning goes FIRST (mirroring how it would've been the
+    // last thing removed), then each successively inner ring follows,
+    // working inward -- outermost to innermost, the timeline of a removal
+    // played backward.
+    const addingRingsToExisting = from && to.ringIndices.length > from.ringIndices.length;
+    const allIndices = Array.from(new Set([...(from ? from.ringIndices : []), ...to.ringIndices]))
+      .sort((a, b) => addingRingsToExisting ? b - a : a - b);
+    // Comfortably past the outermost real ring on either side of this
+    // transition -- enough to read as "off the visible canvas" once
+    // Centric view's own always-fit reframes around the new layout.
+    // Deliberately NOT the viewport/MIN_ZOOM overscan used elsewhere
+    // (chrono gridlines, this grid's own backdrop rect): those are plain
+    // fills, cheap at any size, but this radius belongs to a DASHED
+    // stroke circle too -- a dash pattern's cost scales with
+    // circumference, and a circle tens of thousands of units across (what
+    // that overscan produces) forces the browser to compute tens of
+    // thousands of dash segments per frame, blocking the main thread for
+    // over a second. Scaling to the content's own size instead keeps it
+    // cheap while still being well outside the frame.
+    const priorMax = from ? Math.max(0, ...Object.values(from.radiusByRing)) : 0;
+    const nextMax = Math.max(0, ...Object.values(to.radiusByRing));
+    const offscreenRadius = Math.max(priorMax, nextMax) * 2 + 1000;
+    const startRadius = {}, endRadius = {};
+    for (const idx of allIndices) {
+      startRadius[idx] = (from && from.radiusByRing[idx]) ?? offscreenRadius;
+      endRadius[idx] = to.radiusByRing[idx] ?? offscreenRadius;
+    }
+    const startTime = performance.now();
+    function step(now) {
+      const elapsed = now - startTime;
+      const radiusByRing = {};
+      let allDone = true;
+      allIndices.forEach((idx, i) => {
+        const ringElapsed = Math.max(0, elapsed - i * CENTRIC_RING_STAGGER_MS);
+        const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
+        if (t < 1) allDone = false;
+        const eased = 1 - Math.pow(1 - t, 3);
+        radiusByRing[idx] = startRadius[idx] + (endRadius[idx] - startRadius[idx]) * eased;
+      });
+      drawCentricGrid(to.originX, to.originY, allIndices, radiusByRing);
+      if (!allDone) requestAnimationFrame(step);
+      // Exact final frame -- only the rings that actually still exist,
+      // at their precise target radii, no lingering exit-animation state.
+      else drawCentricGrid(to.originX, to.originY, to.ringIndices, to.radiusByRing);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Played when leaving Centric view for any other view mode -- the exact
+  // reverse of the first-entry build. On entry, every ring starts huge
+  // (off-screen) and SHRINKS down to its resting radius, innermost ring
+  // moving first. Reversed, every ring GROWS from its resting radius back
+  // out to huge, staggered OUTERMOST first -- the ring that finished last
+  // going in is the first to leave, working inward from there, so the
+  // innermost ring (ring 1) is the last thing still animating. Since ring
+  // 1 is also the lightest (closest to --centric-inner, which matches
+  // --bg exactly), its own final growth is what visually hands off to the
+  // destination view's plain background -- by the time it's grown large
+  // enough to cover the viewport, the overlay is indistinguishable from
+  // the background already showing through underneath, and gets removed.
+  // Draws into a temporary overlay svg (not #linesSvg, which the next
+  // view claims for its own use immediately) stacked on top of
+  // #treeContent so the collapse plays out over whatever the destination
+  // view already looks like underneath, without delaying the actual
+  // switch at all.
+  function playCentricExitCollapse(grid) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const overlay = document.createElementNS(svgNS, 'svg');
+    overlay.setAttribute('class', 'lines-svg');
+    // Behind #treeContent (same relative position as #linesSvg itself),
+    // not above it: the growing rings can briefly cover the whole
+    // viewport with a flat color, and stacking that OVER the destination
+    // view's cards would hide them completely for a stretch of the
+    // animation. Behind them, the cards stay visible the entire time --
+    // exactly like the entrance, where #linesSvg is also always behind
+    // #treeContent -- and the rings simply pass behind/around the cards
+    // as they grow.
+    els.canvas.insertBefore(overlay, els.content);
+
+    const descByIdx = [...grid.ringIndices].sort((a, b) => b - a); // outermost first, mirroring the entrance in reverse
+    const startRadius = { ...grid.radiusByRing };
+    // Comfortably covers the viewport regardless of current zoom --
+    // same content-relative sizing (not the viewport/MIN_ZOOM overscan
+    // used for the plain background rect) that keeps the dashed
+    // boundary circles cheap to render even at this size.
+    const exitRadius = Math.max(0, ...Object.values(grid.radiusByRing)) * 3 + 1500;
+    const startTime = performance.now();
+    function step(now) {
+      const elapsed = now - startTime;
+      let allDone = true;
+      const radiusByRing = {};
+      descByIdx.forEach((idx, i) => {
+        const ringElapsed = Math.max(0, elapsed - i * CENTRIC_RING_STAGGER_MS);
+        const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
+        if (t < 1) allDone = false;
+        const eased = 1 - Math.pow(1 - t, 3);
+        radiusByRing[idx] = startRadius[idx] + (exitRadius - startRadius[idx]) * eased;
+      });
+      drawCentricGrid(grid.originX, grid.originY, grid.ringIndices, radiusByRing, overlay, { skipBackground: true });
+      if (!allDone) requestAnimationFrame(step);
+      else overlay.remove();
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Zooms the pan/zoom transform toward a fixed content-space point
+  // (originX, originY), keeping it exactly centered in the viewport at
+  // EVERY frame of the transition, not just the start and end -- unlike
+  // animateFitToView's independent interpolation of view.x/y (which only
+  // matches the origin's on-screen position at t=0 and t=1, drifting in
+  // between whenever the origin itself also moved), this derives view.x/y
+  // directly from the current eased scale each frame, so the origin never
+  // appears to slide even mid-transition. Used for every Centric view
+  // transition -- entering the view, recentering, and switching metric --
+  // so "the same center point" is the one visual constant across all of
+  // them.
+  function animateCentricZoom(targetScale, originX, originY, durationMs) {
+    const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
+    if (!vw || !vh) return;
+    const startScale = view.scale;
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      view.scale = startScale + (targetScale - startScale) * eased;
+      view.x = vw / 2 - originX * view.scale;
+      view.y = vh / 2 - originY * view.scale;
+      applyTransform();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   function renderCentric() {
     const oldPositions = captureCardPositions();
     const hasPeople = Object.keys(data.people).length > 0;
@@ -3644,7 +3961,15 @@
     const centerYear = center.birthDate ? parseInt(center.birthDate.slice(0, 4), 10) : NaN;
     const centerLoc = currentLocationOf(center);
 
+    // Every ring for the current metric always exists (1..4 for age,
+    // 1..3 for location), even ones nobody currently falls into -- so
+    // recentering never makes a ring (and its axis label) pop in or out
+    // of existence, only its radius change. That's what actually reads as
+    // "the same grid, resized," rather than a different set of rings
+    // every time you click someone new.
+    const totalRings = centricMetric === 'location' ? 3 : 4;
     const rings = {}; // ring index -> [person, ...]
+    for (let i = 1; i <= totalRings; i++) rings[i] = [];
     for (const p of Object.values(data.people)) {
       if (p.id === centricCenterId) continue;
       let ring;
@@ -3654,7 +3979,7 @@
         const year = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN;
         ring = centricAgeRing(centerYear, year);
       }
-      (rings[ring] = rings[ring] || []).push(p);
+      rings[ring].push(p);
     }
     // Stable, deterministic order within a ring so angles don't jump
     // around between re-renders (only the ring itself should ever change).
@@ -3716,10 +4041,25 @@
     els.content.style.height = `${originY + maxRadius + CENTRIC_PAD}px`;
 
     // Grid circles + axis labels, one per ring, showing what each ring
-    // actually means for the current metric -- drawn once at the target
-    // radii (not animated/interpolated), so it previews where the cards
-    // in flight are headed rather than trailing behind them.
-    drawCentricGrid(originX, originY, ringIndices, radiusByRing);
+    // actually means for the current metric. animateCentricGrid handles
+    // every case uniformly: a ring present before and after eases to its
+    // new radius, a newly-appearing ring (including the very first time
+    // Centric view is ever entered) shrinks in from off-screen, and a
+    // ring that no longer exists (switching to a metric with fewer rings)
+    // grows out to off-screen instead of just vanishing.
+    const newGrid = { originX, originY, ringIndices, radiusByRing };
+    const unionRingCount = new Set([...(prevCentricGrid ? prevCentricGrid.ringIndices : []), ...ringIndices]).size;
+    animateCentricGrid(prevCentricGrid, newGrid);
+    prevCentricGrid = newGrid;
+
+    // Centric view always reframes to fit -- entering it, recentering, or
+    // switching metric can all produce a completely different overall
+    // size -- but does so anchored on this render's own origin the whole
+    // time (see animateCentricZoom), the same transition regardless of
+    // what triggered this render, so "zooming toward the same center
+    // point" is consistent everywhere in this view.
+    const fitTarget = computeFitTransform();
+    if (fitTarget) animateCentricZoom(fitTarget.scale, originX, originY, centricTransitionDuration(unionRingCount));
 
     // Cards still glide into their new ring/position like every other
     // view, just with no connector lines to animate alongside them.
