@@ -272,7 +272,11 @@ body {
   cursor: pointer;
   overflow: hidden;
   user-select: none;
-  transition: transform .12s, box-shadow .12s, border-color .12s;
+  /* left/top drive the animated re-layout transition (see animateLayoutIn
+     in app.js) -- kept separate from the hover lift's own transform
+     transition above so the two never fight over one property. */
+  transition: transform .12s, box-shadow .12s, border-color .12s,
+    left .38s ease, top .38s ease;
   flex-shrink: 0;
 }
 .person-card:hover {
