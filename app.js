@@ -273,6 +273,7 @@
     viewModeSelect: document.getElementById('viewModeSelect'),
     chronoRuler: document.getElementById('chronoRuler'),
     chronoRulerInner: document.getElementById('chronoRulerInner'),
+    fitViewBtn: document.getElementById('fitViewBtn'),
     searchInput: document.getElementById('searchInput'),
     searchWrap: document.getElementById('searchWrap'),
     searchToggleBtn: document.getElementById('searchToggleBtn'),
@@ -1084,22 +1085,55 @@
     applyTransform();
   });
 
-  // Zoom/pan so the whole tree is visible, centered in the viewport. Called
-  // once after the initial render (never on later re-renders, so it doesn't
-  // yank the view out from under someone who's already panned/zoomed).
-  function fitToView() {
+  // Shared by fitToView() (instant, used on initial load) and
+  // animateFitToView() (smooth, used by the on-demand fit button) so both
+  // always agree on what "fit" means.
+  function computeFitTransform() {
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
     const cw = els.content.offsetWidth;
     const ch = els.content.offsetHeight;
-    if (!vw || !vh || !cw || !ch) return;
+    if (!vw || !vh || !cw || !ch) return null;
     const padding = 24;
-    const scale = Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1);
-    view.scale = Math.max(MIN_ZOOM, scale);
-    view.x = (vw - cw * view.scale) / 2;
-    view.y = (vh - ch * view.scale) / 2;
+    const scale = Math.max(MIN_ZOOM, Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1));
+    return { scale, x: (vw - cw * scale) / 2, y: (vh - ch * scale) / 2 };
+  }
+
+  // Zoom/pan so the whole tree is visible, centered in the viewport. Called
+  // once after the initial render (never on later re-renders, so it doesn't
+  // yank the view out from under someone who's already panned/zoomed).
+  function fitToView() {
+    const target = computeFitTransform();
+    if (!target) return;
+    view.scale = target.scale;
+    view.x = target.x;
+    view.y = target.y;
     applyTransform();
   }
+
+  // Same end state as fitToView(), but eased in over FIT_VIEW_MS instead of
+  // snapping -- used by the floating fit button, a deliberate user action
+  // that (unlike a live drag/pinch, which must track the pointer 1:1)
+  // benefits from the same "settle, don't jump" feel as the rest of the
+  // tree's animations.
+  const FIT_VIEW_MS = 380; // matches CARD_MOVE_MS's transition duration
+  function animateFitToView() {
+    const target = computeFitTransform();
+    if (!target) return;
+    const start = { x: view.x, y: view.y, scale: view.scale };
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / FIT_VIEW_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      view.x = start.x + (target.x - start.x) * eased;
+      view.y = start.y + (target.y - start.y) * eased;
+      view.scale = start.scale + (target.scale - start.scale) * eased;
+      applyTransform();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  els.fitViewBtn.addEventListener('click', animateFitToView);
 
   // Center a card in the viewport by adjusting our own pan transform.
   // Deliberately not the native el.scrollIntoView(): the tree isn't laid
@@ -1141,7 +1175,7 @@
 
   let isPanning = false, panStart = null;
   els.viewport.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.person-card')) return;
+    if (e.target.closest('.person-card, .fit-view-btn')) return;
     isPanning = true;
     panStart = { x: e.clientX - view.x, y: e.clientY - view.y };
     els.viewport.classList.add('grabbing');
@@ -1172,7 +1206,7 @@
   let pinchStartScale = 1;
 
   els.viewport.addEventListener('touchstart', (e) => {
-    if (e.target.closest('.person-card')) { touchMode = null; return; }
+    if (e.target.closest('.person-card, .fit-view-btn')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
       touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
@@ -3502,9 +3536,20 @@
   // it). The ruler still marks "Today" as a label -- see renderChronoRuler.
   function drawChronoGridlines(minYear, maxYear, contentWidth) {
     const svg = els.svg;
+    // #linesSvg is a child of the pannable/zoomable #treeCanvas, so it's
+    // already carried along by that CSS transform -- no per-pan/zoom
+    // repositioning needed. But a line only as long as the tree's own
+    // content (0..contentWidth) falls short of the viewport edges whenever
+    // the content is narrower than the screen, zoomed in, or panned, so
+    // extend generously past both edges: enough overscan to still cover a
+    // full viewport width even at MIN_ZOOM (the most the content can ever
+    // be zoomed out), which comfortably covers ordinary panning too.
+    const overscan = Math.max(els.viewport.clientWidth, 2000) / MIN_ZOOM;
+    const x1 = -overscan;
+    const x2 = contentWidth + overscan;
     for (let y = minYear; y <= maxYear; y += 10) {
       const py = chronoYToPixel(y, minYear);
-      svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--card-border)', 1), svg.firstChild);
+      svg.insertBefore(svgLine(x1, py, x2, py, 'var(--card-border)', 1), svg.firstChild);
     }
   }
 
@@ -3652,14 +3697,16 @@
     // Connectors are drawn by the exact same function the traditional tree
     // uses (same X-layout means the same bus-line grouping works
     // unchanged); only the extra gridlines/ruler are chrono-specific.
-    // Gridlines/ruler only depend on the (unanimated) year range, so they
-    // draw once; if cards actually moved from before this render, lines
-    // FLIP-animate and keep tracking them every frame instead.
+    // drawLines() always clears the SVG first, so the gridlines must be
+    // (re)drawn AFTER each drawLines() call, never before -- passed in as
+    // animateLinesDuring's extraStep so they get redrawn every animation
+    // frame too, not just once. The ruler only depends on the (unanimated)
+    // year range, so it draws once regardless.
     requestAnimationFrame(() => {
-      drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
       renderChronoRuler(minYear, maxYear, contentHeight);
-      if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS);
-      else drawLines();
+      const drawGridlines = () => drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
+      if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS, drawGridlines);
+      else { drawLines(); drawGridlines(); }
     });
   }
 
