@@ -1740,25 +1740,24 @@
   }
 
   // A location-history row: plain text (not a link, unlike relation rows --
-  // a location isn't a tree person to navigate to), tagged "Current" for
-  // whichever entry is first (see currentLocationOf).
-  function buildLocationRow(location, isCurrent) {
+  // a location isn't a tree person to navigate to).
+  function buildLocationRow(location) {
     const li = document.createElement('li');
     const text = document.createElement('span');
     text.className = 'view-location-text';
     text.textContent = location;
-    const tag = document.createElement('span');
-    tag.className = 'view-location-tag';
-    tag.textContent = isCurrent ? 'Current' : '';
     li.appendChild(text);
-    li.appendChild(tag);
     return li;
   }
 
+  // Index 0 (the "current" one, per currentLocationOf) already shows up top
+  // of the card, so this section is just everywhere *else* the person has
+  // lived -- skip it here rather than repeating it.
   function fillLocationsSection(sectionEl, listEl, locations) {
     listEl.innerHTML = '';
-    if (!locations.length) { sectionEl.hidden = true; return; }
-    locations.forEach((loc, i) => listEl.appendChild(buildLocationRow(loc, i === 0)));
+    const previous = locations.slice(1);
+    if (!previous.length) { sectionEl.hidden = true; return; }
+    previous.forEach(loc => listEl.appendChild(buildLocationRow(loc)));
     sectionEl.hidden = false;
   }
 
