@@ -258,6 +258,29 @@ body {
   font-weight: 700;
 }
 
+.fit-view-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--surface);
+  color: var(--ink-soft);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 3;
+  transition: background .15s, border-color .15s, color .15s, transform .1s;
+}
+.fit-view-btn svg { width: 18px; height: 18px; }
+.fit-view-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fit-view-btn:active { transform: scale(0.92); }
+
 .empty-state {
   position: absolute;
   top: 45%;
