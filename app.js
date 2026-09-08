@@ -318,6 +318,7 @@
     cropApplyBtn: document.getElementById('cropApplyBtn'),
 
     viewModal: document.getElementById('personViewModal'),
+    viewModalCard: document.getElementById('personViewCard'),
     viewCloseModalBtn: document.getElementById('viewCloseModalBtn'),
     viewCloseBtn: document.getElementById('viewCloseBtn'),
     viewEditBtn: document.getElementById('viewEditBtn'),
@@ -1904,55 +1905,6 @@
     return wrap;
   }
 
-  // A lightweight, non-interactive preview of a single person or couple --
-  // just enough (photo, name, dates) to recognize who you're swiping to
-  // before the swipe commits and the real, full-detail card renders in
-  // its place. See buildSwipePeekCard.
-  function buildSinglePeekCard(personId) {
-    const p = data.people[personId];
-    const wrap = document.createElement('div');
-    wrap.className = 'view-person';
-    const photo = document.createElement('div');
-    photo.className = 'view-photo';
-    if (p.photo) {
-      const img = document.createElement('img');
-      img.src = p.photo;
-      img.alt = p.name || '';
-      photo.appendChild(img);
-    } else {
-      photo.innerHTML = PERSON_PLACEHOLDER_SVG;
-    }
-    const name = document.createElement('h3');
-    name.className = 'view-name';
-    name.textContent = p.name || '(unnamed)';
-    const dates = document.createElement('p');
-    dates.className = 'view-dates';
-    dates.textContent = personDatesText(p);
-    wrap.appendChild(photo);
-    wrap.appendChild(name);
-    wrap.appendChild(dates);
-    return wrap;
-  }
-
-  // The full preview card for a swipe destination -- single or couple,
-  // mirroring which one the real render would show. Only ever mounted
-  // inside the transient swipe-drag overlay (see the pointermove handler
-  // below), never given ids or click handlers, since it isn't the active
-  // card yet.
-  function buildSwipePeekCard(ids, selectedId) {
-    const card = document.createElement('div');
-    card.className = 'swipe-card-slot';
-    if (ids.length > 1) {
-      const couple = document.createElement('div');
-      couple.className = 'view-couple';
-      ids.forEach(id => couple.appendChild(buildCoupleMemberVisual(id, id === selectedId)));
-      card.appendChild(couple);
-    } else {
-      card.appendChild(buildSinglePeekCard(selectedId));
-    }
-    return card;
-  }
-
   // Switches which half of the current couple card is "selected" -- i.e.
   // whose parents/siblings show and whose tree further swipes follow. This
   // is a lateral change within the current thread position, not a
@@ -2290,6 +2242,7 @@
   let dragSign = 0;            // +1/-1: which side the incoming card starts off-screen on (always -dragCaptureSign)
   let dragNeighbor = null;     // { ids, selected, kind: 'sibling' | 'child' | 'parent' }, or null for a dead end
   let dragDim = 0;             // outgoing card's width (axis x) or height (axis y), px
+  let dragStep = 0;            // dragDim plus the card's own margin to the screen edge -- see startSwipeDrag
   let dragLayer = null;
   let outgoingEl = null;
   let incomingEl = null;
@@ -2325,18 +2278,34 @@
     else verticalGoDown();
   }
 
-  // Mounts the drag-follow overlay: a pixel-perfect clone of the current
-  // (outgoing) card, plus -- if there's actually somewhere to go in this
-  // direction -- a lightweight preview of the incoming one, positioned
-  // just off the appropriate edge. The real #viewSwipeZone is hidden (not
-  // removed, so it keeps its layout space) for the overlay's duration.
+  // Mounts the drag-follow overlay: a pixel-perfect clone of the whole
+  // modal card as it looks right now (outgoing), plus -- if there's
+  // actually somewhere to go in this direction -- a full clone of how it
+  // would look for the destination (incoming), positioned just off the
+  // appropriate edge. The incoming clone is captured by briefly rendering
+  // the destination for real into the live card, cloning that, then
+  // rendering the original back -- reusing renderPersonView itself rather
+  // than a second, parallel card-building codepath, and safe to do because
+  // renderPersonView has no side effect beyond repainting the DOM (it
+  // never touches verticalPath/verticalIndex) -- so this leaves navigation
+  // state untouched and never paints on screen, since both calls happen
+  // synchronously before the browser gets a chance to render either one.
+  // The real card is hidden (not removed, so it keeps its layout space)
+  // for the overlay's duration.
   function startSwipeDrag(axis) {
     dragAxis = axis;
     dragNeighbor = resolveSwipeTarget(axis, dragCaptureSign);
     dragSign = -dragCaptureSign;
 
-    const rect = els.viewSwipeZone.getBoundingClientRect();
+    const cardEl = els.viewModalCard;
+    const rect = cardEl.getBoundingClientRect();
     dragDim = axis === 'x' ? rect.width : rect.height;
+    // The incoming card starts (and the outgoing one ends up) a full step
+    // away -- not just one card-width, but that plus the same margin the
+    // card already keeps from the screen edge at rest (rect.left/top, since
+    // .modal-overlay centers it) -- so the two visibly separate by a gap
+    // instead of sliding past each other edge-to-edge.
+    dragStep = dragDim + (axis === 'x' ? rect.left : rect.top);
     const prop = axis === 'x' ? 'translateX' : 'translateY';
 
     dragLayer = document.createElement('div');
@@ -2347,21 +2316,25 @@
     dragLayer.style.height = `${rect.height}px`;
     document.body.appendChild(dragLayer);
 
-    outgoingEl = els.viewSwipeZone.cloneNode(true);
+    outgoingEl = cardEl.cloneNode(true);
     stripIds(outgoingEl);
     outgoingEl.classList.add('swipe-card-slot', 'swipe-card-outgoing');
     dragLayer.appendChild(outgoingEl);
 
     if (dragNeighbor) {
-      incomingEl = buildSwipePeekCard(dragNeighbor.ids, dragNeighbor.selected);
-      incomingEl.classList.add('swipe-card-incoming');
-      incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+      const current = verticalPath[verticalIndex]; // exactly what's on screen right now
+      renderPersonView(dragNeighbor.ids, dragNeighbor.selected);
+      incomingEl = cardEl.cloneNode(true);
+      stripIds(incomingEl);
+      renderPersonView(current.ids, current.selected); // restore before the browser ever paints the swap
+      incomingEl.classList.add('swipe-card-slot', 'swipe-card-incoming');
+      incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
       dragLayer.appendChild(incomingEl);
     } else {
       incomingEl = null;
     }
 
-    els.viewSwipeZone.style.visibility = 'hidden';
+    cardEl.style.visibility = 'hidden';
   }
 
   // Tracks the pointer 1:1 while the gesture is live. A dead end (no
@@ -2376,7 +2349,7 @@
     }
     const clamped = Math.max(-dragDim, Math.min(dragDim, delta));
     outgoingEl.style.transform = `${prop}(${clamped}px)`;
-    incomingEl.style.transform = `${prop}(${dragSign * dragDim + clamped}px)`;
+    incomingEl.style.transform = `${prop}(${dragSign * dragStep + clamped}px)`;
   }
 
   // Finishes the gesture: animates the rest of the way to either a full
@@ -2389,24 +2362,24 @@
     if (incomingEl) incomingEl.classList.add('swipe-settling');
 
     if (committed) {
-      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragDim}px)`;
+      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragStep}px)`;
       if (incomingEl) incomingEl.style.transform = `${prop}(0px)`;
     } else {
       outgoingEl.style.transform = `${prop}(0px)`;
-      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
     }
 
     const neighbor = dragNeighbor;
     const layer = dragLayer;
-    const realZone = els.viewSwipeZone;
+    const realCard = els.viewModalCard;
     dragLayer = null; outgoingEl = null; incomingEl = null; dragAxis = null; dragNeighbor = null;
 
     window.setTimeout(() => {
       layer.remove();
       // If a new drag started before this timeout fired (a very fast
-      // second swipe), it has already hidden realZone for its own
+      // second swipe), it has already hidden realCard for its own
       // overlay -- leave that alone; its own endSwipeDrag will restore it.
-      if (!swipeCaptured) realZone.style.visibility = '';
+      if (!swipeCaptured) realCard.style.visibility = '';
       if (committed && neighbor) commitDragNeighbor(neighbor);
     }, SWIPE_SETTLE_MS + 20);
   }
