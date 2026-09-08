@@ -316,7 +316,10 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30, 24, 15, 0.45);
+  /* Shared by the Add/Edit form and the Person View card -- kept the same
+     dimness on both so the backdrop never visibly changes just from
+     tapping Edit on an open card, or Close on the edit form back to it. */
+  background: rgba(20, 16, 10, 0.78);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -761,14 +764,7 @@ body {
    even though nothing about the gesture itself changed. Fixing the top
    edge in place means only the *bottom* of the card moves with content
    height, never the part you're actually looking at and dragging. */
-/* Dimmed darker than a typical modal backdrop (.modal-overlay's own
-   0.45) -- viewing a person's card is closer to a photo lightbox than a
-   form, so the tree behind it recedes further, putting the full visual
-   weight on the card itself. Scoped here rather than raising
-   .modal-overlay's own opacity so the Add/Edit form modal, which people
-   are actively working in rather than just looking at, keeps its lighter
-   backdrop. */
-#personViewModal { align-items: flex-start; background: rgba(20, 16, 10, 0.78); }
+#personViewModal { align-items: flex-start; }
 /* A fixed height (not just a cap) rather than sizing to content: single
    and couple cards, and cards with very different numbers of relation-
    list rows, would otherwise never be quite the same size, which is what
