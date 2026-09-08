@@ -991,14 +991,36 @@
   const view = { x: 40, y: 20, scale: 1 };
   let viewMode = 'traditional'; // 'traditional' | 'chronological'
 
+  // The chrono ruler's own year labels, kept separately from the DOM so
+  // their vertical spacing can be rescaled on every pan/zoom without a
+  // full re-render -- see repositionChronoRulerLabels. { el, year } pairs,
+  // rebuilt by renderChronoRuler(); chronoMinYear is whatever minYear that
+  // same render used (chronoYToPixel needs it to place a given year).
+  let chronoRulerLabels = [];
+  let chronoMinYear = 0;
+
+  // Rescales each label's *position* (so it lines up with the row/decade
+  // it labels, same as the zoomed tree) without rescaling its rendered
+  // size -- unlike the tree canvas, the ruler's own text should always
+  // read at one comfortable, constant size, never microscopic zoomed out
+  // or oversized (and overflowing its 56px column) zoomed in.
+  function repositionChronoRulerLabels() {
+    for (const { el, year } of chronoRulerLabels) {
+      el.style.top = `${chronoYToPixel(year, chronoMinYear) * view.scale}px`;
+    }
+  }
+
   function applyTransform() {
     els.canvas.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
     // The chrono ruler's labels live outside #treeCanvas (so horizontal pan
     // never moves them off the viewport's left edge) but still need to
-    // track vertical pan/zoom exactly like the rows they label -- so they
-    // get only the Y+scale portion of the same transform.
+    // track vertical pan/zoom like the rows they label -- just not by
+    // literally scaling the label text itself (see
+    // repositionChronoRulerLabels): only translateY here, and each
+    // label's own top does the scaled positioning individually.
     if (viewMode === 'chronological') {
-      els.chronoRulerInner.style.transform = `translateY(${view.y}px) scale(${view.scale})`;
+      els.chronoRulerInner.style.transform = `translateY(${view.y}px)`;
+      repositionChronoRulerLabels();
     }
   }
   applyTransform();
@@ -3448,21 +3470,27 @@
   function renderChronoRuler(minYear, maxYear, contentHeight) {
     els.chronoRulerInner.innerHTML = '';
     els.chronoRulerInner.style.height = `${contentHeight}px`;
+    chronoMinYear = minYear;
+    chronoRulerLabels = [];
     for (let y = minYear; y <= maxYear; y += 10) {
       const label = document.createElement('div');
       label.className = 'chrono-year-label';
-      label.style.top = `${chronoYToPixel(y, minYear)}px`;
       label.textContent = String(y);
       els.chronoRulerInner.appendChild(label);
+      chronoRulerLabels.push({ el: label, year: y });
     }
     const thisYear = new Date().getFullYear();
     if (thisYear >= minYear && thisYear <= maxYear) {
       const today = document.createElement('div');
       today.className = 'chrono-year-label today';
-      today.style.top = `${chronoYToPixel(thisYear, minYear)}px`;
       today.textContent = 'Today';
       els.chronoRulerInner.appendChild(today);
+      chronoRulerLabels.push({ el: today, year: thisYear });
     }
+    // Labels are created with no position of their own -- give them their
+    // first (scale-aware) placement immediately rather than waiting for
+    // the next pan/zoom event to call this.
+    repositionChronoRulerLabels();
   }
 
   // Places each person at their own natural chronological Y (grouped by
