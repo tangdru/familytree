@@ -3612,6 +3612,11 @@
   // -- see renderCentric's own note on why no connector lines are drawn)
   // rather than a separate element, so it pans/zooms with the cards for
   // free via the same parent transform.
+  // Top opacity for the outermost ring's filled band -- the innermost
+  // ring fades to fully transparent so the tint never sits directly under
+  // the center person's own card.
+  const CENTRIC_BAND_MAX_OPACITY = 0.4;
+
   function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
     const svg = els.svg;
     svg.innerHTML = '';
@@ -3619,6 +3624,29 @@
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+
+    // Filled bands, largest ring to smallest: each smaller circle's own
+    // fill is painted on top and masks the larger one within its radius,
+    // so the visible color in a given ring's own band is exactly that
+    // ring's fill-opacity, not a stack of every ring inside it. Opacity
+    // ramps from 0 at the innermost ring up to CENTRIC_BAND_MAX_OPACITY at
+    // the outermost, so the zones read clearly at a glance without
+    // fighting the cards for attention.
+    const descByRadius = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
+    descByRadius.forEach((idx, i) => {
+      const posFromCenter = descByRadius.length - 1 - i; // 0 = innermost ring
+      const opacity = descByRadius.length > 1
+        ? (posFromCenter / (descByRadius.length - 1)) * CENTRIC_BAND_MAX_OPACITY
+        : CENTRIC_BAND_MAX_OPACITY;
+      const band = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      band.setAttribute('cx', originX);
+      band.setAttribute('cy', originY);
+      band.setAttribute('r', radiusByRing[idx]);
+      band.setAttribute('fill', 'var(--accent)');
+      band.setAttribute('fill-opacity', opacity.toFixed(3));
+      band.setAttribute('stroke', 'none');
+      svg.appendChild(band);
+    });
 
     for (const idx of ringIndices) {
       const radius = radiusByRing[idx];
