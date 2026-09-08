@@ -4047,19 +4047,24 @@
     // Centric view is ever entered) shrinks in from off-screen, and a
     // ring that no longer exists (switching to a metric with fewer rings)
     // grows out to off-screen instead of just vanishing.
+    const isFirstEntry = !prevCentricGrid;
     const newGrid = { originX, originY, ringIndices, radiusByRing };
     const unionRingCount = new Set([...(prevCentricGrid ? prevCentricGrid.ringIndices : []), ...ringIndices]).size;
     animateCentricGrid(prevCentricGrid, newGrid);
     prevCentricGrid = newGrid;
 
-    // Centric view always reframes to fit -- entering it, recentering, or
-    // switching metric can all produce a completely different overall
-    // size -- but does so anchored on this render's own origin the whole
-    // time (see animateCentricZoom), the same transition regardless of
-    // what triggered this render, so "zooming toward the same center
-    // point" is consistent everywhere in this view.
-    const fitTarget = computeFitTransform();
-    if (fitTarget) animateCentricZoom(fitTarget.scale, originX, originY, centricTransitionDuration(unionRingCount));
+    // Only reframe on the way IN to Centric view (prevCentricGrid was
+    // null, i.e. this is a fresh entry from some other view). Once
+    // inside, recentering or switching metric never fights the pan/zoom
+    // the user has already set up -- exactly like Traditional/
+    // Chronological, which also never re-fit on their own re-renders --
+    // so panning/zooming to look at a particular part of the rings stays
+    // put through further clicks instead of snapping back to a fit view
+    // after every one.
+    if (isFirstEntry) {
+      const fitTarget = computeFitTransform();
+      if (fitTarget) animateCentricZoom(fitTarget.scale, originX, originY, centricTransitionDuration(unionRingCount));
+    }
 
     // Cards still glide into their new ring/position like every other
     // view, just with no connector lines to animate alongside them.
