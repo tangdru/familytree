@@ -762,7 +762,30 @@ body {
    edge in place means only the *bottom* of the card moves with content
    height, never the part you're actually looking at and dragging. */
 #personViewModal { align-items: flex-start; }
-.view-modal { max-width: 420px; }
+/* A fixed height (not just a cap) rather than sizing to content: single
+   and couple cards, and cards with very different numbers of relation-
+   list rows, would otherwise never be quite the same size, which is what
+   the swipe-drag overlay's outgoing/incoming dimensions had to work
+   around. Making every card the same size removes the problem at the
+   source -- a short card just shows blank space above its footer, and a
+   long one scrolls internally same as before.
+   On the class, not "#personViewCard": the swipe-drag overlay strips ids
+   off its clones (see stripIds in app.js) so they never collide with the
+   real, still-present card -- an id-selector rule (like the header-height
+   bug this same overlay caused before) would silently stop applying to
+   the clones the instant that happened, which is exactly what let their
+   heights diverge back to their natural content size mid-swipe. */
+.view-modal { max-width: 420px; height: min(700px, 80vh); }
+.view-modal-body { flex: 1; min-height: 0; }
+/* Sibling of .view-modal-body now (see index.html), not nested inside
+   it, so it stays pinned to the card's bottom edge instead of scrolling
+   away with the content or floating right after it on a short card. It
+   needs its own full padding since it no longer sits inside
+   .modal-body's padded box. */
+.view-modal-footer {
+  padding: 6px 20px 16px;
+  border-top: 1px solid var(--card-border);
+}
 /* No title text -- the person's own name is already the first thing in
    the card -- so just the close button remains, right-aligned, in a
    shorter bar than the Add/Edit modal's header needs for its title.
