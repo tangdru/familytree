@@ -3036,6 +3036,7 @@
 
   function renderTree() {
     if (viewMode === 'chronological') renderChronological();
+    else if (viewMode === 'zodiac') renderZodiac();
     else renderTraditional();
   }
 
@@ -3390,8 +3391,87 @@
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
     if (viewMode === 'chronological') renderChronological();
-    else drawLines();
+    // Zodiac's columns and card positions don't depend on viewport size,
+    // and (unlike the other two views) it deliberately draws no connector
+    // lines at all -- see renderZodiac() -- so there's nothing to redo.
+    else if (viewMode !== 'zodiac') drawLines();
   }));
+
+  // ---------- Zodiac view ----------
+  //
+  // One column per Chinese zodiac sign (plus a trailing column for anyone
+  // without one set) -- X only encodes zodiac sign, Y is just a stacked
+  // list within that column, entirely independent of the family-tree
+  // hierarchy. Parent/child and spouse connector lines are deliberately
+  // NOT drawn here: drawLines() assumes the traditional/chronological
+  // layout's top-down, same-row structure (a parent's card sits above and
+  // a spouse's beside), which zodiac grouping doesn't preserve -- a parent
+  // can easily land below or beside their own child once sorted by sign.
+
+  const ZODIAC_COLUMN_GAP = 40; // gap between adjacent zodiac columns
+  const ZODIAC_CARD_GAP = 20; // vertical gap between stacked cards in one column
+  const ZODIAC_HEADER_HEIGHT = 56; // space reserved at the column top for its header
+
+  function renderZodiac() {
+    const oldPositions = captureCardPositions();
+    const hasPeople = Object.keys(data.people).length > 0;
+    els.emptyState.hidden = hasPeople;
+    els.content.innerHTML = '';
+    els.svg.innerHTML = '';
+    if (!hasPeople) return;
+
+    // '' (falsy/unset zodiac) sorts into its own trailing column rather
+    // than being dropped, so no one goes missing from this view.
+    const columns = ZODIAC_CYCLE.concat(['']);
+    const byColumn = columns.map(() => []);
+    for (const p of Object.values(data.people)) {
+      const idx = columns.indexOf(p.zodiac || '');
+      byColumn[idx >= 0 ? idx : columns.length - 1].push(p);
+    }
+    for (const bucket of byColumn) {
+      bucket.sort((a, b) => {
+        const ya = a.birthDate ? parseInt(a.birthDate.slice(0, 4), 10) : Infinity;
+        const yb = b.birthDate ? parseInt(b.birthDate.slice(0, 4), 10) : Infinity;
+        return ya !== yb ? ya - yb : (a.name || '').localeCompare(b.name || '');
+      });
+    }
+
+    const cardEls = {};
+    let maxBottom = 0;
+    columns.forEach((sign, colIndex) => {
+      const x = MARGIN + colIndex * (CARD_WIDTH + ZODIAC_COLUMN_GAP);
+
+      const header = document.createElement('div');
+      header.className = 'zodiac-column-header';
+      header.style.left = `${x}px`;
+      header.style.top = `${MARGIN}px`;
+      header.style.width = `${CARD_WIDTH}px`;
+      const emoji = ZODIAC_EMOJI[sign];
+      header.innerHTML = emoji
+        ? `<span class="zodiac-header-emoji">${emoji}</span><span class="zodiac-header-label">${sign}</span>`
+        : `<span class="zodiac-header-label">No zodiac set</span>`;
+      els.content.appendChild(header);
+
+      let y = MARGIN + ZODIAC_HEADER_HEIGHT;
+      for (const p of byColumn[colIndex]) {
+        const card = buildCard(p);
+        card.style.left = `${x}px`;
+        els.content.appendChild(card);
+        cardEls[p.id] = card;
+        card.style.top = `${y}px`;
+        y += card.offsetHeight + ZODIAC_CARD_GAP;
+      }
+      maxBottom = Math.max(maxBottom, y - ZODIAC_CARD_GAP);
+    });
+
+    const contentWidth = MARGIN * 2 + columns.length * CARD_WIDTH + (columns.length - 1) * ZODIAC_COLUMN_GAP;
+    els.content.style.width = `${contentWidth}px`;
+    els.content.style.height = `${maxBottom + MARGIN}px`;
+
+    // Cards still glide into their new column/position like every other
+    // view, just with no connector lines to animate alongside them.
+    animateLayoutIn(cardEls, oldPositions);
+  }
 
   // ---------- Chronological view ----------
   //

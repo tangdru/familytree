@@ -258,6 +258,26 @@ body {
   font-weight: 700;
 }
 
+.zodiac-column-header {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--card-border);
+  color: var(--ink-soft);
+  text-align: center;
+}
+.zodiac-header-emoji { font-size: 1.6rem; line-height: 1; }
+.zodiac-header-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .fit-view-btn {
   position: absolute;
   right: 16px;

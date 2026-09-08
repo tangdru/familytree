@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609090">
+<link rel="stylesheet" href="style.css?v=202609091">
 </head>
 <body>
   <header class="toolbar">
@@ -22,6 +22,7 @@
     <select id="viewModeSelect" class="view-mode-select" aria-label="Tree view">
       <option value="traditional">Traditional Tree</option>
       <option value="chronological">Chronological Tree</option>
+      <option value="zodiac">Zodiac Tree</option>
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
     <h1 class="toolbar-title">Family Tree</h1>
@@ -341,7 +342,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609090"></script>
-  <script src="app.js?v=202609090"></script>
+  <script src="config.js?v=202609091"></script>
+  <script src="app.js?v=202609091"></script>
 </body>
 </html>
