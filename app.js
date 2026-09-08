@@ -1081,11 +1081,23 @@
   applyTransform();
 
   els.viewModeSelect.addEventListener('change', () => {
+    const previousViewMode = viewMode;
     viewMode = els.viewModeSelect.value;
     // Fades in/out via its own opacity transition (see .chrono-ruler.visible
     // in style.css) rather than the hidden attribute, which can't animate.
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
+    if (previousViewMode === 'centric' && viewMode !== 'centric' && prevCentricGrid) {
+      // Play the collapse over whatever renderTree() is about to build
+      // underneath, rather than just letting the grid vanish the instant
+      // #linesSvg gets cleared for the next view.
+      playCentricExitCollapse(prevCentricGrid);
+      // Reset so the NEXT time Centric view is entered -- from any view,
+      // not just the first time ever -- it's treated as a fresh entry and
+      // gets the same confirmed-correct "build outward" animation, rather
+      // than trying to transition from this now-abandoned grid state.
+      prevCentricGrid = null;
+    }
     renderTree();
     if (viewMode === 'zodiac') {
       // Fit the columns' width only -- see computeFitTransform's own note
@@ -3657,12 +3669,17 @@
   // ring. The area beyond the outermost ring continues the exact same
   // step sequence one step further (rather than reverting to the plain
   // page background), so the darkening reads as continuing outward, not
-  // stopping abruptly at the last ring. Reuses #linesSvg (empty in this
-  // view otherwise -- see renderCentric's own note on why no connector
-  // lines are drawn) rather than a separate element, so it pans/zooms
-  // with the cards for free via the same parent transform.
-  function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
-    const svg = els.svg;
+  // stopping abruptly at the last ring. Draws into #linesSvg by default
+  // (empty in this view otherwise -- see renderCentric's own note on why
+  // no connector lines are drawn), so it pans/zooms with the cards for
+  // free via the same parent transform; playCentricExitCollapse passes a
+  // temporary overlay svg instead, so the exit animation can keep playing
+  // after #linesSvg has already been claimed by whatever view comes next
+  // -- also passing skipBackground there, since that overlay sits on top
+  // of the destination view's own content, and the (otherwise opaque,
+  // viewport-filling) background rect would hide it completely for as
+  // long as the collapse takes to finish.
+  function drawCentricGrid(originX, originY, ringIndices, radiusByRing, svg = els.svg, { skipBackground = false } = {}) {
     svg.innerHTML = '';
     svg.setAttribute('width', els.content.scrollWidth);
     svg.setAttribute('height', els.content.scrollHeight);
@@ -3681,15 +3698,18 @@
       // overscan technique as the chrono ruler's gridlines -- centered on
       // the origin and sized to survive any pan/zoom up to MIN_ZOOM,
       // rather than tied to content-space dimensions that don't track the
-      // actual viewport rectangle.
-      const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
-      const background = document.createElementNS(svgNS, 'rect');
-      background.setAttribute('x', originX - overscan);
-      background.setAttribute('y', originY - overscan);
-      background.setAttribute('width', overscan * 2);
-      background.setAttribute('height', overscan * 2);
-      background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
-      svg.appendChild(background);
+      // actual viewport rectangle. Skipped entirely for the exit-collapse
+      // overlay -- see skipBackground's own note above.
+      if (!skipBackground) {
+        const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
+        const background = document.createElementNS(svgNS, 'rect');
+        background.setAttribute('x', originX - overscan);
+        background.setAttribute('y', originY - overscan);
+        background.setAttribute('width', overscan * 2);
+        background.setAttribute('height', overscan * 2);
+        background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
+        svg.appendChild(background);
+      }
 
       // Largest ring first, smallest last, so each smaller disc's flat
       // color paints over the larger one (and the background) within its
@@ -3783,8 +3803,21 @@
   // ring that persists across the change barely (if at all) recolors --
   // mainly its presence (and radius) changes.
   function animateCentricGrid(from, to) {
+    // First entry ever (from === null) always builds innermost-first,
+    // outward -- the confirmed-correct "radar powering on" feel. Removing
+    // rings (e.g. Age -> Location, ring 4 exiting) also stays
+    // innermost-first: the persisting rings settle first, and the exiting
+    // ring -- the one that would have been built LAST -- leaves last too.
+    // But ADDING rings back on top of an existing grid (e.g. Location ->
+    // Age, ring 4 returning) needs to read as the exact reverse of that
+    // same removal, not a repeat of the from-scratch build: the ring
+    // that's returning goes FIRST (mirroring how it would've been the
+    // last thing removed), then each successively inner ring follows,
+    // working inward -- outermost to innermost, the timeline of a removal
+    // played backward.
+    const addingRingsToExisting = from && to.ringIndices.length > from.ringIndices.length;
     const allIndices = Array.from(new Set([...(from ? from.ringIndices : []), ...to.ringIndices]))
-      .sort((a, b) => a - b); // innermost first, so index 0 in this order starts first below
+      .sort((a, b) => addingRingsToExisting ? b - a : a - b);
     // Comfortably past the outermost real ring on either side of this
     // transition -- enough to read as "off the visible canvas" once
     // Centric view's own always-fit reframes around the new layout.
@@ -3822,6 +3855,43 @@
       // Exact final frame -- only the rings that actually still exist,
       // at their precise target radii, no lingering exit-animation state.
       else drawCentricGrid(to.originX, to.originY, to.ringIndices, to.radiusByRing);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Played when leaving Centric view for any other view mode -- the exact
+  // reverse of the first-entry build: every ring collapses inward toward
+  // the center and shrinks to nothing, staggered outermost-first (the
+  // timeline of the "build outward" entrance, played backward), rather
+  // than just vanishing the instant the mode switches. Draws into a
+  // temporary overlay svg (not #linesSvg, which the next view claims for
+  // its own use immediately) stacked on top of #treeContent so the
+  // collapse plays out over whatever the destination view already looks
+  // like underneath, without delaying the actual switch at all.
+  function playCentricExitCollapse(grid) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const overlay = document.createElementNS(svgNS, 'svg');
+    overlay.setAttribute('class', 'lines-svg');
+    overlay.style.zIndex = '5'; // above #treeContent's cards
+    els.canvas.appendChild(overlay);
+
+    const descByIdx = [...grid.ringIndices].sort((a, b) => b - a); // outermost first, mirroring the entrance
+    const startRadius = { ...grid.radiusByRing };
+    const startTime = performance.now();
+    function step(now) {
+      const elapsed = now - startTime;
+      let allDone = true;
+      const radiusByRing = {};
+      descByIdx.forEach((idx, i) => {
+        const ringElapsed = Math.max(0, elapsed - i * CENTRIC_RING_STAGGER_MS);
+        const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
+        if (t < 1) allDone = false;
+        const eased = 1 - Math.pow(1 - t, 3);
+        radiusByRing[idx] = startRadius[idx] * (1 - eased);
+      });
+      drawCentricGrid(grid.originX, grid.originY, grid.ringIndices, radiusByRing, overlay, { skipBackground: true });
+      if (!allDone) requestAnimationFrame(step);
+      else overlay.remove();
     }
     requestAnimationFrame(step);
   }
