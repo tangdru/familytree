@@ -991,23 +991,97 @@
   const view = { x: 40, y: 20, scale: 1 };
   let viewMode = 'traditional'; // 'traditional' | 'chronological'
 
+  // The chrono ruler's own year labels, kept separately from the DOM so
+  // their vertical spacing can be rescaled on every pan/zoom without a
+  // full re-render -- see repositionChronoRulerLabels. { el, year } pairs,
+  // rebuilt by renderChronoRuler(); chronoMinYear is whatever minYear that
+  // same render used (chronoYToPixel needs it to place a given year).
+  let chronoRulerLabels = [];
+  let chronoMinYear = 0;
+
+  // Below this vertical gap (px) between two labels, the later one starts
+  // reading as overlapping text rather than two distinct ticks -- so one
+  // of the pair gets hidden rather than left to collide.
+  const CHRONO_MIN_LABEL_GAP = 20;
+
+  // Rescales each label's *position* (so it lines up with the row/decade
+  // it labels, same as the zoomed tree) without rescaling its rendered
+  // size -- unlike the tree canvas, the ruler's own text should always
+  // read at one comfortable, constant size, never microscopic zoomed out
+  // or oversized (and overflowing its 56px column) zoomed in. Also thins
+  // out labels that would otherwise collide when zoomed out far enough
+  // that decades sit closer together than CHRONO_MIN_LABEL_GAP, keeping
+  // "Today" visible in preference to whichever decade crowds it.
+  function repositionChronoRulerLabels() {
+    const positioned = chronoRulerLabels
+      .map(entry => ({ ...entry, top: chronoYToPixel(entry.year, chronoMinYear) * view.scale }))
+      .sort((a, b) => a.top - b.top);
+    const todayIndex = positioned.findIndex(entry => entry.el.classList.contains('today'));
+
+    const visible = positioned.map(() => true);
+    let lastVisibleTop = -Infinity;
+    for (let i = 0; i < positioned.length; i++) {
+      if (i === todayIndex) continue; // Today is resolved separately below, always visible.
+      if (positioned[i].top - lastVisibleTop < CHRONO_MIN_LABEL_GAP) {
+        visible[i] = false;
+      } else {
+        lastVisibleTop = positioned[i].top;
+      }
+    }
+    // Today always keeps its slot; if that crowds the nearest still-visible
+    // decade on either side, hide that decade instead of hiding Today, and
+    // keep walking outward in case the next one in is also too close.
+    if (todayIndex !== -1) {
+      const todayTop = positioned[todayIndex].top;
+      for (let i = todayIndex - 1; i >= 0; i--) {
+        if (!visible[i]) continue;
+        if (todayTop - positioned[i].top < CHRONO_MIN_LABEL_GAP) visible[i] = false;
+        else break;
+      }
+      for (let i = todayIndex + 1; i < positioned.length; i++) {
+        if (!visible[i]) continue;
+        if (positioned[i].top - todayTop < CHRONO_MIN_LABEL_GAP) visible[i] = false;
+        else break;
+      }
+    }
+
+    positioned.forEach(({ el, top }, i) => {
+      el.style.top = `${top}px`;
+      el.style.display = visible[i] ? '' : 'none';
+    });
+  }
+
   function applyTransform() {
     els.canvas.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
     // The chrono ruler's labels live outside #treeCanvas (so horizontal pan
     // never moves them off the viewport's left edge) but still need to
-    // track vertical pan/zoom exactly like the rows they label -- so they
-    // get only the Y+scale portion of the same transform.
+    // track vertical pan/zoom like the rows they label -- just not by
+    // literally scaling the label text itself (see
+    // repositionChronoRulerLabels): only translateY here, and each
+    // label's own top does the scaled positioning individually.
     if (viewMode === 'chronological') {
-      els.chronoRulerInner.style.transform = `translateY(${view.y}px) scale(${view.scale})`;
+      els.chronoRulerInner.style.transform = `translateY(${view.y}px)`;
+      repositionChronoRulerLabels();
     }
   }
   applyTransform();
 
   els.viewModeSelect.addEventListener('change', () => {
     viewMode = els.viewModeSelect.value;
-    els.chronoRuler.hidden = viewMode !== 'chronological';
+    // Fades in/out via its own opacity transition (see .chrono-ruler.visible
+    // in style.css) rather than the hidden attribute, which can't animate.
+    els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     renderTree();
-    fitToView();
+    // Deliberately NOT fitToView() here -- switching modes should feel like
+    // the same content rearranging itself under a still camera, not a new
+    // scene: pan/zoom (view.x/y/scale) stay exactly where the user left
+    // them, and only the tree layout animates underneath (see
+    // animateLayoutIn). Still need applyTransform() though, since the
+    // chrono ruler's own transform is only kept in sync with view.{x,y,
+    // scale} while chronological mode is actually active (see
+    // applyTransform) -- it can otherwise go stale while panning/zooming
+    // in traditional mode with the ruler faded out.
+    applyTransform();
   });
 
   // Zoom/pan so the whole tree is visible, centered in the viewport. Called
@@ -2924,12 +2998,78 @@
 
   // ---------- Rendering ----------
 
+  const CARD_MOVE_MS = 380; // must match .person-card's left/top transition duration in style.css
+
   function renderTree() {
     if (viewMode === 'chronological') renderChronological();
     else renderTraditional();
   }
 
+  // Snapshots each currently-rendered card's position, keyed by person id,
+  // before a re-render wipes and rebuilds every .person-card from scratch
+  // -- lets animateLayoutIn (below) replay the move as a smooth transition
+  // instead of an instant jump, even across a Traditional/Chronological
+  // view-mode switch (both build cards via the same buildCard(), keyed by
+  // the same dataset.id, so this works seamlessly across either).
+  function captureCardPositions() {
+    const positions = {};
+    els.content.querySelectorAll('.person-card').forEach(card => {
+      positions[card.dataset.id] = { left: card.style.left, top: card.style.top };
+    });
+    return positions;
+  }
+
+  // FLIP ("First, Last, Invert, Play"): cardEls have already been built
+  // fresh and positioned at their final target left/top for this render.
+  // For any id that also existed in oldPositions (i.e. was on screen
+  // before this render), jump it back to its old spot with transitions
+  // suppressed, force the browser to commit that as the visible frame,
+  // then release it back to the real target -- which .person-card's own
+  // left/top transition then animates smoothly. A brand-new card (no old
+  // position on record) just appears at its target directly, since
+  // there's nowhere meaningful to animate it in from.
+  function animateLayoutIn(cardEls, oldPositions) {
+    const moving = [];
+    for (const id of Object.keys(cardEls)) {
+      const old = oldPositions[id];
+      if (!old || !old.left || !old.top) continue;
+      const card = cardEls[id];
+      const target = { left: card.style.left, top: card.style.top };
+      if (old.left === target.left && old.top === target.top) continue;
+      card.style.transition = 'none';
+      card.style.left = old.left;
+      card.style.top = old.top;
+      moving.push({ card, target });
+    }
+    if (!moving.length) return false;
+    // Force layout so the browser actually paints the "old position"
+    // frame before releasing to the target -- without this the two style
+    // writes would coalesce into one and nothing would visibly animate.
+    void els.content.offsetHeight;
+    moving.forEach(({ card, target }) => {
+      card.style.transition = '';
+      card.style.left = target.left;
+      card.style.top = target.top;
+    });
+    return true;
+  }
+
+  // Keeps redrawing the connector lines on every frame for the duration
+  // of the card-move transition, so lines visually track the cards as
+  // they glide instead of snapping straight to their final position while
+  // the cards they're attached to are still mid-flight.
+  function animateLinesDuring(durationMs, extraStep) {
+    const start = performance.now();
+    function step(now) {
+      drawLines();
+      if (extraStep) extraStep();
+      if (now - start < durationMs) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   function renderTraditional() {
+    const oldPositions = captureCardPositions();
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
     els.content.innerHTML = '';
@@ -2976,7 +3116,11 @@
     els.content.style.height = `${y - ROW_GAP + MARGIN}px`;
 
     // Draw connecting lines after layout so we can measure real positions.
-    requestAnimationFrame(drawLines);
+    // If any card actually moved from where it was before this render,
+    // FLIP-animate the move and keep lines tracking it every frame;
+    // otherwise (first render, or nothing changed) just draw once.
+    if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS);
+    else requestAnimationFrame(drawLines);
   }
 
   function formatYear(dateStr) {
@@ -3367,21 +3511,27 @@
   function renderChronoRuler(minYear, maxYear, contentHeight) {
     els.chronoRulerInner.innerHTML = '';
     els.chronoRulerInner.style.height = `${contentHeight}px`;
+    chronoMinYear = minYear;
+    chronoRulerLabels = [];
     for (let y = minYear; y <= maxYear; y += 10) {
       const label = document.createElement('div');
       label.className = 'chrono-year-label';
-      label.style.top = `${chronoYToPixel(y, minYear)}px`;
       label.textContent = String(y);
       els.chronoRulerInner.appendChild(label);
+      chronoRulerLabels.push({ el: label, year: y });
     }
     const thisYear = new Date().getFullYear();
     if (thisYear >= minYear && thisYear <= maxYear) {
       const today = document.createElement('div');
       today.className = 'chrono-year-label today';
-      today.style.top = `${chronoYToPixel(thisYear, minYear)}px`;
       today.textContent = 'Today';
       els.chronoRulerInner.appendChild(today);
+      chronoRulerLabels.push({ el: today, year: thisYear });
     }
+    // Labels are created with no position of their own -- give them their
+    // first (scale-aware) placement immediately rather than waiting for
+    // the next pan/zoom event to call this.
+    repositionChronoRulerLabels();
   }
 
   // Places each person at their own natural chronological Y (grouped by
@@ -3447,6 +3597,7 @@
   }
 
   function renderChronological() {
+    const oldPositions = captureCardPositions();
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
     els.content.innerHTML = '';
@@ -3501,10 +3652,14 @@
     // Connectors are drawn by the exact same function the traditional tree
     // uses (same X-layout means the same bus-line grouping works
     // unchanged); only the extra gridlines/ruler are chrono-specific.
+    // Gridlines/ruler only depend on the (unanimated) year range, so they
+    // draw once; if cards actually moved from before this render, lines
+    // FLIP-animate and keep tracking them every frame instead.
     requestAnimationFrame(() => {
-      drawLines();
       drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
       renderChronoRuler(minYear, maxYear, contentHeight);
+      if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS);
+      else drawLines();
     });
   }
 

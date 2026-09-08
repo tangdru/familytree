@@ -228,7 +228,13 @@ body {
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
+  /* Faded via opacity (toggling the .visible class), not the hidden
+     attribute -- display:none can't transition, and this needs to fade
+     in/out alongside the view-mode switch rather than popping. */
+  opacity: 0;
+  transition: opacity .32s ease;
 }
+.chrono-ruler.visible { opacity: 1; }
 .chrono-ruler-inner {
   position: absolute;
   left: 0;
@@ -238,7 +244,9 @@ body {
 }
 .chrono-year-label {
   position: absolute;
-  right: 8px;
+  left: 0;
+  width: 100%;
+  text-align: center;
   transform: translateY(-50%);
   font-size: 11px;
   font-weight: 600;
@@ -272,7 +280,11 @@ body {
   cursor: pointer;
   overflow: hidden;
   user-select: none;
-  transition: transform .12s, box-shadow .12s, border-color .12s;
+  /* left/top drive the animated re-layout transition (see animateLayoutIn
+     in app.js) -- kept separate from the hover lift's own transform
+     transition above so the two never fight over one property. */
+  transition: transform .12s, box-shadow .12s, border-color .12s,
+    left .38s ease, top .38s ease;
   flex-shrink: 0;
 }
 .person-card:hover {
