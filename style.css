@@ -19,12 +19,11 @@
   /* Centric view's stepped ring colors (see drawCentricGrid in app.js) --
      dedicated tokens rather than reusing --ink/--surface, since those
      flip which one reads as "light" between themes while this always
-     needs --centric-inner to be the lighter of the two. Kept to a
-     moderate terracotta at the --centric-outer end (not nearly as dark as
-     --ink) so the outermost ring/background stays readable rather than
-     turning into a near-black vignette. */
-  --centric-inner: #fdfbf7;
-  --centric-outer: #c98a4c;
+     needs --centric-inner to be the lighter of the two. Grayscale (equal
+     r/g/b) and a fairly narrow range, so each ring's step reads as a
+     subtle shade change rather than a bold color jump. */
+  --centric-inner: #ededed;
+  --centric-outer: #8c8c8c;
 }
 
 * { box-sizing: border-box; }
@@ -1175,8 +1174,8 @@ body {
     --ink-soft: #b3a892;
     --card-border: #4a4131;
     --shadow: 0 2px 8px rgba(0,0,0,0.4);
-    --centric-inner: #5a4a36;
-    --centric-outer: #1a140d;
+    --centric-inner: #6a6a6a;
+    --centric-outer: #2c2c2c;
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
