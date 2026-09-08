@@ -2242,6 +2242,7 @@
   let dragSign = 0;            // +1/-1: which side the incoming card starts off-screen on (always -dragCaptureSign)
   let dragNeighbor = null;     // { ids, selected, kind: 'sibling' | 'child' | 'parent' }, or null for a dead end
   let dragDim = 0;             // outgoing card's width (axis x) or height (axis y), px
+  let dragStep = 0;            // dragDim plus the card's own margin to the screen edge -- see startSwipeDrag
   let dragLayer = null;
   let outgoingEl = null;
   let incomingEl = null;
@@ -2299,6 +2300,12 @@
     const cardEl = els.viewModalCard;
     const rect = cardEl.getBoundingClientRect();
     dragDim = axis === 'x' ? rect.width : rect.height;
+    // The incoming card starts (and the outgoing one ends up) a full step
+    // away -- not just one card-width, but that plus the same margin the
+    // card already keeps from the screen edge at rest (rect.left/top, since
+    // .modal-overlay centers it) -- so the two visibly separate by a gap
+    // instead of sliding past each other edge-to-edge.
+    dragStep = dragDim + (axis === 'x' ? rect.left : rect.top);
     const prop = axis === 'x' ? 'translateX' : 'translateY';
 
     dragLayer = document.createElement('div');
@@ -2321,7 +2328,7 @@
       stripIds(incomingEl);
       renderPersonView(current.ids, current.selected); // restore before the browser ever paints the swap
       incomingEl.classList.add('swipe-card-slot', 'swipe-card-incoming');
-      incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+      incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
       dragLayer.appendChild(incomingEl);
     } else {
       incomingEl = null;
@@ -2342,7 +2349,7 @@
     }
     const clamped = Math.max(-dragDim, Math.min(dragDim, delta));
     outgoingEl.style.transform = `${prop}(${clamped}px)`;
-    incomingEl.style.transform = `${prop}(${dragSign * dragDim + clamped}px)`;
+    incomingEl.style.transform = `${prop}(${dragSign * dragStep + clamped}px)`;
   }
 
   // Finishes the gesture: animates the rest of the way to either a full
@@ -2355,11 +2362,11 @@
     if (incomingEl) incomingEl.classList.add('swipe-settling');
 
     if (committed) {
-      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragDim}px)`;
+      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragStep}px)`;
       if (incomingEl) incomingEl.style.transform = `${prop}(0px)`;
     } else {
       outgoingEl.style.transform = `${prop}(0px)`;
-      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
     }
 
     const neighbor = dragNeighbor;
