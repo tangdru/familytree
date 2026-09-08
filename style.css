@@ -1012,8 +1012,13 @@ body {
 .view-relation-list li {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  /* Age sits right next to its own name (not pushed to the row's far
+     edge) -- in the two-column grid, a right-aligned age in the left
+     column read as visually closer to the *next* column's name than to
+     its own, a proximity mismatch that space-between doesn't have room
+     to avoid once there's a neighboring column immediately to its right. */
+  justify-content: flex-start;
+  gap: 5px;
   padding: 7px 0;
 }
 .view-relation-link {

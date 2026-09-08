@@ -1749,7 +1749,7 @@
     const age = computeAge(p);
     const ageSpan = document.createElement('span');
     ageSpan.className = 'view-relation-age';
-    ageSpan.textContent = age == null ? '' : p.deathDate ? `${age} (d. ${formatYear(p.deathDate)})` : `${age}`;
+    ageSpan.textContent = age == null ? '' : p.deathDate ? `(${age}, d. ${formatYear(p.deathDate)})` : `(${age})`;
     li.appendChild(link);
     li.appendChild(ageSpan);
     return li;
