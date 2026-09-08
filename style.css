@@ -783,13 +783,14 @@ body {
 .swipe-hint-right { right: -14px; top: 50%; transform: translateY(-50%); }
 
 /* ---------- Swipe drag-follow overlay ---------- */
-/* While a card swipe is in progress, the real (fixed-id) #viewSwipeZone is
-   hidden and this fixed-position layer takes over: a pixel-perfect clone
-   of the outgoing card plus a lightweight preview of the incoming one
-   (see buildSwipePeekCard), both translated 1:1 with the pointer so the
-   next card visibly slides in as you drag -- see the pointermove handler
-   in app.js. Removed again once the gesture ends (committed or sprung
-   back) and the real card is shown again. */
+/* While a card swipe is in progress, the real #personViewCard (the whole
+   modal card -- header, photo/info, relation lists, footer) is hidden and
+   this fixed-position layer takes over: a pixel-perfect clone of the
+   outgoing card plus a full clone of the incoming one (see
+   startSwipeDrag), both translated 1:1 with the pointer so the whole next
+   card visibly slides in as you drag -- see the pointermove handler in
+   app.js. Removed again once the gesture ends (committed or sprung back)
+   and the real card is shown again. */
 .swipe-drag-layer {
   position: fixed;
   overflow: hidden;
