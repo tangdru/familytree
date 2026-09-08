@@ -3860,23 +3860,43 @@
   }
 
   // Played when leaving Centric view for any other view mode -- the exact
-  // reverse of the first-entry build: every ring collapses inward toward
-  // the center and shrinks to nothing, staggered outermost-first (the
-  // timeline of the "build outward" entrance, played backward), rather
-  // than just vanishing the instant the mode switches. Draws into a
-  // temporary overlay svg (not #linesSvg, which the next view claims for
-  // its own use immediately) stacked on top of #treeContent so the
-  // collapse plays out over whatever the destination view already looks
-  // like underneath, without delaying the actual switch at all.
+  // reverse of the first-entry build. On entry, every ring starts huge
+  // (off-screen) and SHRINKS down to its resting radius, innermost ring
+  // moving first. Reversed, every ring GROWS from its resting radius back
+  // out to huge, staggered OUTERMOST first -- the ring that finished last
+  // going in is the first to leave, working inward from there, so the
+  // innermost ring (ring 1) is the last thing still animating. Since ring
+  // 1 is also the lightest (closest to --centric-inner, which matches
+  // --bg exactly), its own final growth is what visually hands off to the
+  // destination view's plain background -- by the time it's grown large
+  // enough to cover the viewport, the overlay is indistinguishable from
+  // the background already showing through underneath, and gets removed.
+  // Draws into a temporary overlay svg (not #linesSvg, which the next
+  // view claims for its own use immediately) stacked on top of
+  // #treeContent so the collapse plays out over whatever the destination
+  // view already looks like underneath, without delaying the actual
+  // switch at all.
   function playCentricExitCollapse(grid) {
     const svgNS = 'http://www.w3.org/2000/svg';
     const overlay = document.createElementNS(svgNS, 'svg');
     overlay.setAttribute('class', 'lines-svg');
-    overlay.style.zIndex = '5'; // above #treeContent's cards
-    els.canvas.appendChild(overlay);
+    // Behind #treeContent (same relative position as #linesSvg itself),
+    // not above it: the growing rings can briefly cover the whole
+    // viewport with a flat color, and stacking that OVER the destination
+    // view's cards would hide them completely for a stretch of the
+    // animation. Behind them, the cards stay visible the entire time --
+    // exactly like the entrance, where #linesSvg is also always behind
+    // #treeContent -- and the rings simply pass behind/around the cards
+    // as they grow.
+    els.canvas.insertBefore(overlay, els.content);
 
-    const descByIdx = [...grid.ringIndices].sort((a, b) => b - a); // outermost first, mirroring the entrance
+    const descByIdx = [...grid.ringIndices].sort((a, b) => b - a); // outermost first, mirroring the entrance in reverse
     const startRadius = { ...grid.radiusByRing };
+    // Comfortably covers the viewport regardless of current zoom --
+    // same content-relative sizing (not the viewport/MIN_ZOOM overscan
+    // used for the plain background rect) that keeps the dashed
+    // boundary circles cheap to render even at this size.
+    const exitRadius = Math.max(0, ...Object.values(grid.radiusByRing)) * 3 + 1500;
     const startTime = performance.now();
     function step(now) {
       const elapsed = now - startTime;
@@ -3887,7 +3907,7 @@
         const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
         if (t < 1) allDone = false;
         const eased = 1 - Math.pow(1 - t, 3);
-        radiusByRing[idx] = startRadius[idx] * (1 - eased);
+        radiusByRing[idx] = startRadius[idx] + (exitRadius - startRadius[idx]) * eased;
       });
       drawCentricGrid(grid.originX, grid.originY, grid.ringIndices, radiusByRing, overlay, { skipBackground: true });
       if (!allDone) requestAnimationFrame(step);
