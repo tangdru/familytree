@@ -274,6 +274,7 @@
     chronoRuler: document.getElementById('chronoRuler'),
     chronoRulerInner: document.getElementById('chronoRulerInner'),
     fitViewBtn: document.getElementById('fitViewBtn'),
+    centricMetricToggle: document.getElementById('centricMetricToggle'),
     searchInput: document.getElementById('searchInput'),
     searchWrap: document.getElementById('searchWrap'),
     searchToggleBtn: document.getElementById('searchToggleBtn'),
@@ -990,7 +991,15 @@
   // below a "normal" zoomed-out level to let the whole thing fit.
   const MIN_ZOOM = 0.05;
   const view = { x: 40, y: 20, scale: 1 };
-  let viewMode = 'traditional'; // 'traditional' | 'chronological'
+  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric'
+
+  // Centric view's own state: which person is at the center, and which
+  // proximity metric currently decides ring placement -- see
+  // renderCentric(). Persists across re-renders and view switches within
+  // the session (not saved), so coming back to Centric view keeps your
+  // last focus instead of resetting.
+  let centricCenterId = null;
+  let centricMetric = 'age'; // 'age' | 'location'
 
   // The chrono ruler's own year labels, kept separately from the DOM so
   // their vertical spacing can be rescaled on every pan/zoom without a
@@ -1072,17 +1081,26 @@
     // Fades in/out via its own opacity transition (see .chrono-ruler.visible
     // in style.css) rather than the hidden attribute, which can't animate.
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
+    els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
     renderTree();
-    // Deliberately NOT fitToView() here -- switching modes should feel like
-    // the same content rearranging itself under a still camera, not a new
-    // scene: pan/zoom (view.x/y/scale) stay exactly where the user left
-    // them, and only the tree layout animates underneath (see
-    // animateLayoutIn). Still need applyTransform() though, since the
-    // chrono ruler's own transform is only kept in sync with view.{x,y,
-    // scale} while chronological mode is actually active (see
-    // applyTransform) -- it can otherwise go stale while panning/zooming
-    // in traditional mode with the ruler faded out.
-    applyTransform();
+    if (viewMode === 'zodiac' || viewMode === 'centric') {
+      // Zodiac's columns and Centric's rings are usually a completely
+      // different size/shape than whatever was framed before switching
+      // into them, so (unlike Traditional/Chronological) always reframe
+      // on entry rather than trying to preserve the old pan/zoom.
+      animateFitToView();
+    } else {
+      // Deliberately NOT fitToView() here -- switching modes should feel
+      // like the same content rearranging itself under a still camera, not
+      // a new scene: pan/zoom (view.x/y/scale) stay exactly where the user
+      // left them, and only the tree layout animates underneath (see
+      // animateLayoutIn). Still need applyTransform() though, since the
+      // chrono ruler's own transform is only kept in sync with view.{x,y,
+      // scale} while chronological mode is actually active (see
+      // applyTransform) -- it can otherwise go stale while panning/zooming
+      // in traditional mode with the ruler faded out.
+      applyTransform();
+    }
   });
 
   // Shared by fitToView() (instant, used on initial load) and
@@ -1135,6 +1153,17 @@
   }
   els.fitViewBtn.addEventListener('click', animateFitToView);
 
+  els.centricMetricToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.centric-metric-btn');
+    if (!btn || btn.classList.contains('active')) return;
+    centricMetric = btn.dataset.metric;
+    els.centricMetricToggle.querySelectorAll('.centric-metric-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderTree();
+    // Switching metric reshuffles who's in which ring entirely, which can
+    // change the layout's overall size just as much as recentering does.
+    animateFitToView();
+  });
+
   // Center a card in the viewport by adjusting our own pan transform.
   // Deliberately not the native el.scrollIntoView(): the tree isn't laid
   // out via normal document scroll, so scrollIntoView walks up the DOM
@@ -1175,7 +1204,7 @@
 
   let isPanning = false, panStart = null;
   els.viewport.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.person-card, .fit-view-btn')) return;
+    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle')) return;
     isPanning = true;
     panStart = { x: e.clientX - view.x, y: e.clientY - view.y };
     els.viewport.classList.add('grabbing');
@@ -1206,7 +1235,7 @@
   let pinchStartScale = 1;
 
   els.viewport.addEventListener('touchstart', (e) => {
-    if (e.target.closest('.person-card, .fit-view-btn')) { touchMode = null; return; }
+    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
       touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
@@ -1921,9 +1950,15 @@
   // Parents link, see goToParents), opening a card from the tree -- lands
   // here and starts a brand new vertical thread anchored on whoever it's
   // landing on. See verticalGoUp/Down below for the thread itself.
-  function openViewModal(personId) {
+  // forceSingle skips coupleIdsFor's spouse-pairing entirely, showing just
+  // this one person even if they have a spouse -- used by Zodiac/Centric
+  // view (see buildCard()), where cards are already deliberately shown as
+  // individuals regrouped by sign/proximity rather than by relationship,
+  // so opening straight into a paired Couple View would cut against that.
+  function openViewModal(personId, options) {
     if (!data.people[personId]) return;
-    verticalPath = [{ ids: coupleIdsFor(personId), selected: personId }];
+    const forceSingle = options && options.forceSingle;
+    verticalPath = [{ ids: forceSingle ? [personId] : coupleIdsFor(personId), selected: personId }];
     verticalIndex = 0;
     renderThreadPosition();
   }
@@ -3036,6 +3071,8 @@
 
   function renderTree() {
     if (viewMode === 'chronological') renderChronological();
+    else if (viewMode === 'zodiac') renderZodiac();
+    else if (viewMode === 'centric') renderCentric();
     else renderTraditional();
   }
 
@@ -3200,7 +3237,29 @@
     card.appendChild(photo);
     card.appendChild(info);
 
-    card.addEventListener('click', () => openViewModal(person.id));
+    // In Centric view, clicking any card other than the one already at the
+    // center recenters the view on it instead of opening the modal --
+    // that's the view's whole interaction model (see renderCentric()).
+    // Clicking the already-centered card is a no-op re-center, so it falls
+    // through to the normal open-modal behavior instead, giving Centric
+    // view its own way to still reach a person's details.
+    card.addEventListener('click', () => {
+      if (viewMode === 'centric' && person.id !== centricCenterId) {
+        centricCenterId = person.id;
+        renderTree();
+        // Recentering on someone else can produce a very differently
+        // shaped/sized ring layout (different ring populations entirely),
+        // so reframe every time, same as entering Centric view at all.
+        animateFitToView();
+      } else {
+        // Zodiac/Centric cards are shown as individuals, regrouped by sign
+        // or proximity rather than by relationship -- opening straight
+        // into a spouse-paired Couple View would cut against that, so
+        // force the single Person View for just the clicked card instead.
+        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric';
+        openViewModal(person.id, { forceSingle });
+      }
+    });
     return card;
   }
 
@@ -3390,8 +3449,282 @@
 
   window.addEventListener('resize', () => requestAnimationFrame(() => {
     if (viewMode === 'chronological') renderChronological();
-    else drawLines();
+    // Neither Zodiac's columns nor Centric's rings depend on viewport
+    // size, and (unlike the other two views) neither draws any connector
+    // lines at all -- see renderZodiac()/renderCentric() -- so there's
+    // nothing to redo on resize.
+    else if (viewMode !== 'zodiac' && viewMode !== 'centric') drawLines();
   }));
+
+  // ---------- Zodiac view ----------
+  //
+  // One column per Chinese zodiac sign (plus a trailing column for anyone
+  // without one set) -- X only encodes zodiac sign, Y is just a stacked
+  // list within that column, entirely independent of the family-tree
+  // hierarchy. Parent/child and spouse connector lines are deliberately
+  // NOT drawn here: drawLines() assumes the traditional/chronological
+  // layout's top-down, same-row structure (a parent's card sits above and
+  // a spouse's beside), which zodiac grouping doesn't preserve -- a parent
+  // can easily land below or beside their own child once sorted by sign.
+
+  const ZODIAC_COLUMN_GAP = 40; // gap between adjacent zodiac columns
+  const ZODIAC_CARD_GAP = 20; // vertical gap between stacked cards in one column
+  const ZODIAC_HEADER_HEIGHT = 56; // space reserved at the column top for its header
+
+  function renderZodiac() {
+    const oldPositions = captureCardPositions();
+    const hasPeople = Object.keys(data.people).length > 0;
+    els.emptyState.hidden = hasPeople;
+    els.content.innerHTML = '';
+    els.svg.innerHTML = '';
+    if (!hasPeople) return;
+
+    // '' (falsy/unset zodiac) sorts into its own trailing column rather
+    // than being dropped, so no one goes missing from this view.
+    const columns = ZODIAC_CYCLE.concat(['']);
+    const byColumn = columns.map(() => []);
+    for (const p of Object.values(data.people)) {
+      const idx = columns.indexOf(p.zodiac || '');
+      byColumn[idx >= 0 ? idx : columns.length - 1].push(p);
+    }
+    for (const bucket of byColumn) {
+      bucket.sort((a, b) => {
+        const ya = a.birthDate ? parseInt(a.birthDate.slice(0, 4), 10) : Infinity;
+        const yb = b.birthDate ? parseInt(b.birthDate.slice(0, 4), 10) : Infinity;
+        return ya !== yb ? ya - yb : (a.name || '').localeCompare(b.name || '');
+      });
+    }
+
+    const cardEls = {};
+    let maxBottom = 0;
+    columns.forEach((sign, colIndex) => {
+      const x = MARGIN + colIndex * (CARD_WIDTH + ZODIAC_COLUMN_GAP);
+
+      const header = document.createElement('div');
+      header.className = 'zodiac-column-header';
+      header.style.left = `${x}px`;
+      header.style.top = `${MARGIN}px`;
+      header.style.width = `${CARD_WIDTH}px`;
+      const emoji = ZODIAC_EMOJI[sign];
+      header.innerHTML = emoji
+        ? `<span class="zodiac-header-emoji">${emoji}</span><span class="zodiac-header-label">${sign}</span>`
+        : `<span class="zodiac-header-label">No zodiac set</span>`;
+      els.content.appendChild(header);
+
+      let y = MARGIN + ZODIAC_HEADER_HEIGHT;
+      for (const p of byColumn[colIndex]) {
+        const card = buildCard(p);
+        card.style.left = `${x}px`;
+        els.content.appendChild(card);
+        cardEls[p.id] = card;
+        card.style.top = `${y}px`;
+        y += card.offsetHeight + ZODIAC_CARD_GAP;
+      }
+      maxBottom = Math.max(maxBottom, y - ZODIAC_CARD_GAP);
+    });
+
+    const contentWidth = MARGIN * 2 + columns.length * CARD_WIDTH + (columns.length - 1) * ZODIAC_COLUMN_GAP;
+    els.content.style.width = `${contentWidth}px`;
+    els.content.style.height = `${maxBottom + MARGIN}px`;
+
+    // Cards still glide into their new column/position like every other
+    // view, just with no connector lines to animate alongside them.
+    animateLayoutIn(cardEls, oldPositions);
+  }
+
+  // ---------- Centric view ----------
+  //
+  // Concentric rings around one focused person (centricCenterId): everyone
+  // else is grouped into a ring by proximity to them -- age or location,
+  // whichever centricMetric currently is -- and spread evenly around that
+  // ring's circumference. Clicking any card recenters on it (see
+  // buildCard()); there's no other way to pick the center. Like Zodiac
+  // view, this reshuffles people by a criterion that has nothing to do
+  // with the family hierarchy, so for the same reason (see renderZodiac's
+  // own comment), no connector lines are drawn.
+
+  const CENTRIC_RING_BASE_RADIUS = 220; // clears the center card itself, plus margin
+  const CENTRIC_RING_GAP = 200; // minimum radial gap between successive rings
+  const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
+  const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
+
+  // Age-proximity ring: 0 is the center (handled separately, never passed
+  // here), higher is further out. A missing birth year can't be compared
+  // at all, so it lands in the outermost ring alongside anyone more than
+  // 30 years apart.
+  function centricAgeRing(centerYear, personYear) {
+    if (!Number.isFinite(personYear) || !Number.isFinite(centerYear)) return 4;
+    const diff = Math.abs(personYear - centerYear);
+    if (diff <= 5) return 1;
+    if (diff <= 15) return 2;
+    if (diff <= 30) return 3;
+    return 4;
+  }
+
+  // Location-proximity ring. There's no geocoding anywhere in this app --
+  // just free-text "City, State/Country" strings (see currentLocationOf)
+  // -- so "proximity" here is textual, not a real distance: ring 1 is the
+  // exact same location string, ring 2 shares the same trailing
+  // state/country segment, ring 3 is everyone else, including anyone with
+  // no location set at all.
+  function centricLocationRing(centerLoc, personLoc) {
+    if (!centerLoc || !personLoc) return 3;
+    if (personLoc.toLowerCase() === centerLoc.toLowerCase()) return 1;
+    const centerRegion = centerLoc.split(',').pop().trim().toLowerCase();
+    const personRegion = personLoc.split(',').pop().trim().toLowerCase();
+    if (centerRegion && centerRegion === personRegion) return 2;
+    return 3;
+  }
+
+  // What a ring actually means for the current metric, shown as an axis
+  // label next to its gridline -- ring 0 (the center person) never gets a
+  // label since there's no gridline drawn at radius 0.
+  function centricRingLabel(metric, ringIndex) {
+    const labels = metric === 'location'
+      ? ['Same city', 'Same region', 'Elsewhere']
+      : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
+    return labels[ringIndex - 1] || labels[labels.length - 1];
+  }
+
+  // One dashed circle plus an axis label per ring, centered on the person
+  // at (originX, originY). Reuses #linesSvg (empty in this view otherwise
+  // -- see renderCentric's own note on why no connector lines are drawn)
+  // rather than a separate element, so it pans/zooms with the cards for
+  // free via the same parent transform.
+  function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
+    const svg = els.svg;
+    svg.innerHTML = '';
+    svg.setAttribute('width', els.content.scrollWidth);
+    svg.setAttribute('height', els.content.scrollHeight);
+    svg.style.width = els.content.scrollWidth + 'px';
+    svg.style.height = els.content.scrollHeight + 'px';
+
+    for (const idx of ringIndices) {
+      const radius = radiusByRing[idx];
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', originX);
+      circle.setAttribute('cy', originY);
+      circle.setAttribute('r', radius);
+      circle.setAttribute('fill', 'none');
+      circle.setAttribute('stroke', 'var(--card-border)');
+      circle.setAttribute('stroke-width', 1);
+      circle.setAttribute('stroke-dasharray', '4 6');
+      svg.appendChild(circle);
+
+      // Always along the same fixed axis (straight up), regardless of
+      // where that ring's own cards happen to start (see the per-ring
+      // stagger in renderCentric) -- reading top-to-bottom like a ruler
+      // is clearer than chasing each ring's staggered start angle.
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', originX);
+      label.setAttribute('y', originY - radius - 8);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', 'var(--ink-soft)');
+      label.setAttribute('font-size', '12');
+      label.setAttribute('font-weight', '600');
+      label.textContent = centricRingLabel(centricMetric, idx);
+      svg.appendChild(label);
+    }
+  }
+
+  function renderCentric() {
+    const oldPositions = captureCardPositions();
+    const hasPeople = Object.keys(data.people).length > 0;
+    els.emptyState.hidden = hasPeople;
+    els.content.innerHTML = '';
+    els.svg.innerHTML = '';
+    if (!hasPeople) return;
+
+    // Fall back to some deterministic person if there's no center yet (or
+    // the previous one no longer exists, e.g. it was deleted).
+    if (!centricCenterId || !data.people[centricCenterId]) {
+      centricCenterId = Object.keys(data.people)[0];
+    }
+    const center = data.people[centricCenterId];
+    const centerYear = center.birthDate ? parseInt(center.birthDate.slice(0, 4), 10) : NaN;
+    const centerLoc = currentLocationOf(center);
+
+    const rings = {}; // ring index -> [person, ...]
+    for (const p of Object.values(data.people)) {
+      if (p.id === centricCenterId) continue;
+      let ring;
+      if (centricMetric === 'location') {
+        ring = centricLocationRing(centerLoc, currentLocationOf(p));
+      } else {
+        const year = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN;
+        ring = centricAgeRing(centerYear, year);
+      }
+      (rings[ring] = rings[ring] || []).push(p);
+    }
+    // Stable, deterministic order within a ring so angles don't jump
+    // around between re-renders (only the ring itself should ever change).
+    for (const ring of Object.values(rings)) {
+      ring.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    const ringIndices = Object.keys(rings).map(Number).sort((a, b) => a - b);
+
+    // Nominal radius per ring, pushed further out if a ring has too many
+    // members to fit around its own circumference without crowding --
+    // every subsequent ring inherits that push too (via runningRadius),
+    // so rings never end up colliding.
+    const radiusByRing = {};
+    let runningRadius = 0;
+    for (const idx of ringIndices) {
+      const n = rings[idx].length;
+      const nominal = CENTRIC_RING_BASE_RADIUS + (idx - 1) * CENTRIC_RING_GAP;
+      const circumferenceNeeded = (n * (CARD_WIDTH + CENTRIC_MIN_ARC_GAP)) / (2 * Math.PI);
+      const minFromPrev = runningRadius > 0 ? runningRadius + CENTRIC_RING_GAP : 0;
+      const radius = Math.max(nominal, circumferenceNeeded, minFromPrev);
+      radiusByRing[idx] = radius;
+      runningRadius = radius;
+    }
+    const maxRadius = runningRadius;
+    const originX = maxRadius + CENTRIC_PAD;
+    const originY = maxRadius + CENTRIC_PAD;
+
+    const cardEls = {};
+    const centerCard = buildCard(center);
+    centerCard.classList.add('centric-center-card');
+    centerCard.style.left = `${originX - CARD_WIDTH / 2}px`;
+    els.content.appendChild(centerCard);
+    cardEls[center.id] = centerCard;
+    // Two-phase like every other view: set top only after the card is in
+    // the DOM and its real (name-wrap-dependent) height can be measured.
+    centerCard.style.top = `${originY - centerCard.offsetHeight / 2}px`;
+
+    for (const idx of ringIndices) {
+      const members = rings[idx];
+      const radius = radiusByRing[idx];
+      // Every ring starts its own first member at a slightly different
+      // angle (a 30° stagger per ring) rather than all pointing straight
+      // up -- with only one or two members in a ring (common for an inner
+      // ring), starting them all at the same angle would otherwise line
+      // every ring's first card up into one vertical spoke, reading as a
+      // stack rather than actual concentric circles.
+      const ringStartAngle = -Math.PI / 2 + idx * (Math.PI / 6);
+      members.forEach((p, i) => {
+        const angle = ringStartAngle + (i / members.length) * Math.PI * 2;
+        const card = buildCard(p);
+        card.style.left = `${originX + radius * Math.cos(angle) - CARD_WIDTH / 2}px`;
+        els.content.appendChild(card);
+        cardEls[p.id] = card;
+        card.style.top = `${originY + radius * Math.sin(angle) - card.offsetHeight / 2}px`;
+      });
+    }
+
+    els.content.style.width = `${originX + maxRadius + CENTRIC_PAD}px`;
+    els.content.style.height = `${originY + maxRadius + CENTRIC_PAD}px`;
+
+    // Grid circles + axis labels, one per ring, showing what each ring
+    // actually means for the current metric -- drawn once at the target
+    // radii (not animated/interpolated), so it previews where the cards
+    // in flight are headed rather than trailing behind them.
+    drawCentricGrid(originX, originY, ringIndices, radiusByRing);
+
+    // Cards still glide into their new ring/position like every other
+    // view, just with no connector lines to animate alongside them.
+    animateLayoutIn(cardEls, oldPositions);
+  }
 
   // ---------- Chronological view ----------
   //
