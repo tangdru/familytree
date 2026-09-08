@@ -3502,9 +3502,20 @@
   // it). The ruler still marks "Today" as a label -- see renderChronoRuler.
   function drawChronoGridlines(minYear, maxYear, contentWidth) {
     const svg = els.svg;
+    // #linesSvg is a child of the pannable/zoomable #treeCanvas, so it's
+    // already carried along by that CSS transform -- no per-pan/zoom
+    // repositioning needed. But a line only as long as the tree's own
+    // content (0..contentWidth) falls short of the viewport edges whenever
+    // the content is narrower than the screen, zoomed in, or panned, so
+    // extend generously past both edges: enough overscan to still cover a
+    // full viewport width even at MIN_ZOOM (the most the content can ever
+    // be zoomed out), which comfortably covers ordinary panning too.
+    const overscan = Math.max(els.viewport.clientWidth, 2000) / MIN_ZOOM;
+    const x1 = -overscan;
+    const x2 = contentWidth + overscan;
     for (let y = minYear; y <= maxYear; y += 10) {
       const py = chronoYToPixel(y, minYear);
-      svg.insertBefore(svgLine(0, py, contentWidth, py, 'var(--card-border)', 1), svg.firstChild);
+      svg.insertBefore(svgLine(x1, py, x2, py, 'var(--card-border)', 1), svg.firstChild);
     }
   }
 
