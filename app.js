@@ -18,6 +18,11 @@
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
   const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
 
+  // Icons painted on the Person View / Couple View contact chips -- see
+  // buildContactChip().
+  const PHONE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.36 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.34 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+  const MAIL_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z" opacity="0"></path><path d="M22 6 12 13 2 6"></path><path d="M2 6h20v12H2z"></path></svg>';
+
   // Matches the emoji baked into #zodiacInput's <option> labels in
   // index.html -- needed again here to show the same emoji on the
   // read-only Person View card.
@@ -322,6 +327,7 @@
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
     viewCouple: document.getElementById('viewCouple'),
+    viewCoupleContacts: document.getElementById('viewCoupleContacts'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
@@ -702,6 +708,43 @@
       return `tel:${value.replace(/[^\d+]/g, '')}`;
     }
     return null;
+  }
+
+  // The short text painted on a contact chip (see buildContactChip) --
+  // just enough to recognize which contact it is, not the full value.
+  // The full value is still always reachable via the chip's title
+  // attribute and its tel:/mailto: target.
+  function contactChipLabel(value) {
+    if (!value) return '';
+    if (value.includes('@') && /[a-zA-Z]/.test(value)) {
+      return value.replace(/\.[a-zA-Z]{2,}$/, '');
+    }
+    if (/\d/.test(value)) {
+      const digits = value.replace(/\D/g, '');
+      return `•${digits.slice(-4)}`;
+    }
+    return value;
+  }
+
+  // A compact, tappable pill for one contact value -- used on both the
+  // single Person View and, grouped per person, the Couple View. Renders
+  // as a real tel:/mailto: link when contactHref recognizes the value,
+  // otherwise as a plain (non-clickable) chip.
+  function buildContactChip(value, countryHint) {
+    const isEmail = value.includes('@') && /[a-zA-Z]/.test(value);
+    const href = contactHref(value, countryHint);
+    const chip = document.createElement(href ? 'a' : 'span');
+    chip.className = 'contact-chip';
+    chip.title = value;
+    if (href) chip.href = href;
+    const icon = document.createElement('span');
+    icon.className = 'contact-chip-icon';
+    icon.innerHTML = isEmail ? MAIL_ICON_SVG : PHONE_ICON_SVG;
+    const label = document.createElement('span');
+    label.textContent = contactChipLabel(value);
+    chip.appendChild(icon);
+    chip.appendChild(label);
+    return chip;
   }
 
   function setupLocationAutocomplete(input, list) {
@@ -1915,22 +1958,35 @@
       const contacts = contactsOf(p);
       if (contacts.length) {
         const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
-        contacts.forEach(contact => {
-          const line = document.createElement('p');
-          line.className = 'view-contact-line';
-          const href = contactHref(contact, countryHint);
-          if (href) {
-            const a = document.createElement('a');
-            a.href = href;
-            a.textContent = contact;
-            line.appendChild(a);
-          } else {
-            line.textContent = contact;
-          }
-          els.viewContact.appendChild(line);
-        });
+        contacts.forEach(contact => els.viewContact.appendChild(buildContactChip(contact, countryHint)));
       }
       els.viewContact.hidden = !contacts.length;
+    }
+
+    // Couple card contacts: one column per person, headed by their first
+    // name -- unlike the single view above, the couple card needs that
+    // heading since two people's chips sit side by side.
+    els.viewCoupleContacts.innerHTML = '';
+    if (isCouple) {
+      let anyContacts = false;
+      ids.forEach(id => {
+        const person = data.people[id];
+        const contacts = contactsOf(person);
+        if (!contacts.length) return;
+        anyContacts = true;
+        const col = document.createElement('div');
+        col.className = 'view-couple-contact-col';
+        const heading = document.createElement('p');
+        heading.className = 'view-couple-contact-name';
+        heading.textContent = (person.name || '').trim().split(/\s+/)[0] || '(unnamed)';
+        col.appendChild(heading);
+        const countryHint = guessCountryFromLocationText(currentLocationOf(person) || person.birthLocation || '') || 'US';
+        contacts.forEach(contact => col.appendChild(buildContactChip(contact, countryHint)));
+        els.viewCoupleContacts.appendChild(col);
+      });
+      els.viewCoupleContacts.hidden = !anyContacts;
+    } else {
+      els.viewCoupleContacts.hidden = true;
     }
 
     // Spouses already shown as the other half of a couple card don't need
