@@ -763,6 +763,10 @@ body {
    height, never the part you're actually looking at and dragging. */
 #personViewModal { align-items: flex-start; }
 .view-modal { max-width: 420px; }
+/* No title text -- the person's own name is already the first thing in
+   the card -- so just the close button remains, right-aligned, in a
+   shorter bar than the Add/Edit modal's header needs for its title. */
+#personViewModal .modal-header { justify-content: flex-end; padding: 8px 20px; }
 
 /* The photo/name/dates header doubles as a swipe pad -- disabling the
    browser's own touch scrolling here (rather than on the whole modal body,
