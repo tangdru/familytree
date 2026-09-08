@@ -326,6 +326,10 @@
     viewPhoto: document.getElementById('viewPhoto'),
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
+    swipeHintUp: document.getElementById('swipeHintUp'),
+    swipeHintDown: document.getElementById('swipeHintDown'),
+    swipeHintLeft: document.getElementById('swipeHintLeft'),
+    swipeHintRight: document.getElementById('swipeHintRight'),
     viewCouple: document.getElementById('viewCouple'),
     viewCoupleContacts: document.getElementById('viewCoupleContacts'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
@@ -1862,10 +1866,11 @@
     return text ? `${text} · Age ${age}` : `Age ${age}`;
   }
 
-  // One half of a couple card: photo, name, dates+age, ringed when selected.
-  // Clicking a member switches which side of the couple drives navigation,
-  // without touching the vertical thread itself -- see selectCoupleMember.
-  function buildCoupleMember(personId, isSelected) {
+  // One half of a couple card's visuals: photo, name, dates+age, ringed
+  // when selected -- with no click behavior of its own, so a swipe-preview
+  // peek card (see buildSwipePeekCard) can reuse the exact same markup
+  // without becoming tappable before the swipe it belongs to has committed.
+  function buildCoupleMemberVisual(personId, isSelected) {
     const p = data.people[personId];
     const wrap = document.createElement('div');
     wrap.className = 'view-couple-member';
@@ -1888,8 +1893,64 @@
     wrap.appendChild(photo);
     wrap.appendChild(name);
     wrap.appendChild(dates);
+    return wrap;
+  }
+
+  // Clicking a member switches which side of the couple drives navigation,
+  // without touching the vertical thread itself -- see selectCoupleMember.
+  function buildCoupleMember(personId, isSelected) {
+    const wrap = buildCoupleMemberVisual(personId, isSelected);
     wrap.addEventListener('click', () => selectCoupleMember(personId));
     return wrap;
+  }
+
+  // A lightweight, non-interactive preview of a single person or couple --
+  // just enough (photo, name, dates) to recognize who you're swiping to
+  // before the swipe commits and the real, full-detail card renders in
+  // its place. See buildSwipePeekCard.
+  function buildSinglePeekCard(personId) {
+    const p = data.people[personId];
+    const wrap = document.createElement('div');
+    wrap.className = 'view-person';
+    const photo = document.createElement('div');
+    photo.className = 'view-photo';
+    if (p.photo) {
+      const img = document.createElement('img');
+      img.src = p.photo;
+      img.alt = p.name || '';
+      photo.appendChild(img);
+    } else {
+      photo.innerHTML = PERSON_PLACEHOLDER_SVG;
+    }
+    const name = document.createElement('h3');
+    name.className = 'view-name';
+    name.textContent = p.name || '(unnamed)';
+    const dates = document.createElement('p');
+    dates.className = 'view-dates';
+    dates.textContent = personDatesText(p);
+    wrap.appendChild(photo);
+    wrap.appendChild(name);
+    wrap.appendChild(dates);
+    return wrap;
+  }
+
+  // The full preview card for a swipe destination -- single or couple,
+  // mirroring which one the real render would show. Only ever mounted
+  // inside the transient swipe-drag overlay (see the pointermove handler
+  // below), never given ids or click handlers, since it isn't the active
+  // card yet.
+  function buildSwipePeekCard(ids, selectedId) {
+    const card = document.createElement('div');
+    card.className = 'swipe-card-slot';
+    if (ids.length > 1) {
+      const couple = document.createElement('div');
+      couple.className = 'view-couple';
+      ids.forEach(id => couple.appendChild(buildCoupleMemberVisual(id, id === selectedId)));
+      card.appendChild(couple);
+    } else {
+      card.appendChild(buildSinglePeekCard(selectedId));
+    }
+    return card;
   }
 
   // Switches which half of the current couple card is "selected" -- i.e.
@@ -2023,6 +2084,7 @@
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
 
+    updateSwipeHints();
     els.viewModal.hidden = false;
   }
 
@@ -2177,11 +2239,177 @@
     renderThreadPosition();
   }
 
-  const SWIPE_THRESHOLD = 48;  // px; smaller drags are taps, not swipes
-  const SWIPE_DEADZONE = 10;   // px moved before this counts as dragging at all
+  // Read-only mirrors of verticalGoUp/verticalGoDown's own logic, for the
+  // swipe-drag preview (see the pointermove handler below) and the edge
+  // hints (updateSwipeHints) to check "is there actually somewhere to go"
+  // without mutating verticalPath -- the real navigation still always goes
+  // through verticalGoUp/verticalGoDown themselves once a swipe commits.
+  function peekChildIds() {
+    if (!verticalPath.length) return null;
+    if (verticalIndex + 1 < verticalPath.length) return verticalPath[verticalIndex + 1];
+    const childId = firstChildId(verticalPath[verticalIndex].selected);
+    return childId ? { ids: coupleIdsFor(childId), selected: childId } : null;
+  }
+
+  function peekParentIds() {
+    if (!verticalPath.length) return null;
+    if (verticalIndex > 0) return verticalPath[verticalIndex - 1];
+    const parentIds = parentIdsOf(verticalPath[0].selected);
+    return parentIds.length ? { ids: parentIds, selected: parentIds[0] } : null;
+  }
+
+  // Whether the swipe-edge hints (see updateSwipeHints) should show for
+  // each direction -- mirrors exactly what a swipe in that direction would
+  // actually do, so a hint never promises a swipe that would be a no-op.
+  function canSwipeLeft() { return siblingNeighborId(currentViewId, 1) !== null; }
+  function canSwipeRight() { return siblingNeighborId(currentViewId, -1) !== null; }
+  function canSwipeUp() { return peekChildIds() !== null; }
+  function canSwipeDown() { return peekParentIds() !== null; }
+
+  function updateSwipeHints() {
+    els.swipeHintLeft.hidden = !canSwipeLeft();
+    els.swipeHintRight.hidden = !canSwipeRight();
+    els.swipeHintUp.hidden = !canSwipeUp();
+    els.swipeHintDown.hidden = !canSwipeDown();
+  }
+
+  const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes
+  const SWIPE_DEADZONE = 10;    // px moved before this counts as dragging at all
+  const SWIPE_SETTLE_MS = 220;  // must match .swipe-settling's transition duration in style.css
+  const SWIPE_RESISTANCE = 0.35;    // how far a dead-end drag (no neighbor) travels, relative to the finger
+  const SWIPE_RESISTANCE_MAX = 46;  // px cap on a dead-end drag's visual travel
   let swipeStart = null;
   let swipeCaptured = false;
   let suppressNextClick = false;
+
+  // Live drag-follow state, set once a drag is captured (past the
+  // deadzone) and cleared once its settle animation finishes -- see
+  // startSwipeDrag/updateSwipeDrag/endSwipeDrag.
+  let dragAxis = null;         // 'x' | 'y'
+  let dragCaptureSign = 0;     // +1/-1: sign of dx (axis 'x') or dy (axis 'y') at the moment of capture
+  let dragSign = 0;            // +1/-1: which side the incoming card starts off-screen on (always -dragCaptureSign)
+  let dragNeighbor = null;     // { ids, selected, kind: 'sibling' | 'child' | 'parent' }, or null for a dead end
+  let dragDim = 0;             // outgoing card's width (axis x) or height (axis y), px
+  let dragLayer = null;
+  let outgoingEl = null;
+  let incomingEl = null;
+
+  // Duplicate ids in the DOM are invalid HTML and, worse, would shadow the
+  // real elements for any later document.getElementById lookup -- everything
+  // in this app resolves those once at startup into the `els` cache, so in
+  // practice nothing breaks, but the clone should still never carry them.
+  function stripIds(el) {
+    el.removeAttribute('id');
+    el.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  }
+
+  // What a swipe in this direction would land on, without navigating there
+  // -- mirrors siblingNeighborId's own sign convention (a positive dx, i.e.
+  // dragging right, reveals the previous/older sibling) and
+  // verticalGoUp/verticalGoDown's (dragging up reveals a child).
+  function resolveSwipeTarget(axis, sign) {
+    if (axis === 'x') {
+      const siblingId = siblingNeighborId(currentViewId, sign > 0 ? -1 : 1);
+      return siblingId ? { ids: coupleIdsFor(siblingId), selected: siblingId, kind: 'sibling' } : null;
+    }
+    const target = sign < 0 ? peekChildIds() : peekParentIds();
+    return target ? { ...target, kind: sign < 0 ? 'child' : 'parent' } : null;
+  }
+
+  // The one place a swipe actually navigates -- always goes through the
+  // same functions a tap-based navigation would, so there's exactly one
+  // codepath that mutates verticalPath / calls openViewModal.
+  function commitDragNeighbor(neighbor) {
+    if (neighbor.kind === 'sibling') openViewModal(neighbor.selected);
+    else if (neighbor.kind === 'child') verticalGoUp();
+    else verticalGoDown();
+  }
+
+  // Mounts the drag-follow overlay: a pixel-perfect clone of the current
+  // (outgoing) card, plus -- if there's actually somewhere to go in this
+  // direction -- a lightweight preview of the incoming one, positioned
+  // just off the appropriate edge. The real #viewSwipeZone is hidden (not
+  // removed, so it keeps its layout space) for the overlay's duration.
+  function startSwipeDrag(axis) {
+    dragAxis = axis;
+    dragNeighbor = resolveSwipeTarget(axis, dragCaptureSign);
+    dragSign = -dragCaptureSign;
+
+    const rect = els.viewSwipeZone.getBoundingClientRect();
+    dragDim = axis === 'x' ? rect.width : rect.height;
+    const prop = axis === 'x' ? 'translateX' : 'translateY';
+
+    dragLayer = document.createElement('div');
+    dragLayer.className = 'swipe-drag-layer';
+    dragLayer.style.left = `${rect.left}px`;
+    dragLayer.style.top = `${rect.top}px`;
+    dragLayer.style.width = `${rect.width}px`;
+    dragLayer.style.height = `${rect.height}px`;
+    document.body.appendChild(dragLayer);
+
+    outgoingEl = els.viewSwipeZone.cloneNode(true);
+    stripIds(outgoingEl);
+    outgoingEl.classList.add('swipe-card-slot', 'swipe-card-outgoing');
+    dragLayer.appendChild(outgoingEl);
+
+    if (dragNeighbor) {
+      incomingEl = buildSwipePeekCard(dragNeighbor.ids, dragNeighbor.selected);
+      incomingEl.classList.add('swipe-card-incoming');
+      incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+      dragLayer.appendChild(incomingEl);
+    } else {
+      incomingEl = null;
+    }
+
+    els.viewSwipeZone.style.visibility = 'hidden';
+  }
+
+  // Tracks the pointer 1:1 while the gesture is live. A dead end (no
+  // neighbor that direction) just gives the outgoing card a little
+  // rubber-band resistance instead of sliding a new one in.
+  function updateSwipeDrag(delta) {
+    const prop = dragAxis === 'x' ? 'translateX' : 'translateY';
+    if (!dragNeighbor) {
+      const resisted = Math.max(-SWIPE_RESISTANCE_MAX, Math.min(SWIPE_RESISTANCE_MAX, delta * SWIPE_RESISTANCE));
+      outgoingEl.style.transform = `${prop}(${resisted}px)`;
+      return;
+    }
+    const clamped = Math.max(-dragDim, Math.min(dragDim, delta));
+    outgoingEl.style.transform = `${prop}(${clamped}px)`;
+    incomingEl.style.transform = `${prop}(${dragSign * dragDim + clamped}px)`;
+  }
+
+  // Finishes the gesture: animates the rest of the way to either a full
+  // swap (committed) or back to rest (spring-back), then tears down the
+  // overlay and -- only if committed -- performs the real navigation.
+  function endSwipeDrag(committed) {
+    const axis = dragAxis;
+    const prop = axis === 'x' ? 'translateX' : 'translateY';
+    outgoingEl.classList.add('swipe-settling');
+    if (incomingEl) incomingEl.classList.add('swipe-settling');
+
+    if (committed) {
+      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragDim}px)`;
+      if (incomingEl) incomingEl.style.transform = `${prop}(0px)`;
+    } else {
+      outgoingEl.style.transform = `${prop}(0px)`;
+      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragDim}px)`;
+    }
+
+    const neighbor = dragNeighbor;
+    const layer = dragLayer;
+    const realZone = els.viewSwipeZone;
+    dragLayer = null; outgoingEl = null; incomingEl = null; dragAxis = null; dragNeighbor = null;
+
+    window.setTimeout(() => {
+      layer.remove();
+      // If a new drag started before this timeout fired (a very fast
+      // second swipe), it has already hidden realZone for its own
+      // overlay -- leave that alone; its own endSwipeDrag will restore it.
+      if (!swipeCaptured) realZone.style.visibility = '';
+      if (committed && neighbor) commitDragNeighbor(neighbor);
+    }, SWIPE_SETTLE_MS + 20);
+  }
 
   els.viewSwipeZone.addEventListener('pointerdown', (e) => {
     // A stale true here (a previous swipe whose compensating click never
@@ -2193,46 +2421,51 @@
     swipeCaptured = false;
   });
   els.viewSwipeZone.addEventListener('pointermove', (e) => {
-    if (!swipeStart || e.pointerId !== swipeStart.id || swipeCaptured) return;
+    if (!swipeStart || e.pointerId !== swipeStart.id) return;
     const dx = e.clientX - swipeStart.x;
     const dy = e.clientY - swipeStart.y;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_DEADZONE) return;
-    // Only capture once we know this is an actual drag, not a tap: while
-    // captured, the browser retargets the *compatibility click event* to
-    // this zone too (per the Pointer Events spec), which would stop a
-    // plain tap on the spouse avatar from ever reaching its own click
-    // listener. A real swipe still needs capture, though -- it moves the
-    // pointer beyond this fairly short zone, and without capture pointerup
-    // would fire on whatever element the cursor ends up over instead.
-    swipeCaptured = true;
-    els.viewSwipeZone.setPointerCapture(e.pointerId);
+    if (!swipeCaptured) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_DEADZONE) return;
+      // Only capture once we know this is an actual drag, not a tap: while
+      // captured, the browser retargets the *compatibility click event* to
+      // this zone too (per the Pointer Events spec), which would stop a
+      // plain tap on the spouse avatar from ever reaching its own click
+      // listener. A real swipe still needs capture, though -- it moves the
+      // pointer beyond this fairly short zone, and without capture pointerup
+      // would fire on whatever element the cursor ends up over instead.
+      swipeCaptured = true;
+      els.viewSwipeZone.setPointerCapture(e.pointerId);
+      const axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      dragCaptureSign = (axis === 'x' ? dx : dy) >= 0 ? 1 : -1;
+      startSwipeDrag(axis);
+    }
+    updateSwipeDrag(dragAxis === 'x' ? dx : dy);
   });
   els.viewSwipeZone.addEventListener('pointerup', (e) => {
     if (swipeCaptured && els.viewSwipeZone.hasPointerCapture(e.pointerId)) {
       els.viewSwipeZone.releasePointerCapture(e.pointerId);
     }
-    if (!swipeStart || e.pointerId !== swipeStart.id) return;
+    if (!swipeStart || e.pointerId !== swipeStart.id) { swipeStart = null; return; }
     const dx = e.clientX - swipeStart.x;
     const dy = e.clientY - swipeStart.y;
     swipeStart = null;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD) return;
+    if (!swipeCaptured) return; // a plain tap -- no drag ever started
 
-    suppressNextClick = true;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      const siblingId = siblingNeighborId(currentViewId, dx > 0 ? -1 : 1);
-      if (siblingId) openViewModal(siblingId); // a fresh vertical thread, per spec
-      else suppressNextClick = false; // no-op: nothing actually navigated, so don't eat the next tap
-    } else if (dy < 0) {
-      const before = currentViewId;
-      verticalGoUp();
-      if (currentViewId === before) suppressNextClick = false;
-    } else {
-      const before = currentViewId;
-      verticalGoDown();
-      if (currentViewId === before) suppressNextClick = false;
-    }
+    const delta = dragAxis === 'x' ? dx : dy;
+    // Only commits if the release still agrees with the direction the
+    // gesture captured in -- a hard reversal mid-drag (start right, end up
+    // left of the start point) always springs back rather than navigating
+    // to whatever the *original* direction's neighbor was.
+    const committed = !!dragNeighbor && Math.sign(delta) === dragCaptureSign && Math.abs(delta) >= SWIPE_THRESHOLD;
+    suppressNextClick = committed;
+    endSwipeDrag(committed);
+    swipeCaptured = false;
   });
-  els.viewSwipeZone.addEventListener('pointercancel', () => { swipeStart = null; swipeCaptured = false; });
+  els.viewSwipeZone.addEventListener('pointercancel', () => {
+    if (swipeCaptured) endSwipeDrag(false);
+    swipeStart = null;
+    swipeCaptured = false;
+  });
   // A real swipe's pointerup can land on the spouse-avatar row underneath
   // the pointer's final position -- swallow that one click so it doesn't
   // also fire the avatar's own navigation on top of the swipe's.

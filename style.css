@@ -759,8 +759,50 @@ body {
    browser's own touch scrolling here (rather than on the whole modal body,
    which still needs to scroll normally for long relation lists) is what
    lets a vertical drag mean "go to parent/child" instead of just scrolling. */
-.view-swipe-zone { touch-action: none; cursor: grab; }
+.view-swipe-zone { position: relative; touch-action: none; cursor: grab; }
 .view-swipe-zone:active { cursor: grabbing; }
+
+/* Faint chevrons hinting a swipe works in a given direction -- purely
+   decorative (pointer-events: none), toggled per render by
+   updateSwipeHints() in app.js. Sit just outside the card itself, in the
+   modal-body's own padding gutter, so they never overlap real content. */
+.swipe-hint {
+  position: absolute;
+  display: flex;
+  color: var(--ink-soft);
+  opacity: 0.5;
+  pointer-events: none;
+  width: 16px;
+  height: 16px;
+}
+.swipe-hint[hidden] { display: none; }
+.swipe-hint svg { width: 100%; height: 100%; }
+.swipe-hint-up { top: -13px; left: 50%; transform: translateX(-50%); }
+.swipe-hint-down { bottom: -13px; left: 50%; transform: translateX(-50%); }
+.swipe-hint-left { left: -14px; top: 50%; transform: translateY(-50%); }
+.swipe-hint-right { right: -14px; top: 50%; transform: translateY(-50%); }
+
+/* ---------- Swipe drag-follow overlay ---------- */
+/* While a card swipe is in progress, the real (fixed-id) #viewSwipeZone is
+   hidden and this fixed-position layer takes over: a pixel-perfect clone
+   of the outgoing card plus a lightweight preview of the incoming one
+   (see buildSwipePeekCard), both translated 1:1 with the pointer so the
+   next card visibly slides in as you drag -- see the pointermove handler
+   in app.js. Removed again once the gesture ends (committed or sprung
+   back) and the real card is shown again. */
+.swipe-drag-layer {
+  position: fixed;
+  overflow: hidden;
+  z-index: 150;
+  pointer-events: none;
+}
+.swipe-card-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+.swipe-card-slot.swipe-settling { transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1); }
 
 .view-photo {
   width: 160px;
