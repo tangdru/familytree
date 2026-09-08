@@ -1000,6 +1000,10 @@
   // last focus instead of resetting.
   let centricCenterId = null;
   let centricMetric = 'age'; // 'age' | 'location'
+  // The grid's own {originX, originY, ringIndices, radiusByRing} from the
+  // last render, so the next one can animate the grid smoothly from there
+  // instead of snapping -- see animateCentricGrid.
+  let prevCentricGrid = null;
 
   // The chrono ruler's own year labels, kept separately from the DOM so
   // their vertical spacing can be rescaled on every pan/zoom without a
@@ -3651,15 +3655,20 @@
       const darkColor = readHexColorVar('--centric-outer');
       const stepCount = ringIndices.length; // + 1 implicit "beyond" step at t=1
 
-      // Beyond the outermost ring: covers the whole canvas (rings are
-      // painted over it below), so whatever peeks out past the last
-      // ring's edge is the next step in the sequence, not the bare page
-      // background.
+      // Beyond the outermost ring: covers the whole VIEWPORT, not just the
+      // content's own (often smaller, or differently-shaped) bounding
+      // box, so there's never a strip of plain page background visible
+      // between the tinted square and the viewport edge. Same generous
+      // overscan technique as the chrono ruler's gridlines -- centered on
+      // the origin and sized to survive any pan/zoom up to MIN_ZOOM,
+      // rather than tied to content-space dimensions that don't track the
+      // actual viewport rectangle.
+      const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
       const background = document.createElementNS(svgNS, 'rect');
-      background.setAttribute('x', 0);
-      background.setAttribute('y', 0);
-      background.setAttribute('width', els.content.scrollWidth);
-      background.setAttribute('height', els.content.scrollHeight);
+      background.setAttribute('x', originX - overscan);
+      background.setAttribute('y', originY - overscan);
+      background.setAttribute('width', overscan * 2);
+      background.setAttribute('height', overscan * 2);
       background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
       svg.appendChild(background);
 
@@ -3708,6 +3717,31 @@
     }
   }
 
+  // Eases the grid smoothly from its last drawn state to the new one --
+  // same duration/easing as animateLayoutIn's card transition, so the
+  // rings visually resize in lockstep with cards gliding to their new
+  // spots instead of the grid snapping ahead of them. Only used when the
+  // ring set itself is unchanged (recentering with the same metric);
+  // switching metric entirely changes what the rings even mean, so that
+  // still snaps -- see renderCentric.
+  function animateCentricGrid(from, to) {
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / CARD_MOVE_MS);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const originX = from.originX + (to.originX - from.originX) * eased;
+      const originY = from.originY + (to.originY - from.originY) * eased;
+      const radiusByRing = {};
+      for (const idx of to.ringIndices) {
+        const fromR = from.radiusByRing[idx] ?? 0;
+        radiusByRing[idx] = fromR + (to.radiusByRing[idx] - fromR) * eased;
+      }
+      drawCentricGrid(originX, originY, to.ringIndices, radiusByRing);
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   function renderCentric() {
     const oldPositions = captureCardPositions();
     const hasPeople = Object.keys(data.people).length > 0;
@@ -3725,7 +3759,15 @@
     const centerYear = center.birthDate ? parseInt(center.birthDate.slice(0, 4), 10) : NaN;
     const centerLoc = currentLocationOf(center);
 
+    // Every ring for the current metric always exists (1..4 for age,
+    // 1..3 for location), even ones nobody currently falls into -- so
+    // recentering never makes a ring (and its axis label) pop in or out
+    // of existence, only its radius change. That's what actually reads as
+    // "the same grid, resized," rather than a different set of rings
+    // every time you click someone new.
+    const totalRings = centricMetric === 'location' ? 3 : 4;
     const rings = {}; // ring index -> [person, ...]
+    for (let i = 1; i <= totalRings; i++) rings[i] = [];
     for (const p of Object.values(data.people)) {
       if (p.id === centricCenterId) continue;
       let ring;
@@ -3735,7 +3777,7 @@
         const year = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN;
         ring = centricAgeRing(centerYear, year);
       }
-      (rings[ring] = rings[ring] || []).push(p);
+      rings[ring].push(p);
     }
     // Stable, deterministic order within a ring so angles don't jump
     // around between re-renders (only the ring itself should ever change).
@@ -3797,10 +3839,18 @@
     els.content.style.height = `${originY + maxRadius + CENTRIC_PAD}px`;
 
     // Grid circles + axis labels, one per ring, showing what each ring
-    // actually means for the current metric -- drawn once at the target
-    // radii (not animated/interpolated), so it previews where the cards
-    // in flight are headed rather than trailing behind them.
-    drawCentricGrid(originX, originY, ringIndices, radiusByRing);
+    // actually means for the current metric. The ring set itself is now
+    // always fixed per metric (see totalRings above), so recentering
+    // (same metric) only ever changes radii/origin -- animate smoothly
+    // from the last drawn grid rather than snapping. A metric switch
+    // changes the ring count/meaning entirely, so that still snaps.
+    const newGrid = { originX, originY, ringIndices, radiusByRing };
+    const sameRingSet = prevCentricGrid &&
+      prevCentricGrid.ringIndices.length === ringIndices.length &&
+      prevCentricGrid.ringIndices.every((v, i) => v === ringIndices[i]);
+    if (sameRingSet) animateCentricGrid(prevCentricGrid, newGrid);
+    else drawCentricGrid(originX, originY, ringIndices, radiusByRing);
+    prevCentricGrid = newGrid;
 
     // Cards still glide into their new ring/position like every other
     // view, just with no connector lines to animate alongside them.
