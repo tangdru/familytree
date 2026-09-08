@@ -3607,17 +3607,36 @@
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
 
+  // Reads a --centric-inner/--centric-outer custom property (a plain
+  // #rgb/#rrggbb hex, as authored in style.css) as {r,g,b}, so
+  // drawCentricGrid can compute intermediate step colors in JS -- CSS
+  // alone can't give us a dynamic number of discrete steps.
+  function readHexColorVar(name) {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
+    const hex = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw;
+    const n = parseInt(hex, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function mixColors(a, b, t) {
+    return {
+      r: Math.round(a.r + (b.r - a.r) * t),
+      g: Math.round(a.g + (b.g - a.g) * t),
+      b: Math.round(a.b + (b.b - a.b) * t),
+    };
+  }
+  function rgbCss({ r, g, b }) { return `rgb(${r}, ${g}, ${b})`; }
+
   // One dashed circle plus an axis label per ring, centered on the person
-  // at (originX, originY), backed by a radial-gradient backdrop that's
-  // lightest (--centric-inner) right at the center and darkens toward
-  // --centric-outer at the outermost ring -- a true color gradient rather
-  // than opacity, so it doesn't just fade toward the page background but
-  // actually reads as light-in-the-middle, dark-at-the-edge regardless of
-  // theme (see the --centric-inner/outer tokens in style.css). Reuses
-  // #linesSvg (empty in this view otherwise -- see renderCentric's own
-  // note on why no connector lines are drawn) rather than a separate
-  // element, so it pans/zooms with the cards for free via the same parent
-  // transform.
+  // at (originX, originY), backed by DISTINCT flat colors per ring --
+  // deliberately not a smooth blend -- stepping from --centric-inner
+  // (lightest, the innermost ring) toward --centric-outer, one step per
+  // ring. The area beyond the outermost ring continues the exact same
+  // step sequence one step further (rather than reverting to the plain
+  // page background), so the darkening reads as continuing outward, not
+  // stopping abruptly at the last ring. Reuses #linesSvg (empty in this
+  // view otherwise -- see renderCentric's own note on why no connector
+  // lines are drawn) rather than a separate element, so it pans/zooms
+  // with the cards for free via the same parent transform.
   function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
     const svg = els.svg;
     svg.innerHTML = '';
@@ -3625,40 +3644,40 @@
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+    const svgNS = 'http://www.w3.org/2000/svg';
 
     if (ringIndices.length) {
-      // Reaches past the outermost ring boundary by CENTRIC_PAD -- roughly
-      // where the content's own edge sits, which (since Centric view
-      // always fits itself to the viewport) lands close to the viewport's
-      // own edges too.
-      const outerRadius = Math.max(...ringIndices.map(idx => radiusByRing[idx])) + CENTRIC_PAD;
-      const gradientId = 'centricRadialGradient';
-      const svgNS = 'http://www.w3.org/2000/svg';
+      const lightColor = readHexColorVar('--centric-inner');
+      const darkColor = readHexColorVar('--centric-outer');
+      const stepCount = ringIndices.length; // + 1 implicit "beyond" step at t=1
 
-      const defs = document.createElementNS(svgNS, 'defs');
-      const gradient = document.createElementNS(svgNS, 'radialGradient');
-      gradient.setAttribute('id', gradientId);
-      gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-      gradient.setAttribute('cx', originX);
-      gradient.setAttribute('cy', originY);
-      gradient.setAttribute('r', outerRadius);
-      const stopInner = document.createElementNS(svgNS, 'stop');
-      stopInner.setAttribute('offset', '0%');
-      stopInner.setAttribute('stop-color', 'var(--centric-inner)');
-      const stopOuter = document.createElementNS(svgNS, 'stop');
-      stopOuter.setAttribute('offset', '100%');
-      stopOuter.setAttribute('stop-color', 'var(--centric-outer)');
-      gradient.appendChild(stopInner);
-      gradient.appendChild(stopOuter);
-      defs.appendChild(gradient);
-      svg.appendChild(defs);
+      // Beyond the outermost ring: covers the whole canvas (rings are
+      // painted over it below), so whatever peeks out past the last
+      // ring's edge is the next step in the sequence, not the bare page
+      // background.
+      const background = document.createElementNS(svgNS, 'rect');
+      background.setAttribute('x', 0);
+      background.setAttribute('y', 0);
+      background.setAttribute('width', els.content.scrollWidth);
+      background.setAttribute('height', els.content.scrollHeight);
+      background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
+      svg.appendChild(background);
 
-      const backdrop = document.createElementNS(svgNS, 'circle');
-      backdrop.setAttribute('cx', originX);
-      backdrop.setAttribute('cy', originY);
-      backdrop.setAttribute('r', outerRadius);
-      backdrop.setAttribute('fill', `url(#${gradientId})`);
-      svg.appendChild(backdrop);
+      // Largest ring first, smallest last, so each smaller disc's flat
+      // color paints over the larger one (and the background) within its
+      // own radius -- a clean band per ring, not a blend of everything
+      // inside it.
+      for (let p = ringIndices.length - 1; p >= 0; p--) {
+        const idx = ringIndices[p];
+        const t = p / stepCount;
+        const disc = document.createElementNS(svgNS, 'circle');
+        disc.setAttribute('cx', originX);
+        disc.setAttribute('cy', originY);
+        disc.setAttribute('r', radiusByRing[idx]);
+        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, t)));
+        disc.setAttribute('stroke', 'none');
+        svg.appendChild(disc);
+      }
     }
 
     for (const idx of ringIndices) {
