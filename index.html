@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908n">
+<link rel="stylesheet" href="style.css?v=20260908o">
 </head>
 <body>
   <header class="toolbar">
@@ -254,6 +254,21 @@
       </div>
       <div class="modal-body">
         <div class="view-swipe-zone" id="viewSwipeZone">
+          <!-- Faint chevrons hinting a swipe works in that direction --
+               each toggled on/off per render by updateSwipeHints() in
+               app.js, based on whether there's actually somewhere to go. -->
+          <span class="swipe-hint swipe-hint-up" id="swipeHintUp" hidden aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          </span>
+          <span class="swipe-hint swipe-hint-down" id="swipeHintDown" hidden aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </span>
+          <span class="swipe-hint swipe-hint-left" id="swipeHintLeft" hidden aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </span>
+          <span class="swipe-hint swipe-hint-right" id="swipeHintRight" hidden aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </span>
           <div class="view-person" id="viewPersonSingle">
             <div class="view-photo" id="viewPhoto">
               <span id="viewPhotoPlaceholder">
@@ -315,7 +330,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=20260908n"></script>
-  <script src="app.js?v=20260908n"></script>
+  <script src="config.js?v=20260908o"></script>
+  <script src="app.js?v=20260908o"></script>
 </body>
 </html>
