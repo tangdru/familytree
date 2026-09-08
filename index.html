@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908w">
+<link rel="stylesheet" href="style.css?v=20260908x">
 </head>
 <body>
   <header class="toolbar">
@@ -251,7 +251,7 @@
       <div class="modal-header view-modal-header">
         <button id="viewCloseModalBtn" type="button" class="icon-btn" aria-label="Close">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body view-modal-body">
         <div class="view-swipe-zone" id="viewSwipeZone">
           <!-- Faint chevrons hinting a swipe works in that direction --
                each toggled on/off per render by updateSwipeHints() in
@@ -315,11 +315,15 @@
           <h4>Previous location(s)</h4>
           <ul class="view-relation-list" id="viewLocationsList"></ul>
         </div>
-        <div class="modal-footer">
-          <div class="spacer"></div>
-          <button type="button" id="viewCloseBtn" class="btn">Close</button>
-          <button type="button" id="viewEditBtn" class="btn btn-primary">Edit</button>
-        </div>
+      </div>
+      <!-- Sibling of .modal-body (not nested inside it) so it stays pinned
+           at the bottom of the card's now-fixed height, per #personViewCard
+           below, instead of scrolling away with the content or floating
+           right after it on a short card. -->
+      <div class="modal-footer view-modal-footer">
+        <div class="spacer"></div>
+        <button type="button" id="viewCloseBtn" class="btn">Close</button>
+        <button type="button" id="viewEditBtn" class="btn btn-primary">Edit</button>
       </div>
     </div>
   </div>
@@ -329,7 +333,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=20260908w"></script>
-  <script src="app.js?v=20260908w"></script>
+  <script src="config.js?v=20260908x"></script>
+  <script src="app.js?v=20260908x"></script>
 </body>
 </html>
