@@ -1083,7 +1083,11 @@
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
     renderTree();
-    if (viewMode === 'zodiac' || viewMode === 'centric') {
+    if (viewMode === 'zodiac') {
+      // Fit the columns' width only -- see computeFitTransform's own note
+      // on why height is deliberately left out here.
+      animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'centric') {
       // Zodiac's columns and Centric's rings are usually a completely
       // different size/shape than whatever was framed before switching
       // into them, so (unlike Traditional/Chronological) always reframe
@@ -1105,16 +1109,31 @@
 
   // Shared by fitToView() (instant, used on initial load) and
   // animateFitToView() (smooth, used by the on-demand fit button) so both
-  // always agree on what "fit" means.
-  function computeFitTransform() {
+  // always agree on what "fit" means. horizontalOnly fits the content's
+  // width only, ignoring height entirely -- used by Zodiac view, where the
+  // columns (a fixed, meaningful count) are what you actually want framed
+  // at a glance, while a tall column's card count is open-ended and fine
+  // to scroll/pan through rather than shrinking everything to fit it too.
+  function computeFitTransform(options) {
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
     const cw = els.content.offsetWidth;
     const ch = els.content.offsetHeight;
     if (!vw || !vh || !cw || !ch) return null;
     const padding = 24;
-    const scale = Math.max(MIN_ZOOM, Math.min((vw - padding * 2) / cw, (vh - padding * 2) / ch, 1));
-    return { scale, x: (vw - cw * scale) / 2, y: (vh - ch * scale) / 2 };
+    const horizontalOnly = options && options.horizontalOnly;
+    const scaleX = (vw - padding * 2) / cw;
+    const scaleY = (vh - padding * 2) / ch;
+    const scale = Math.max(MIN_ZOOM, Math.min(horizontalOnly ? scaleX : Math.min(scaleX, scaleY), 1));
+    return {
+      scale,
+      x: (vw - cw * scale) / 2,
+      // Vertically centering would push a much-taller-than-tall-fits
+      // column's top (and its header) up off-screen -- top-align instead
+      // so headers and each column's oldest (topmost) card are always
+      // the first thing visible, with the rest reachable by panning down.
+      y: horizontalOnly ? padding : (vh - ch * scale) / 2,
+    };
   }
 
   // Zoom/pan so the whole tree is visible, centered in the viewport. Called
@@ -1135,8 +1154,8 @@
   // benefits from the same "settle, don't jump" feel as the rest of the
   // tree's animations.
   const FIT_VIEW_MS = 380; // matches CARD_MOVE_MS's transition duration
-  function animateFitToView() {
-    const target = computeFitTransform();
+  function animateFitToView(options) {
+    const target = computeFitTransform(options);
     if (!target) return;
     const start = { x: view.x, y: view.y, scale: view.scale };
     const startTime = performance.now();
@@ -1151,7 +1170,9 @@
     }
     requestAnimationFrame(step);
   }
-  els.fitViewBtn.addEventListener('click', animateFitToView);
+  els.fitViewBtn.addEventListener('click', () => {
+    animateFitToView(viewMode === 'zodiac' ? { horizontalOnly: true } : undefined);
+  });
 
   els.centricMetricToggle.addEventListener('click', (e) => {
     const btn = e.target.closest('.centric-metric-btn');
