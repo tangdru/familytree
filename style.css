@@ -776,7 +776,10 @@ body {
    the clones the instant that happened, which is exactly what let their
    heights diverge back to their natural content size mid-swipe. */
 .view-modal { max-width: 420px; height: min(800px, 88vh); }
-.view-modal-body { flex: 1; min-height: 0; }
+/* A bit more top padding than the default .modal-body -- with no header
+   bar above it anymore, the card's top edge needs its own breathing room
+   instead of relying on a header to separate it from the swipe zone. */
+.view-modal-body { flex: 1; min-height: 0; padding-top: 22px; }
 /* Sibling of .view-modal-body now (see index.html), not nested inside
    it, so it stays pinned to the card's bottom edge instead of scrolling
    away with the content or floating right after it on a short card. It
@@ -786,17 +789,6 @@ body {
   padding: 6px 20px 16px;
   border-top: 1px solid var(--card-border);
 }
-/* No title text -- the person's own name is already the first thing in
-   the card -- so just the close button remains, right-aligned, in a
-   shorter bar than the Add/Edit modal's header needs for its title.
-   Styled by its own class (not "#personViewModal .modal-header") because
-   the swipe-drag overlay clones #personViewCard out to document.body for
-   the gesture's duration (see startSwipeDrag) -- a rule keyed to an
-   ancestor id would stop matching the moment the clone left that
-   ancestor, which is exactly what made the header/close-button briefly
-   revert to its default (taller, space-between) look mid-swipe. */
-.view-modal-header { justify-content: flex-end; padding: 8px 20px; }
-
 /* The photo/name/dates header doubles as a swipe pad -- disabling the
    browser's own touch scrolling here (rather than on the whole modal body,
    which still needs to scroll normally for long relation lists) is what
@@ -901,7 +893,11 @@ body {
   display: flex;
   justify-content: center;
   gap: 20px;
-  margin: 0 auto 8px;
+  /* Top margin offsets the couple photo (96px) by half the difference
+     from the single view's photo (160px) -- (160-96)/2 = 32px -- so both
+     land on the same horizontal center line instead of both starting flush
+     at the top of the swipe zone with the smaller one appearing higher. */
+  margin: 32px auto 8px;
 }
 .view-couple[hidden] { display: none; }
 .view-couple-member {

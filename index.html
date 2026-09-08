@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908y">
+<link rel="stylesheet" href="style.css?v=20260908z">
 </head>
 <body>
   <header class="toolbar">
@@ -248,9 +248,9 @@
   <!-- Person View (read-only detail) Modal -->
   <div id="personViewModal" class="modal-overlay" hidden>
     <div class="modal view-modal" id="personViewCard">
-      <div class="modal-header view-modal-header">
-        <button id="viewCloseModalBtn" type="button" class="icon-btn" aria-label="Close">✕</button>
-      </div>
+      <!-- No header bar -- the footer's own Close button (always visible,
+           pinned to the card's bottom edge) already closes the card, so a
+           second close control up top would be pure duplication. -->
       <div class="modal-body view-modal-body">
         <div class="view-swipe-zone" id="viewSwipeZone">
           <!-- Faint chevrons hinting a swipe works in that direction --
@@ -333,7 +333,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=20260908y"></script>
-  <script src="app.js?v=20260908y"></script>
+  <script src="config.js?v=20260908z"></script>
+  <script src="app.js?v=20260908z"></script>
 </body>
 </html>
