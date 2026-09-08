@@ -278,6 +278,42 @@ body {
   white-space: nowrap;
 }
 
+.centric-metric-toggle {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  padding: 3px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+.centric-metric-toggle.visible { opacity: 1; pointer-events: auto; }
+.centric-metric-btn {
+  border: none;
+  background: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.centric-metric-btn:hover:not(.active) { background: #f1ead9; }
+.centric-metric-btn.active { background: var(--accent); color: #fff; }
+
+.centric-center-card {
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(60,45,20,0.28);
+}
+
 .fit-view-btn {
   position: absolute;
   right: 16px;

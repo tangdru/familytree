@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609091">
+<link rel="stylesheet" href="style.css?v=202609093">
 </head>
 <body>
   <header class="toolbar">
@@ -23,6 +23,7 @@
       <option value="traditional">Traditional Tree</option>
       <option value="chronological">Chronological Tree</option>
       <option value="zodiac">Zodiac Tree</option>
+      <option value="centric">Centric View</option>
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
     <h1 class="toolbar-title">Family Tree</h1>
@@ -40,6 +41,10 @@
     <p id="emptyState" class="empty-state" hidden>
       No one in the tree yet. Click <strong>+ Add Person</strong> to start building your family tree.
     </p>
+    <div id="centricMetricToggle" class="centric-metric-toggle">
+      <button type="button" class="centric-metric-btn active" data-metric="age">Age</button>
+      <button type="button" class="centric-metric-btn" data-metric="location">Location</button>
+    </div>
     <button type="button" id="fitViewBtn" class="fit-view-btn" aria-label="Fit to view" title="Fit to view">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
@@ -342,7 +347,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609091"></script>
-  <script src="app.js?v=202609091"></script>
+  <script src="config.js?v=202609093"></script>
+  <script src="app.js?v=202609093"></script>
 </body>
 </html>
