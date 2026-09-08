@@ -753,6 +753,15 @@ body {
 .crop-modal .hint { display: block; text-align: center; margin-bottom: 4px; }
 
 /* ---------- Person view (read-only detail) modal ---------- */
+/* Top-aligned rather than the .modal-overlay default of vertically
+   centered: a single card (birth location/zodiac/contacts/etc.) and a
+   couple card are rarely the same height, and centering would put their
+   top edges -- header, photo, swipe zone -- at a different Y each time,
+   so swiping between them would visibly jerk the whole card up or down
+   even though nothing about the gesture itself changed. Fixing the top
+   edge in place means only the *bottom* of the card moves with content
+   height, never the part you're actually looking at and dragging. */
+#personViewModal { align-items: flex-start; }
 .view-modal { max-width: 420px; }
 
 /* The photo/name/dates header doubles as a swipe pad -- disabling the
