@@ -1723,17 +1723,28 @@
     return age >= 0 ? age : null;
   }
 
+  function firstNameOf(person) {
+    const trimmed = (person.name || '').trim();
+    return trimmed ? trimmed.split(/\s+/)[0] : '(unnamed)';
+  }
+
   // onNavigate defaults to a full reset (openViewModal); the Parents section
   // passes goToParents instead, so following a parent link extends the
   // vertical thread (and lands on a couple card) rather than discarding it.
-  function buildRelationRow(personId, onNavigate) {
+  // useFirstName trims the row to just a first name (full name in the title
+  // attribute instead) -- used for Siblings/Children, which can run long
+  // and go two-column (see .view-relation-grid), unlike Parents/Spouses,
+  // which are only ever one or two people and stay full-name.
+  function buildRelationRow(personId, onNavigate, useFirstName) {
     const p = data.people[personId];
     if (!p) return null;
     const li = document.createElement('li');
     const link = document.createElement('button');
     link.type = 'button';
     link.className = 'view-relation-link';
-    link.textContent = p.name || '(unnamed)';
+    const fullName = p.name || '(unnamed)';
+    link.textContent = useFirstName ? firstNameOf(p) : fullName;
+    if (useFirstName) link.title = fullName;
     link.addEventListener('click', () => (onNavigate || openViewModal)(personId));
     const age = computeAge(p);
     const ageSpan = document.createElement('span');
@@ -1766,7 +1777,7 @@
     sectionEl.hidden = false;
   }
 
-  function fillRelationSection(sectionEl, listEl, ids, onNavigate) {
+  function fillRelationSection(sectionEl, listEl, ids, onNavigate, useFirstName) {
     listEl.innerHTML = '';
     const valid = ids.filter(id => data.people[id]);
     if (!valid.length) { sectionEl.hidden = true; return; }
@@ -1774,7 +1785,7 @@
       .slice()
       .sort((a, b) => compareByBirth(data.people[a], data.people[b]))
       .forEach(id => {
-        const row = buildRelationRow(id, onNavigate);
+        const row = buildRelationRow(id, onNavigate, useFirstName);
         if (row) listEl.appendChild(row);
       });
     sectionEl.hidden = false;
@@ -2021,7 +2032,7 @@
       if (id === selectedId) return false;
       return data.people[id].parents.some(pid => p.parents.includes(pid));
     });
-    fillRelationSection(els.viewSiblingsSection, els.viewSiblingsList, siblingIds);
+    fillRelationSection(els.viewSiblingsSection, els.viewSiblingsList, siblingIds, undefined, true);
 
     // A couple card already shows both partners directly -- a Spouses list
     // repeating "the other one" underneath adds nothing.
@@ -2032,7 +2043,7 @@
     }
 
     const childIds = Object.keys(data.people).filter(id => ids.some(pid => data.people[id].parents.includes(pid)));
-    fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds);
+    fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds, undefined, true);
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
 

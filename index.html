@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908s">
+<link rel="stylesheet" href="style.css?v=20260908t">
 </head>
 <body>
   <header class="toolbar">
@@ -301,7 +301,7 @@
         </div>
         <div class="view-section" id="viewSiblingsSection" hidden>
           <h4>Siblings</h4>
-          <ul class="view-relation-list" id="viewSiblingsList"></ul>
+          <ul class="view-relation-list view-relation-grid" id="viewSiblingsList"></ul>
         </div>
         <div class="view-section" id="viewSpousesSection" hidden>
           <h4>Spouses</h4>
@@ -309,7 +309,7 @@
         </div>
         <div class="view-section" id="viewChildrenSection" hidden>
           <h4>Children</h4>
-          <ul class="view-relation-list" id="viewChildrenList"></ul>
+          <ul class="view-relation-list view-relation-grid" id="viewChildrenList"></ul>
         </div>
         <div class="view-section" id="viewLocationsSection" hidden>
           <h4>Previous location(s)</h4>
@@ -329,7 +329,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=20260908s"></script>
-  <script src="app.js?v=20260908s"></script>
+  <script src="config.js?v=20260908t"></script>
+  <script src="app.js?v=20260908t"></script>
 </body>
 </html>
