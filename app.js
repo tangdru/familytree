@@ -2253,7 +2253,9 @@
   let dragSign = 0;            // +1/-1: which side the incoming card starts off-screen on (always -dragCaptureSign)
   let dragNeighbor = null;     // { ids, selected, kind: 'sibling' | 'child' | 'parent' }, or null for a dead end
   let dragDim = 0;             // outgoing card's width (axis x) or height (axis y), px
-  let dragStep = 0;            // dragDim plus the card's own margin to the screen edge -- see startSwipeDrag
+  let dragGap = 0;             // the card's own margin to the screen edge -- see startSwipeDrag
+  let dragOutFar = 0;          // outgoing's fully-off-screen offset: dragDim + dragGap
+  let dragInStart = 0;         // incoming's starting (fully-off-screen) offset -- see startSwipeDrag
   let dragLayer = null;
   let outgoingEl = null;
   let incomingEl = null;
@@ -2311,12 +2313,12 @@
     const cardEl = els.viewModalCard;
     const rect = cardEl.getBoundingClientRect();
     dragDim = axis === 'x' ? rect.width : rect.height;
-    // The incoming card starts (and the outgoing one ends up) a full step
-    // away -- not just one card-width, but that plus the same margin the
-    // card already keeps from the screen edge at rest (rect.left/top, since
-    // .modal-overlay centers it) -- so the two visibly separate by a gap
-    // instead of sliding past each other edge-to-edge.
-    dragStep = dragDim + (axis === 'x' ? rect.left : rect.top);
+    // The same margin the card already keeps from the screen edge at rest
+    // (rect.left/top, since .modal-overlay centers it) -- kept as a visible
+    // gap between the outgoing and incoming cards instead of them sliding
+    // past each other edge-to-edge.
+    dragGap = axis === 'x' ? rect.left : rect.top;
+    dragOutFar = dragDim + dragGap;
     const prop = axis === 'x' ? 'translateX' : 'translateY';
 
     dragLayer = document.createElement('div');
@@ -2339,8 +2341,21 @@
       stripIds(incomingEl);
       renderPersonView(current.ids, current.selected); // restore before the browser ever paints the swap
       incomingEl.classList.add('swipe-card-slot', 'swipe-card-incoming');
-      incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
       dragLayer.appendChild(incomingEl);
+      // Single/couple cards are rarely the same size (contacts, location
+      // history, etc. all add height) -- for axis 'y' especially, using
+      // the OUTGOING card's own height to place the incoming one produced
+      // a wildly inconsistent-looking gap whenever the two heights
+      // differed. Entering from the "positive" side (dragSign > 0), the
+      // reference point is the outgoing card's own far edge (dragDim), so
+      // that side is unaffected by incoming's size; entering from the
+      // "negative" side, it's incoming's *own* far edge that needs to
+      // land just short of the outgoing card's near edge (0), which
+      // depends on incoming's own height -- hence measuring it fresh here
+      // rather than reusing dragDim for both sides.
+      const incomingDim = axis === 'x' ? incomingEl.getBoundingClientRect().width : incomingEl.getBoundingClientRect().height;
+      dragInStart = dragSign > 0 ? dragOutFar : -(incomingDim + dragGap);
+      incomingEl.style.transform = `${prop}(${dragInStart}px)`;
     } else {
       incomingEl = null;
     }
@@ -2360,7 +2375,7 @@
     }
     const clamped = Math.max(-dragDim, Math.min(dragDim, delta));
     outgoingEl.style.transform = `${prop}(${clamped}px)`;
-    incomingEl.style.transform = `${prop}(${dragSign * dragStep + clamped}px)`;
+    incomingEl.style.transform = `${prop}(${dragInStart + clamped}px)`;
   }
 
   // Finishes the gesture: animates the rest of the way to either a full
@@ -2373,11 +2388,11 @@
     if (incomingEl) incomingEl.classList.add('swipe-settling');
 
     if (committed) {
-      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragStep}px)`;
+      outgoingEl.style.transform = `${prop}(${dragCaptureSign * dragOutFar}px)`;
       if (incomingEl) incomingEl.style.transform = `${prop}(0px)`;
     } else {
       outgoingEl.style.transform = `${prop}(0px)`;
-      if (incomingEl) incomingEl.style.transform = `${prop}(${dragSign * dragStep}px)`;
+      if (incomingEl) incomingEl.style.transform = `${prop}(${dragInStart}px)`;
     }
 
     const neighbor = dragNeighbor;
