@@ -319,7 +319,6 @@
 
     viewModal: document.getElementById('personViewModal'),
     viewModalCard: document.getElementById('personViewCard'),
-    viewCloseModalBtn: document.getElementById('viewCloseModalBtn'),
     viewCloseBtn: document.getElementById('viewCloseBtn'),
     viewEditBtn: document.getElementById('viewEditBtn'),
     viewSwipeZone: document.getElementById('viewSwipeZone'),
@@ -2059,7 +2058,6 @@
     resetPageScroll();
   }
 
-  els.viewCloseModalBtn.addEventListener('click', closeViewModal);
   els.viewCloseBtn.addEventListener('click', closeViewModal);
   els.viewModal.addEventListener('click', (e) => { if (e.target === els.viewModal) closeViewModal(); });
   els.viewEditBtn.addEventListener('click', () => {
