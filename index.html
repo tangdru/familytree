@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=20260908j">
+<link rel="stylesheet" href="style.css?v=20260908l">
 </head>
 <body>
   <header class="toolbar">
@@ -273,6 +273,9 @@
           <!-- A couple's shared card: two equal-size member blocks, built and
                populated in JS by buildCoupleMember() -- see renderPersonView(). -->
           <div class="view-couple" id="viewCouple" hidden></div>
+          <!-- One column of contact chips per partner, populated in JS by
+               renderPersonView() -- see viewCoupleContacts. -->
+          <div class="view-couple-contacts" id="viewCoupleContacts" hidden></div>
           <div class="view-spouse-avatars" id="viewSpouseAvatars" hidden></div>
           <p class="view-location" id="viewLocation" hidden></p>
         </div>
@@ -312,7 +315,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=20260908j"></script>
-  <script src="app.js?v=20260908j"></script>
+  <script src="config.js?v=20260908l"></script>
+  <script src="app.js?v=20260908l"></script>
 </body>
 </html>
