@@ -3608,15 +3608,16 @@
   }
 
   // One dashed circle plus an axis label per ring, centered on the person
-  // at (originX, originY). Reuses #linesSvg (empty in this view otherwise
-  // -- see renderCentric's own note on why no connector lines are drawn)
-  // rather than a separate element, so it pans/zooms with the cards for
-  // free via the same parent transform.
-  // Top opacity for the outermost ring's filled band -- the innermost
-  // ring fades to fully transparent so the tint never sits directly under
-  // the center person's own card.
-  const CENTRIC_BAND_MAX_OPACITY = 0.4;
-
+  // at (originX, originY), backed by a radial-gradient backdrop that's
+  // lightest (--centric-inner) right at the center and darkens toward
+  // --centric-outer at the outermost ring -- a true color gradient rather
+  // than opacity, so it doesn't just fade toward the page background but
+  // actually reads as light-in-the-middle, dark-at-the-edge regardless of
+  // theme (see the --centric-inner/outer tokens in style.css). Reuses
+  // #linesSvg (empty in this view otherwise -- see renderCentric's own
+  // note on why no connector lines are drawn) rather than a separate
+  // element, so it pans/zooms with the cards for free via the same parent
+  // transform.
   function drawCentricGrid(originX, originY, ringIndices, radiusByRing) {
     const svg = els.svg;
     svg.innerHTML = '';
@@ -3625,28 +3626,40 @@
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
 
-    // Filled bands, largest ring to smallest: each smaller circle's own
-    // fill is painted on top and masks the larger one within its radius,
-    // so the visible color in a given ring's own band is exactly that
-    // ring's fill-opacity, not a stack of every ring inside it. Opacity
-    // ramps from 0 at the innermost ring up to CENTRIC_BAND_MAX_OPACITY at
-    // the outermost, so the zones read clearly at a glance without
-    // fighting the cards for attention.
-    const descByRadius = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
-    descByRadius.forEach((idx, i) => {
-      const posFromCenter = descByRadius.length - 1 - i; // 0 = innermost ring
-      const opacity = descByRadius.length > 1
-        ? (posFromCenter / (descByRadius.length - 1)) * CENTRIC_BAND_MAX_OPACITY
-        : CENTRIC_BAND_MAX_OPACITY;
-      const band = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      band.setAttribute('cx', originX);
-      band.setAttribute('cy', originY);
-      band.setAttribute('r', radiusByRing[idx]);
-      band.setAttribute('fill', 'var(--accent)');
-      band.setAttribute('fill-opacity', opacity.toFixed(3));
-      band.setAttribute('stroke', 'none');
-      svg.appendChild(band);
-    });
+    if (ringIndices.length) {
+      // Reaches past the outermost ring boundary by CENTRIC_PAD -- roughly
+      // where the content's own edge sits, which (since Centric view
+      // always fits itself to the viewport) lands close to the viewport's
+      // own edges too.
+      const outerRadius = Math.max(...ringIndices.map(idx => radiusByRing[idx])) + CENTRIC_PAD;
+      const gradientId = 'centricRadialGradient';
+      const svgNS = 'http://www.w3.org/2000/svg';
+
+      const defs = document.createElementNS(svgNS, 'defs');
+      const gradient = document.createElementNS(svgNS, 'radialGradient');
+      gradient.setAttribute('id', gradientId);
+      gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
+      gradient.setAttribute('cx', originX);
+      gradient.setAttribute('cy', originY);
+      gradient.setAttribute('r', outerRadius);
+      const stopInner = document.createElementNS(svgNS, 'stop');
+      stopInner.setAttribute('offset', '0%');
+      stopInner.setAttribute('stop-color', 'var(--centric-inner)');
+      const stopOuter = document.createElementNS(svgNS, 'stop');
+      stopOuter.setAttribute('offset', '100%');
+      stopOuter.setAttribute('stop-color', 'var(--centric-outer)');
+      gradient.appendChild(stopInner);
+      gradient.appendChild(stopOuter);
+      defs.appendChild(gradient);
+      svg.appendChild(defs);
+
+      const backdrop = document.createElementNS(svgNS, 'circle');
+      backdrop.setAttribute('cx', originX);
+      backdrop.setAttribute('cy', originY);
+      backdrop.setAttribute('r', outerRadius);
+      backdrop.setAttribute('fill', `url(#${gradientId})`);
+      svg.appendChild(backdrop);
+    }
 
     for (const idx of ringIndices) {
       const radius = radiusByRing[idx];

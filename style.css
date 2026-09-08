@@ -16,6 +16,12 @@
   --danger: #b23a3a;
   --shadow: 0 2px 6px rgba(60, 45, 20, 0.15);
   --radius: 10px;
+  /* Centric view's radial backdrop (see drawCentricGrid in app.js) --
+     dedicated tokens rather than reusing --ink/--surface, since those
+     flip which one reads as "light" between themes while this gradient
+     always needs its inner stop to be the lighter of the two. */
+  --centric-inner: #fdfbf7;
+  --centric-outer: #3d2a1a;
 }
 
 * { box-sizing: border-box; }
@@ -1166,6 +1172,8 @@ body {
     --ink-soft: #b3a892;
     --card-border: #4a4131;
     --shadow: 0 2px 8px rgba(0,0,0,0.4);
+    --centric-inner: #453a2c;
+    --centric-outer: #000000;
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
