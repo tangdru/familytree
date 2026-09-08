@@ -775,7 +775,7 @@ body {
    bug this same overlay caused before) would silently stop applying to
    the clones the instant that happened, which is exactly what let their
    heights diverge back to their natural content size mid-swipe. */
-.view-modal { max-width: 420px; height: min(700px, 80vh); }
+.view-modal { max-width: 420px; height: min(800px, 88vh); }
 .view-modal-body { flex: 1; min-height: 0; }
 /* Sibling of .view-modal-body now (see index.html), not nested inside
    it, so it stays pinned to the card's bottom edge instead of scrolling
