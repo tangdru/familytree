@@ -779,7 +779,7 @@ body {
 /* A bit more top padding than the default .modal-body -- with no header
    bar above it anymore, the card's top edge needs its own breathing room
    instead of relying on a header to separate it from the swipe zone. */
-.view-modal-body { flex: 1; min-height: 0; padding-top: 22px; }
+.view-modal-body { flex: 1; min-height: 0; padding-top: 40px; }
 /* Sibling of .view-modal-body now (see index.html), not nested inside
    it, so it stays pinned to the card's bottom edge instead of scrolling
    away with the content or floating right after it on a short card. It
