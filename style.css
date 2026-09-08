@@ -19,11 +19,13 @@
   /* Centric view's stepped ring colors (see drawCentricGrid in app.js) --
      dedicated tokens rather than reusing --ink/--surface, since those
      flip which one reads as "light" between themes while this always
-     needs --centric-inner to be the lighter of the two. Grayscale (equal
-     r/g/b) and a fairly narrow range, so each ring's step reads as a
-     subtle shade change rather than a bold color jump. */
-  --centric-inner: #ededed;
-  --centric-outer: #8c8c8c;
+     needs --centric-inner to be the lighter of the two. Inner matches
+     --bg exactly (the same beige used for the page itself) so the
+     center ring reads as an extension of the app's own background;
+     outer is a light grey, kept close to the inner value so each ring's
+     step is a subtle shade change rather than a bold color jump. */
+  --centric-inner: #f4f1ea;
+  --centric-outer: #c9c9c9;
 }
 
 * { box-sizing: border-box; }

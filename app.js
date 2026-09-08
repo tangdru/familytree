@@ -3572,6 +3572,7 @@
   const CENTRIC_RING_GAP = 200; // minimum radial gap between successive rings
   const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
   const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
+  const MAX_CENTRIC_RINGS = 4; // the most any metric uses (Age) -- see the fixed color-step comment in drawCentricGrid
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -3653,7 +3654,6 @@
     if (ringIndices.length) {
       const lightColor = readHexColorVar('--centric-inner');
       const darkColor = readHexColorVar('--centric-outer');
-      const stepCount = ringIndices.length; // + 1 implicit "beyond" step at t=1
 
       // Beyond the outermost ring: covers the whole VIEWPORT, not just the
       // content's own (often smaller, or differently-shaped) bounding
@@ -3675,10 +3675,18 @@
       // Largest ring first, smallest last, so each smaller disc's flat
       // color paints over the larger one (and the background) within its
       // own radius -- a clean band per ring, not a blend of everything
-      // inside it.
-      for (let p = ringIndices.length - 1; p >= 0; p--) {
-        const idx = ringIndices[p];
-        const t = p / stepCount;
+      // inside it. Sorted by actual (possibly mid-animation) radius,
+      // never by ring index -- during a transition an "exiting" ring's
+      // radius can temporarily exceed an "entering" one's, or vice versa.
+      const byRadiusDesc = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
+      for (const idx of byRadiusDesc) {
+        // A fixed step size (idx / (MAX_CENTRIC_RINGS + 1)) rather than
+        // one based on how many rings currently exist, so a ring that's
+        // present in both metrics (e.g. ring 1) is always the exact same
+        // color regardless of which metric is active -- only rings that
+        // genuinely don't exist for a metric (Age's ring 4, absent from
+        // Location) are missing, not recolored.
+        const t = idx / (MAX_CENTRIC_RINGS + 1);
         const disc = document.createElementNS(svgNS, 'circle');
         disc.setAttribute('cx', originX);
         disc.setAttribute('cy', originY);
@@ -3717,27 +3725,65 @@
     }
   }
 
-  // Eases the grid smoothly from its last drawn state to the new one --
-  // same duration/easing as animateLayoutIn's card transition, so the
-  // rings visually resize in lockstep with cards gliding to their new
-  // spots instead of the grid snapping ahead of them. Only used when the
-  // ring set itself is unchanged (recentering with the same metric);
-  // switching metric entirely changes what the rings even mean, so that
-  // still snaps -- see renderCentric.
+  // Eases the grid from its last drawn state to the new one -- same
+  // duration/easing as animateLayoutIn's card transition. The origin
+  // itself is NEVER interpolated (always drawn at the new/final origin
+  // from the very first frame): the origin only moves because the
+  // content's own bounding box resized, and the outer pan/zoom
+  // (animateFitToView) is already re-framing that in screen-space on its
+  // own independent rAF loop -- blending the grid's content-space origin
+  // on top of that too made the whole thing appear to slide sideways
+  // rather than resize in place, since the two animations don't track
+  // each other frame-for-frame.
+  //
+  // Each ring instead animates radius only:
+  // - A ring present both before and after (recentering; or a ring index
+  //   that exists in both metrics, e.g. ring 1) eases from its old radius
+  //   to its new one.
+  // - A ring that's newly appearing (didn't exist before -- either the
+  //   very first render, or switching to a metric with more rings) starts
+  //   from a huge offscreen radius and shrinks in.
+  // - A ring that's disappearing (switching to a metric with fewer rings)
+  //   grows out to that same huge offscreen radius rather than just
+  //   vanishing.
+  // Colors come from drawCentricGrid's fixed idx-based step, so a ring
+  // that persists across the change never recolors -- only its presence
+  // (and radius) changes.
   function animateCentricGrid(from, to) {
+    const allIndices = Array.from(new Set([...(from ? from.ringIndices : []), ...to.ringIndices]));
+    // Comfortably past the outermost real ring on either side of this
+    // transition -- enough to read as "off the visible canvas" once
+    // Centric view's own always-fit reframes around the new layout.
+    // Deliberately NOT the viewport/MIN_ZOOM overscan used elsewhere
+    // (chrono gridlines, this grid's own backdrop rect): those are plain
+    // fills, cheap at any size, but this radius belongs to a DASHED
+    // stroke circle too -- a dash pattern's cost scales with
+    // circumference, and a circle tens of thousands of units across (what
+    // that overscan produces) forces the browser to compute tens of
+    // thousands of dash segments per frame, blocking the main thread for
+    // over a second. Scaling to the content's own size instead keeps it
+    // cheap while still being well outside the frame.
+    const priorMax = from ? Math.max(0, ...Object.values(from.radiusByRing)) : 0;
+    const nextMax = Math.max(0, ...Object.values(to.radiusByRing));
+    const offscreenRadius = Math.max(priorMax, nextMax) * 2 + 1000;
+    const startRadius = {}, endRadius = {};
+    for (const idx of allIndices) {
+      startRadius[idx] = (from && from.radiusByRing[idx]) ?? offscreenRadius;
+      endRadius[idx] = to.radiusByRing[idx] ?? offscreenRadius;
+    }
     const startTime = performance.now();
     function step(now) {
       const t = Math.min(1, (now - startTime) / CARD_MOVE_MS);
       const eased = 1 - Math.pow(1 - t, 3);
-      const originX = from.originX + (to.originX - from.originX) * eased;
-      const originY = from.originY + (to.originY - from.originY) * eased;
       const radiusByRing = {};
-      for (const idx of to.ringIndices) {
-        const fromR = from.radiusByRing[idx] ?? 0;
-        radiusByRing[idx] = fromR + (to.radiusByRing[idx] - fromR) * eased;
+      for (const idx of allIndices) {
+        radiusByRing[idx] = startRadius[idx] + (endRadius[idx] - startRadius[idx]) * eased;
       }
-      drawCentricGrid(originX, originY, to.ringIndices, radiusByRing);
+      drawCentricGrid(to.originX, to.originY, allIndices, radiusByRing);
       if (t < 1) requestAnimationFrame(step);
+      // Exact final frame -- only the rings that actually still exist,
+      // at their precise target radii, no lingering exit-animation state.
+      else drawCentricGrid(to.originX, to.originY, to.ringIndices, to.radiusByRing);
     }
     requestAnimationFrame(step);
   }
@@ -3839,17 +3885,14 @@
     els.content.style.height = `${originY + maxRadius + CENTRIC_PAD}px`;
 
     // Grid circles + axis labels, one per ring, showing what each ring
-    // actually means for the current metric. The ring set itself is now
-    // always fixed per metric (see totalRings above), so recentering
-    // (same metric) only ever changes radii/origin -- animate smoothly
-    // from the last drawn grid rather than snapping. A metric switch
-    // changes the ring count/meaning entirely, so that still snaps.
+    // actually means for the current metric. animateCentricGrid handles
+    // every case uniformly: a ring present before and after eases to its
+    // new radius, a newly-appearing ring (including the very first time
+    // Centric view is ever entered) shrinks in from off-screen, and a
+    // ring that no longer exists (switching to a metric with fewer rings)
+    // grows out to off-screen instead of just vanishing.
     const newGrid = { originX, originY, ringIndices, radiusByRing };
-    const sameRingSet = prevCentricGrid &&
-      prevCentricGrid.ringIndices.length === ringIndices.length &&
-      prevCentricGrid.ringIndices.every((v, i) => v === ringIndices[i]);
-    if (sameRingSet) animateCentricGrid(prevCentricGrid, newGrid);
-    else drawCentricGrid(originX, originY, ringIndices, radiusByRing);
+    animateCentricGrid(prevCentricGrid, newGrid);
     prevCentricGrid = newGrid;
 
     // Cards still glide into their new ring/position like every other
