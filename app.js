@@ -3652,14 +3652,16 @@
     // Connectors are drawn by the exact same function the traditional tree
     // uses (same X-layout means the same bus-line grouping works
     // unchanged); only the extra gridlines/ruler are chrono-specific.
-    // Gridlines/ruler only depend on the (unanimated) year range, so they
-    // draw once; if cards actually moved from before this render, lines
-    // FLIP-animate and keep tracking them every frame instead.
+    // drawLines() always clears the SVG first, so the gridlines must be
+    // (re)drawn AFTER each drawLines() call, never before -- passed in as
+    // animateLinesDuring's extraStep so they get redrawn every animation
+    // frame too, not just once. The ruler only depends on the (unanimated)
+    // year range, so it draws once regardless.
     requestAnimationFrame(() => {
-      drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
       renderChronoRuler(minYear, maxYear, contentHeight);
-      if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS);
-      else drawLines();
+      const drawGridlines = () => drawChronoGridlines(minYear, maxYear, maxRight + MARGIN);
+      if (animateLayoutIn(cardEls, oldPositions)) animateLinesDuring(CARD_MOVE_MS, drawGridlines);
+      else { drawLines(); drawGridlines(); }
     });
   }
 
