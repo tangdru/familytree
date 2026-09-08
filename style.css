@@ -316,7 +316,10 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(30, 24, 15, 0.45);
+  /* Shared by the Add/Edit form and the Person View card -- kept the same
+     dimness on both so the backdrop never visibly changes just from
+     tapping Edit on an open card, or Close on the edit form back to it. */
+  background: rgba(20, 16, 10, 0.78);
   display: flex;
   align-items: center;
   justify-content: center;
