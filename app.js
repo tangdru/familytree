@@ -1005,9 +1005,20 @@
 
   els.viewModeSelect.addEventListener('change', () => {
     viewMode = els.viewModeSelect.value;
-    els.chronoRuler.hidden = viewMode !== 'chronological';
+    // Fades in/out via its own opacity transition (see .chrono-ruler.visible
+    // in style.css) rather than the hidden attribute, which can't animate.
+    els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     renderTree();
-    fitToView();
+    // Deliberately NOT fitToView() here -- switching modes should feel like
+    // the same content rearranging itself under a still camera, not a new
+    // scene: pan/zoom (view.x/y/scale) stay exactly where the user left
+    // them, and only the tree layout animates underneath (see
+    // animateLayoutIn). Still need applyTransform() though, since the
+    // chrono ruler's own transform is only kept in sync with view.{x,y,
+    // scale} while chronological mode is actually active (see
+    // applyTransform) -- it can otherwise go stale while panning/zooming
+    // in traditional mode with the ruler faded out.
+    applyTransform();
   });
 
   // Zoom/pan so the whole tree is visible, centered in the viewport. Called

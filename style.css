@@ -228,7 +228,13 @@ body {
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
+  /* Faded via opacity (toggling the .visible class), not the hidden
+     attribute -- display:none can't transition, and this needs to fade
+     in/out alongside the view-mode switch rather than popping. */
+  opacity: 0;
+  transition: opacity .32s ease;
 }
+.chrono-ruler.visible { opacity: 1; }
 .chrono-ruler-inner {
   position: absolute;
   left: 0;
