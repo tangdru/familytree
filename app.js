@@ -999,15 +999,56 @@
   let chronoRulerLabels = [];
   let chronoMinYear = 0;
 
+  // Below this vertical gap (px) between two labels, the later one starts
+  // reading as overlapping text rather than two distinct ticks -- so one
+  // of the pair gets hidden rather than left to collide.
+  const CHRONO_MIN_LABEL_GAP = 20;
+
   // Rescales each label's *position* (so it lines up with the row/decade
   // it labels, same as the zoomed tree) without rescaling its rendered
   // size -- unlike the tree canvas, the ruler's own text should always
   // read at one comfortable, constant size, never microscopic zoomed out
-  // or oversized (and overflowing its 56px column) zoomed in.
+  // or oversized (and overflowing its 56px column) zoomed in. Also thins
+  // out labels that would otherwise collide when zoomed out far enough
+  // that decades sit closer together than CHRONO_MIN_LABEL_GAP, keeping
+  // "Today" visible in preference to whichever decade crowds it.
   function repositionChronoRulerLabels() {
-    for (const { el, year } of chronoRulerLabels) {
-      el.style.top = `${chronoYToPixel(year, chronoMinYear) * view.scale}px`;
+    const positioned = chronoRulerLabels
+      .map(entry => ({ ...entry, top: chronoYToPixel(entry.year, chronoMinYear) * view.scale }))
+      .sort((a, b) => a.top - b.top);
+    const todayIndex = positioned.findIndex(entry => entry.el.classList.contains('today'));
+
+    const visible = positioned.map(() => true);
+    let lastVisibleTop = -Infinity;
+    for (let i = 0; i < positioned.length; i++) {
+      if (i === todayIndex) continue; // Today is resolved separately below, always visible.
+      if (positioned[i].top - lastVisibleTop < CHRONO_MIN_LABEL_GAP) {
+        visible[i] = false;
+      } else {
+        lastVisibleTop = positioned[i].top;
+      }
     }
+    // Today always keeps its slot; if that crowds the nearest still-visible
+    // decade on either side, hide that decade instead of hiding Today, and
+    // keep walking outward in case the next one in is also too close.
+    if (todayIndex !== -1) {
+      const todayTop = positioned[todayIndex].top;
+      for (let i = todayIndex - 1; i >= 0; i--) {
+        if (!visible[i]) continue;
+        if (todayTop - positioned[i].top < CHRONO_MIN_LABEL_GAP) visible[i] = false;
+        else break;
+      }
+      for (let i = todayIndex + 1; i < positioned.length; i++) {
+        if (!visible[i]) continue;
+        if (positioned[i].top - todayTop < CHRONO_MIN_LABEL_GAP) visible[i] = false;
+        else break;
+      }
+    }
+
+    positioned.forEach(({ el, top }, i) => {
+      el.style.top = `${top}px`;
+      el.style.display = visible[i] ? '' : 'none';
+    });
   }
 
   function applyTransform() {
