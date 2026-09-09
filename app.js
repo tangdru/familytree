@@ -3437,6 +3437,23 @@
       }
     }
 
+    // A couple's shared child conventionally drops from the marriage line
+    // joining the two spouses (at circle-center height), not from below
+    // each parent's own caption -- but only once that marriage line is
+    // actually there to drop from: the two must be mutual spouses, in the
+    // same row, and adjacent, the same test the spouse-line loop above
+    // uses to decide whether to draw it at all.
+    const spouseLineY = (idA, idB) => {
+      if (!people[idA] || !people[idA].spouses.includes(idB)) return null;
+      const rA = cardRect(idA), rB = cardRect(idB);
+      if (!rA || !rB || Math.abs(rA.centerY - rB.centerY) > 5) return null;
+      const slA = slotRect(idA), slB = slotRect(idB);
+      const aIsLeft = slA.right < slB.left;
+      const slotGap = aIsLeft ? slB.left - slA.right : slA.left - slB.right;
+      if (Math.abs(slotGap) > SPOUSE_GAP + 2) return null;
+      return rA.centerY;
+    };
+
     // Parent-child lines, grouped by family (parent set)
     const familyGroups = {};
     for (const p of Object.values(people)) {
@@ -3451,7 +3468,8 @@
       if (!parentRects.length || !childRects.length) continue;
 
       const parentAnchorX = parentRects.reduce((s, r) => s + r.centerX, 0) / parentRects.length;
-      const parentY = Math.max(...parentRects.map(r => r.bottom));
+      const sharedSpouseY = parentRects.length === 2 ? spouseLineY(group.parents[0], group.parents[1]) : null;
+      const parentY = sharedSpouseY != null ? sharedSpouseY : Math.max(...parentRects.map(r => r.bottom));
       const childTopY = Math.min(...childRects.map(r => r.top));
       const busY = parentY + (childTopY - parentY) / 2;
 
