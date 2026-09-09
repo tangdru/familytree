@@ -1250,6 +1250,23 @@
     setZoom(view.scale + delta, e.clientX, e.clientY);
   }, { passive: false });
 
+  // #treeViewport's own native scroll is never supposed to move -- pan/zoom
+  // is entirely driven by view.x/y/scale via applyTransform()'s CSS
+  // transform, and overflow:hidden here is only to clip content, not to
+  // provide a second, competing way to scroll. But because the content
+  // inside genuinely overflows the viewport once zoomed in, the container
+  // still counts as "scrollable," and something can still nudge its native
+  // scrollLeft/scrollTop directly (a focus-follows-click of an off-screen
+  // element, assistive tech, or similar) -- if that ever happens it would
+  // silently double up with the transform-based pan, so snap it straight
+  // back to zero the instant it's detected, rather than let it accumulate.
+  els.viewport.addEventListener('scroll', () => {
+    if (els.viewport.scrollLeft || els.viewport.scrollTop) {
+      els.viewport.scrollLeft = 0;
+      els.viewport.scrollTop = 0;
+    }
+  });
+
   let isPanning = false, panStart = null;
   els.viewport.addEventListener('mousedown', (e) => {
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle')) return;
@@ -3294,10 +3311,11 @@
     card.addEventListener('click', () => {
       if (viewMode === 'centric' && person.id !== centricCenterId) {
         centricCenterId = person.id;
-        // renderCentric() (via renderTree()) reframes itself every time --
-        // recentering can produce a very differently shaped/sized ring
-        // layout, and it always keeps the new center anchored in the
-        // viewport the same way (see animateCentricZoom).
+        // renderCentric() (via renderTree()) recomputes the whole ring
+        // layout every time -- recentering can produce a very differently
+        // shaped/sized grid, and it keeps that grid's own origin point
+        // visually anchored regardless (see animateCentricPan), without
+        // touching the user's own pan/zoom.
         renderTree();
       } else {
         // Zodiac/Centric cards are shown as individuals, regrouped by sign
@@ -4011,10 +4029,12 @@
   // matches the origin's on-screen position at t=0 and t=1, drifting in
   // between whenever the origin itself also moved), this derives view.x/y
   // directly from the current eased scale each frame, so the origin never
-  // appears to slide even mid-transition. Used for every Centric view
-  // transition -- entering the view, recentering, and switching metric --
-  // so "the same center point" is the one visual constant across all of
-  // them.
+  // appears to slide even mid-transition. Only used for entering Centric
+  // view fresh from another view mode and for the explicit fit-view button
+  // -- both are genuine reframes (a rescale to fit, recentered in the
+  // viewport). Recentering and switching metric use animateCentricPan
+  // instead, which keeps the origin anchored without rescaling or
+  // recentering to the viewport.
   function animateCentricZoom(targetScale, originX, originY, durationMs) {
     const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
     if (!vw || !vh) return;
@@ -4026,6 +4046,35 @@
       view.scale = startScale + (targetScale - startScale) * eased;
       view.x = vw / 2 - originX * view.scale;
       view.y = vh / 2 - originY * view.scale;
+      applyTransform();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Recentering or switching metric can change the ring layout's own size
+  // (member counts per ring differ), which moves the grid's origin point in
+  // content space even though nothing about the user's own pan/zoom should
+  // change -- animateCentricZoom is deliberately skipped for these (see
+  // renderCentric()), so nothing else corrects for that shift. Left alone,
+  // the ring's visual center would drift on screen by however much the
+  // origin moved, purely as a side effect of ring sizing, not anything the
+  // user did. This eases view.x/y (scale untouched) by exactly that much,
+  // so whatever content-space point was under a given screen pixel before
+  // this render is still under that same pixel after -- the rings resize
+  // in place instead of sliding sideways.
+  function animateCentricPan(fromOriginX, fromOriginY, toOriginX, toOriginY, durationMs) {
+    const dx = (fromOriginX - toOriginX) * view.scale;
+    const dy = (fromOriginY - toOriginY) * view.scale;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    const startX = view.x, startY = view.y;
+    const targetX = startX + dx, targetY = startY + dy;
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      view.x = startX + (targetX - startX) * eased;
+      view.y = startY + (targetY - startY) * eased;
       applyTransform();
       if (t < 1) requestAnimationFrame(step);
     }
@@ -4136,22 +4185,28 @@
     // ring that no longer exists (switching to a metric with fewer rings)
     // grows out to off-screen instead of just vanishing.
     const isFirstEntry = !prevCentricGrid;
+    const priorGrid = prevCentricGrid;
     const newGrid = { originX, originY, ringIndices, radiusByRing };
-    const unionRingCount = new Set([...(prevCentricGrid ? prevCentricGrid.ringIndices : []), ...ringIndices]).size;
-    animateCentricGrid(prevCentricGrid, newGrid);
+    const unionRingCount = new Set([...(priorGrid ? priorGrid.ringIndices : []), ...ringIndices]).size;
+    animateCentricGrid(priorGrid, newGrid);
     prevCentricGrid = newGrid;
 
-    // Only reframe on the way IN to Centric view (prevCentricGrid was
-    // null, i.e. this is a fresh entry from some other view). Once
-    // inside, recentering or switching metric never fights the pan/zoom
-    // the user has already set up -- exactly like Traditional/
-    // Chronological, which also never re-fit on their own re-renders --
-    // so panning/zooming to look at a particular part of the rings stays
-    // put through further clicks instead of snapping back to a fit view
-    // after every one.
+    // Only reframe (rescale + recenter to the viewport) on the way IN to
+    // Centric view (prevCentricGrid was null, i.e. this is a fresh entry
+    // from some other view). Once inside, recentering or switching metric
+    // never fights the pan/zoom the user has already set up -- exactly
+    // like Traditional/Chronological, which also never re-fit on their own
+    // re-renders -- so panning/zooming to look at a particular part of the
+    // rings stays put through further clicks instead of snapping back to a
+    // fit view after every one. That leaves the origin itself free to move
+    // in content space (ring layout resizing changes it), so
+    // animateCentricPan corrects for exactly that shift with a plain pan,
+    // keeping the grid visually anchored without rescaling or recentering.
     if (isFirstEntry) {
       const fitTarget = computeFitTransform();
       if (fitTarget) animateCentricZoom(fitTarget.scale, originX, originY, centricTransitionDuration(unionRingCount));
+    } else {
+      animateCentricPan(priorGrid.originX, priorGrid.originY, originX, originY, centricTransitionDuration(unionRingCount));
     }
 
     // Cards still glide into their new ring/position like every other
