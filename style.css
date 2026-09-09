@@ -551,6 +551,7 @@ body {
 }
 .date-icon svg { width: 15px; height: 15px; }
 .hint { color: var(--ink-soft); font-size: 0.72rem; }
+.zodiac-adjusted-hint { margin: 6px 0 0; }
 
 .combo {
   position: relative;

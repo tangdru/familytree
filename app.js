@@ -43,6 +43,54 @@
     return ZODIAC_CYCLE[((year - 4) % 12 + 12) % 12];
   }
 
+  // The inverse problem: some family members' documented birth year was
+  // made up (e.g. for immigration paperwork while escaping the Vietnam
+  // War), but the zodiac sign they were actually born under is still
+  // remembered accurately -- so it's the more trustworthy signal of their
+  // real birth year. Given a rough/documented year and that sign, finds
+  // the nearest year (in either direction) whose sign actually matches.
+  // A tie (the target sign is exactly 6 years either way) resolves to the
+  // LATER year -- arbitrary, but applied consistently.
+  function nearestYearForZodiac(approxYear, zodiac) {
+    const targetIndex = ZODIAC_CYCLE.indexOf(zodiac);
+    if (targetIndex < 0 || !Number.isFinite(approxYear)) return null;
+    const currentIndex = ((approxYear - 4) % 12 + 12) % 12;
+    const rawDelta = ((targetIndex - currentIndex) % 12 + 12) % 12; // 0..11, years to ADD to reach the target sign
+    const adjustment = rawDelta <= 6 ? rawDelta : rawDelta - 12;
+    return approxYear + adjustment;
+  }
+
+  // The zodiac-adjusted birth date: same month/day as documented, just with
+  // whichever nearby year actually matches the selected zodiac sign. Never
+  // overwrites the documented birthDate itself -- this is computed fresh
+  // wherever it's needed, so the original stays intact and editable.
+  // Returns '' when there's nothing to adjust: no zodiac set, no
+  // parseable birth date to adjust from, or -- just as importantly --
+  // the documented year already matches the zodiac sign exactly, so
+  // there's no actual correction to show or apply. Callers that need
+  // "the year to use" regardless (computeAge, effectiveBirthYear) already
+  // fall back to the documented birthDate in that case, so this returning
+  // '' costs them nothing; it only changes what's worth surfacing as a
+  // second, distinct date.
+  function zodiacAdjustedBirthDate(person) {
+    if (!person || !person.birthDate || !person.zodiac) return '';
+    const year = parseInt(person.birthDate.slice(0, 4), 10);
+    const adjustedYear = nearestYearForZodiac(year, person.zodiac);
+    if (adjustedYear == null || adjustedYear === year) return '';
+    return `${adjustedYear}${person.birthDate.slice(4)}`;
+  }
+
+  // The birth year actually used for every age-based calculation in the
+  // app (Chronological view's Y-axis, Centric view's age rings, the age
+  // shown on a card) -- the zodiac-adjusted year when there's a sign to
+  // correct against, else the documented year as-is.
+  function effectiveBirthYear(person) {
+    const source = zodiacAdjustedBirthDate(person) || (person && person.birthDate);
+    if (!source) return null;
+    const y = parseInt(source.slice(0, 4), 10);
+    return Number.isFinite(y) ? y : null;
+  }
+
   // For recognizing a US state name inside an already-saved full address
   // string -- see shortenLocationText.
   const US_STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
@@ -300,6 +348,7 @@
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
     zodiacInput: document.getElementById('zodiacInput'),
+    zodiacAdjustedHint: document.getElementById('zodiacAdjustedHint'),
     contactsList: document.getElementById('contactsList'),
     addContactBtn: document.getElementById('addContactBtn'),
     notesInput: document.getElementById('notesInput'),
@@ -337,6 +386,7 @@
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewDates: document.getElementById('viewDates'),
+    viewDatesAdjusted: document.getElementById('viewDatesAdjusted'),
     viewBirthLocation: document.getElementById('viewBirthLocation'),
     viewZodiac: document.getElementById('viewZodiac'),
     viewContact: document.getElementById('viewContact'),
@@ -1580,11 +1630,25 @@
     els.zodiacInput.value = inferZodiacFromBirthYear(els.birthInput.value);
   }
 
-  els.zodiacInput.addEventListener('change', () => { zodiacManuallySet = true; });
+  // Live preview of zodiacAdjustedBirthDate as the form's own two inputs
+  // change -- nothing is saved here, this just shows what would be
+  // computed from the values currently in the form.
+  function updateZodiacAdjustedHint() {
+    const adjusted = zodiacAdjustedBirthDate({ birthDate: els.birthInput.value, zodiac: els.zodiacInput.value });
+    const formatted = adjusted ? formatDateDisplay(adjusted) : '';
+    els.zodiacAdjustedHint.textContent = formatted ? `Zodiac-adjusted birthday: ${formatted}` : '';
+    els.zodiacAdjustedHint.hidden = !formatted;
+  }
+
+  els.zodiacInput.addEventListener('change', () => {
+    zodiacManuallySet = true;
+    updateZodiacAdjustedHint();
+  });
 
   els.birthInput.addEventListener('change', () => {
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     maybeAutoSetZodiac();
+    updateZodiacAdjustedHint();
   });
   els.deathInput.addEventListener('change', () => updateDateDisplay(els.deathInput, els.deathDisplayText));
 
@@ -1779,6 +1843,7 @@
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     zodiacManuallySet = false;
+    updateZodiacAdjustedHint();
     els.modalTitle.textContent = 'Add Person';
     els.deletePersonBtn.hidden = true;
     populateSelectOptions(null);
@@ -1802,6 +1867,7 @@
     setLocationRows(locationsOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
+    updateZodiacAdjustedHint();
     setContactRows(contactsOf(p));
     els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
@@ -1860,6 +1926,7 @@
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
     zodiacManuallySet = snap.zodiacManuallySet;
+    updateZodiacAdjustedHint();
     setContactRows(snap.contacts);
     els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
@@ -1912,9 +1979,12 @@
   // ---------- Person view (read-only detail) modal ----------
 
   // Age in whole years as of death (if deceased) or today (if living).
+  // Uses the zodiac-adjusted birth date when there's one to use -- see
+  // effectiveBirthYear.
   function computeAge(person) {
-    if (!person.birthDate) return null;
-    const birth = new Date(person.birthDate);
+    const birthDate = zodiacAdjustedBirthDate(person) || person.birthDate;
+    if (!birthDate) return null;
+    const birth = new Date(birthDate);
     if (Number.isNaN(birth.getTime())) return null;
     const end = person.deathDate ? new Date(person.deathDate) : new Date();
     let age = end.getFullYear() - birth.getFullYear();
@@ -2078,6 +2148,24 @@
     return born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
   }
 
+  // The single Person View's two birthdate lines. When there's a zodiac
+  // sign to adjust against, BOTH the documented and zodiac-adjusted dates
+  // show, clearly labeled -- nothing is hidden, this person just has two
+  // candidate birthdates on record and both stay visible. Without a zodiac
+  // set there's only ever the one date, shown plainly as before (no
+  // "Documented" label -- nothing to disambiguate it from).
+  function personViewDatesLines(p) {
+    const adjusted = zodiacAdjustedBirthDate(p);
+    if (!adjusted) return { primary: personDatesText(p), secondary: '' };
+    const documentedBorn = formatDateDisplay(p.birthDate);
+    const died = formatDateDisplay(p.deathDate);
+    const primary = died ? `Documented: ${documentedBorn} – ${died}` : `Documented: Born ${documentedBorn}`;
+    const age = computeAge(p);
+    const adjustedText = `Born ${formatDateDisplay(adjusted)}`;
+    const secondary = `Zodiac-adjusted: ${age != null ? `${adjustedText} · Age ${age}` : adjustedText}`;
+    return { primary, secondary };
+  }
+
   function personDatesAndAgeText(p) {
     const text = personDatesText(p);
     const age = computeAge(p);
@@ -2176,8 +2264,11 @@
         els.viewPhotoPlaceholder.hidden = false;
       }
       els.viewName.textContent = p.name || '(unnamed)';
-      els.viewDates.textContent = personDatesText(p);
-      els.viewDates.hidden = !els.viewDates.textContent;
+      const { primary: datesPrimary, secondary: datesSecondary } = personViewDatesLines(p);
+      els.viewDates.textContent = datesPrimary;
+      els.viewDates.hidden = !datesPrimary;
+      els.viewDatesAdjusted.textContent = datesSecondary;
+      els.viewDatesAdjusted.hidden = !datesSecondary;
       const shortBirthLocation = shortenLocationText(p.birthLocation || '');
       els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
       els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
@@ -3290,7 +3381,10 @@
     nameEl.textContent = person.name || '(unnamed)';
     const datesEl = document.createElement('div');
     datesEl.className = 'person-dates';
-    const born = formatYear(person.birthDate);
+    // The zodiac-adjusted year when there is one, so the year shown here
+    // always matches whatever year actually drives Chronological/Centric
+    // positioning -- see effectiveBirthYear.
+    const born = effectiveBirthYear(person);
     const died = formatYear(person.deathDate);
     if (born && died) datesEl.textContent = `${born} – ${died}`;
     else if (born) datesEl.textContent = `b. ${born}`;
@@ -3643,8 +3737,8 @@
     }
     for (const bucket of byColumn) {
       bucket.sort((a, b) => {
-        const ya = a.birthDate ? parseInt(a.birthDate.slice(0, 4), 10) : Infinity;
-        const yb = b.birthDate ? parseInt(b.birthDate.slice(0, 4), 10) : Infinity;
+        const ya = effectiveBirthYear(a) ?? Infinity;
+        const yb = effectiveBirthYear(b) ?? Infinity;
         return ya !== yb ? ya - yb : (a.name || '').localeCompare(b.name || '');
       });
     }
@@ -4095,7 +4189,7 @@
       centricCenterId = Object.keys(data.people)[0];
     }
     const center = data.people[centricCenterId];
-    const centerYear = center.birthDate ? parseInt(center.birthDate.slice(0, 4), 10) : NaN;
+    const centerYear = effectiveBirthYear(center);
     const centerLoc = currentLocationOf(center);
 
     // Every ring for the current metric always exists (1..4 for age,
@@ -4113,8 +4207,7 @@
       if (centricMetric === 'location') {
         ring = centricLocationRing(centerLoc, currentLocationOf(p));
       } else {
-        const year = p.birthDate ? parseInt(p.birthDate.slice(0, 4), 10) : NaN;
-        ring = centricAgeRing(centerYear, year);
+        ring = centricAgeRing(centerYear, effectiveBirthYear(p));
       }
       rings[ring].push(p);
     }
@@ -4241,9 +4334,8 @@
 
   function chronoBirthYear(id) {
     const p = data.people[id];
-    if (!p || !p.birthDate) return null;
-    const y = parseInt(p.birthDate.split('-')[0], 10);
-    return Number.isFinite(y) ? y : null;
+    if (!p) return null;
+    return effectiveBirthYear(p);
   }
 
   // Resolves every person's chronological Y-year, plus two independent
