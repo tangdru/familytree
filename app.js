@@ -3413,7 +3413,23 @@
     const people = data.people;
     const drawnSpousePairs = new Set();
 
-    // Spouse lines
+    // Built here (rather than down where it's consumed, next to the actual
+    // parent-child line drawing) so the spouse-line loop below can already
+    // tell whether a given couple has children together.
+    const familyGroups = {};
+    for (const p of Object.values(people)) {
+      if (!p.parents.length) continue;
+      const key = familyKey(p.parents);
+      (familyGroups[key] = familyGroups[key] || { parents: p.parents, children: [] }).children.push(p.id);
+    }
+
+    // Spouse lines. In Traditional/Zodiac clustering the two are always
+    // the same row (same Y), so a plain horizontal line joins them; in
+    // Chronological view they sit at their own birth year, which puts a
+    // couple with an age gap at two different heights entirely -- there, a
+    // right-angle elbow (same style as every parent-child connector) joins
+    // them instead of a line that would otherwise run diagonally through
+    // whatever sits between their rows.
     for (const p of Object.values(people)) {
       for (const sid of p.spouses) {
         if (!people[sid]) continue;
@@ -3421,9 +3437,8 @@
         if (drawnSpousePairs.has(key)) continue;
         drawnSpousePairs.add(key);
         const r1 = cardRect(p.id), r2 = cardRect(sid);
-        if (!r1 || !r2 || Math.abs(r1.centerY - r2.centerY) > 5) continue; // only same-row spouses
+        if (!r1 || !r2) continue;
         const sl1 = slotRect(p.id), sl2 = slotRect(sid);
-        const y = r1.centerY;
         const pIsLeft = sl1.right < sl2.left;
         const slotGap = pIsLeft ? sl2.left - sl1.right : sl1.left - sl2.right;
         // A hub with 2+ spouses (a remarriage) puts them in the same row --
@@ -3431,9 +3446,30 @@
         // a tie to the far spouse doesn't draw straight through whoever
         // else's card sits in between.
         if (Math.abs(slotGap) > SPOUSE_GAP + 2) continue;
-        const x1 = pIsLeft ? r1.right : r2.right;
-        const x2 = pIsLeft ? r2.left : r1.left;
-        svg.appendChild(svgLine(x1, y, x2, y));
+        const leftR = pIsLeft ? r1 : r2;
+        const rightR = pIsLeft ? r2 : r1;
+        if (Math.abs(leftR.centerY - rightR.centerY) < 0.5) {
+          svg.appendChild(svgLine(leftR.right, leftR.centerY, rightR.left, rightR.centerY));
+        } else {
+          const bendX = (leftR.right + rightR.left) / 2;
+          svg.appendChild(svgElbowPath([
+            { x: leftR.right, y: leftR.centerY },
+            { x: bendX, y: leftR.centerY },
+            { x: bendX, y: rightR.centerY },
+            { x: rightR.left, y: rightR.centerY },
+          ], CONNECTOR_CORNER_RADIUS));
+          // If this couple has children together, the parent-child trunk
+          // below starts at the lower spouse's own card bottom (see
+          // parentY in the loop below) -- extend this elbow's trunk down
+          // to meet it exactly, through the clear gap beside the lower
+          // spouse's caption, instead of stopping right at their circle
+          // and leaving a visible break before the trunk resumes.
+          const lowerR = leftR.centerY > rightR.centerY ? leftR : rightR;
+          if (familyGroups[familyKey([p.id, sid])]) {
+            const trunkStartY = Math.max(leftR.bottom, rightR.bottom);
+            svg.appendChild(svgLine(bendX, lowerR.centerY, bendX, trunkStartY));
+          }
+        }
       }
     }
 
@@ -3454,14 +3490,8 @@
       return rA.centerY;
     };
 
-    // Parent-child lines, grouped by family (parent set)
-    const familyGroups = {};
-    for (const p of Object.values(people)) {
-      if (!p.parents.length) continue;
-      const key = familyKey(p.parents);
-      (familyGroups[key] = familyGroups[key] || { parents: p.parents, children: [] }).children.push(p.id);
-    }
-
+    // Parent-child lines, grouped by family (parent set; familyGroups
+    // itself was already built above, before the spouse-line loop).
     for (const group of Object.values(familyGroups)) {
       const parentRects = group.parents.map(cardRect).filter(Boolean);
       const childRects = group.children.map(cardRect).filter(Boolean);
