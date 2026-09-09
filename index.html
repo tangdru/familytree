@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609119">
+<link rel="stylesheet" href="style.css?v=202609121">
 </head>
 <body>
   <header class="toolbar">
@@ -97,7 +97,7 @@
 
         <div class="form-row two-col">
           <div>
-            <label for="birthInput">Born</label>
+            <label for="birthInput">Documented birthday</label>
             <div class="date-field">
               <input id="birthInput" type="date">
               <div class="date-display placeholder" id="birthDisplay" aria-hidden="true">
@@ -159,6 +159,10 @@
             <option value="Dog">🐕 Dog</option>
             <option value="Pig">🐖 Pig</option>
           </select>
+          <!-- Computed live from Documented birthday + this field -- see
+               updateZodiacAdjustedHint() in app.js. Hidden until both are
+               set, since there's nothing to adjust otherwise. -->
+          <p class="zodiac-adjusted-hint hint" id="zodiacAdjustedHint" hidden></p>
         </div>
 
         <div class="form-row">
@@ -294,6 +298,7 @@
             </div>
             <h3 class="view-name" id="viewName"></h3>
             <p class="view-dates" id="viewDates" hidden></p>
+            <p class="view-dates view-dates-adjusted" id="viewDatesAdjusted" hidden></p>
             <p class="view-birth-location" id="viewBirthLocation" hidden></p>
             <p class="view-zodiac" id="viewZodiac" hidden></p>
             <div class="view-contact" id="viewContact" hidden></div>
@@ -347,7 +352,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609119"></script>
-  <script src="app.js?v=202609119"></script>
+  <script src="config.js?v=202609121"></script>
+  <script src="app.js?v=202609121"></script>
 </body>
 </html>
