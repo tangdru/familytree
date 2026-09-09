@@ -3365,13 +3365,20 @@
     // view.scale != 1. offsetLeft/Top are relative to #treeContent (the
     // nearest positioned ancestor) and are transform-independent, matching
     // how cards were positioned in the first place.
-    // Anchor to the circular .person-photo, not the wider .person-card box
-    // around it -- the card is only as wide as it is so a long name has
-    // room to wrap, and connecting to its own edges would leave lines
-    // dangling in the blank space beside/below the circle instead of
-    // meeting it. .person-photo is a non-positioned child of the
-    // position:absolute .person-card, so its offsetLeft/Top are already
-    // card-local and just need the card's own offset added back in.
+    // Anchor left/right/top/centerX/centerY to the circular .person-photo,
+    // not the wider .person-card box around it -- the card is only as wide
+    // as it is so a long name has room to wrap, and connecting to its own
+    // left/right edges would leave a spouse line dangling in the blank
+    // space beside the circle instead of meeting it. .person-photo is a
+    // non-positioned child of the position:absolute .person-card, so its
+    // offsetLeft/Top are already card-local and just need the card's own
+    // offset added back in.
+    //
+    // bottom is the one exception: it stays the *card's* bottom (past the
+    // name/dates caption below the circle), not the circle's own bottom --
+    // a parent-child line drops down from here, and anchoring it to the
+    // circle instead would send that line straight down through the
+    // caption text rather than clearing it first.
     const cardRect = (id) => {
       const el = els.content.querySelector(`[data-id="${id}"]`);
       if (!el) return null;
@@ -3381,7 +3388,7 @@
       return {
         left, top,
         right: left + photo.offsetWidth,
-        bottom: top + photo.offsetHeight,
+        bottom: el.offsetTop + el.offsetHeight,
         centerX: left + photo.offsetWidth / 2,
         centerY: top + photo.offsetHeight / 2,
       };
