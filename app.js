@@ -2173,6 +2173,18 @@
     return text ? `${text} · Age ${age}` : `Age ${age}`;
   }
 
+  // A couple card member's two possible date lines -- mirrors
+  // personViewDatesLines' Documented/Zodiac-adjusted split when there's an
+  // adjustment to show, so a couple card member with a fabricated birth
+  // year is exactly as transparent as the single Person View. Without an
+  // adjustment, keeps the couple card's own existing convention (age
+  // folded into the one line) rather than personViewDatesLines' plain
+  // (no age) single line, since that's what a couple card has always shown.
+  function coupleMemberDatesLines(p) {
+    if (!zodiacAdjustedBirthDate(p)) return { primary: personDatesAndAgeText(p), secondary: '' };
+    return personViewDatesLines(p);
+  }
+
   // One half of a couple card's visuals: photo, name, dates+age, ringed
   // when selected -- with no click behavior of its own, so a swipe-preview
   // peek card (see buildSwipePeekCard) can reuse the exact same markup
@@ -2194,12 +2206,20 @@
     const name = document.createElement('div');
     name.className = 'view-couple-name';
     name.textContent = p.name || '(unnamed)';
-    const dates = document.createElement('div');
-    dates.className = 'view-couple-dates';
-    dates.textContent = personDatesAndAgeText(p);
     wrap.appendChild(photo);
     wrap.appendChild(name);
+
+    const { primary, secondary } = coupleMemberDatesLines(p);
+    const dates = document.createElement('div');
+    dates.className = 'view-couple-dates';
+    dates.textContent = primary;
     wrap.appendChild(dates);
+    if (secondary) {
+      const adjustedDates = document.createElement('div');
+      adjustedDates.className = 'view-couple-dates view-couple-dates-adjusted';
+      adjustedDates.textContent = secondary;
+      wrap.appendChild(adjustedDates);
+    }
     return wrap;
   }
 
