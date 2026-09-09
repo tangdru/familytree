@@ -3365,16 +3365,32 @@
     // view.scale != 1. offsetLeft/Top are relative to #treeContent (the
     // nearest positioned ancestor) and are transform-independent, matching
     // how cards were positioned in the first place.
+    // Anchor left/right/top/centerX/centerY to the circular .person-photo,
+    // not the wider .person-card box around it -- the card is only as wide
+    // as it is so a long name has room to wrap, and connecting to its own
+    // left/right edges would leave a spouse line dangling in the blank
+    // space beside the circle instead of meeting it. .person-photo is a
+    // non-positioned child of the position:absolute .person-card, so its
+    // offsetLeft/Top are already card-local and just need the card's own
+    // offset added back in.
+    //
+    // bottom is the one exception: it stays the *card's* bottom (past the
+    // name/dates caption below the circle), not the circle's own bottom --
+    // a parent-child line drops down from here, and anchoring it to the
+    // circle instead would send that line straight down through the
+    // caption text rather than clearing it first.
     const cardRect = (id) => {
       const el = els.content.querySelector(`[data-id="${id}"]`);
       if (!el) return null;
+      const photo = el.querySelector('.person-photo') || el;
+      const left = el.offsetLeft + photo.offsetLeft;
+      const top = el.offsetTop + photo.offsetTop;
       return {
-        left: el.offsetLeft,
-        top: el.offsetTop,
-        right: el.offsetLeft + el.offsetWidth,
+        left, top,
+        right: left + photo.offsetWidth,
         bottom: el.offsetTop + el.offsetHeight,
-        centerX: el.offsetLeft + el.offsetWidth / 2,
-        centerY: el.offsetTop + el.offsetHeight / 2,
+        centerX: left + photo.offsetWidth / 2,
+        centerY: top + photo.offsetHeight / 2,
       };
     };
 
@@ -3382,6 +3398,17 @@
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+
+    // Adjacency between spouses is decided by their .person-card slots
+    // (always CARD_WIDTH + SPOUSE_GAP apart when next to each other), not
+    // by the narrower circles inside them -- the circle's own inset from
+    // its slot's edges would otherwise read as a much bigger, inconsistent
+    // gap and break the "are these two actually next to each other" check.
+    const slotRect = (id) => {
+      const el = els.content.querySelector(`[data-id="${id}"]`);
+      if (!el) return null;
+      return { left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
+    };
 
     const people = data.people;
     const drawnSpousePairs = new Set();
@@ -3395,17 +3422,37 @@
         drawnSpousePairs.add(key);
         const r1 = cardRect(p.id), r2 = cardRect(sid);
         if (!r1 || !r2 || Math.abs(r1.centerY - r2.centerY) > 5) continue; // only same-row spouses
+        const sl1 = slotRect(p.id), sl2 = slotRect(sid);
         const y = r1.centerY;
-        const x1 = r1.right < r2.left ? r1.right : r2.right;
-        const x2 = r1.right < r2.left ? r2.left : r1.left;
+        const pIsLeft = sl1.right < sl2.left;
+        const slotGap = pIsLeft ? sl2.left - sl1.right : sl1.left - sl2.right;
         // A hub with 2+ spouses (a remarriage) puts them in the same row --
         // only tie together cards that are actually next to each other, so
         // a tie to the far spouse doesn't draw straight through whoever
         // else's card sits in between.
-        if (Math.abs(x2 - x1) > SPOUSE_GAP + 2) continue;
+        if (Math.abs(slotGap) > SPOUSE_GAP + 2) continue;
+        const x1 = pIsLeft ? r1.right : r2.right;
+        const x2 = pIsLeft ? r2.left : r1.left;
         svg.appendChild(svgLine(x1, y, x2, y));
       }
     }
+
+    // A couple's shared child conventionally drops from the marriage line
+    // joining the two spouses (at circle-center height), not from below
+    // each parent's own caption -- but only once that marriage line is
+    // actually there to drop from: the two must be mutual spouses, in the
+    // same row, and adjacent, the same test the spouse-line loop above
+    // uses to decide whether to draw it at all.
+    const spouseLineY = (idA, idB) => {
+      if (!people[idA] || !people[idA].spouses.includes(idB)) return null;
+      const rA = cardRect(idA), rB = cardRect(idB);
+      if (!rA || !rB || Math.abs(rA.centerY - rB.centerY) > 5) return null;
+      const slA = slotRect(idA), slB = slotRect(idB);
+      const aIsLeft = slA.right < slB.left;
+      const slotGap = aIsLeft ? slB.left - slA.right : slA.left - slB.right;
+      if (Math.abs(slotGap) > SPOUSE_GAP + 2) return null;
+      return rA.centerY;
+    };
 
     // Parent-child lines, grouped by family (parent set)
     const familyGroups = {};
@@ -3421,9 +3468,20 @@
       if (!parentRects.length || !childRects.length) continue;
 
       const parentAnchorX = parentRects.reduce((s, r) => s + r.centerX, 0) / parentRects.length;
-      const parentY = Math.max(...parentRects.map(r => r.bottom));
+      const sharedSpouseY = parentRects.length === 2 ? spouseLineY(group.parents[0], group.parents[1]) : null;
+      const parentY = sharedSpouseY != null ? sharedSpouseY : Math.max(...parentRects.map(r => r.bottom));
       const childTopY = Math.min(...childRects.map(r => r.top));
-      const busY = parentY + (childTopY - parentY) / 2;
+      // The bus (the horizontal run the trunk bends into) always centers in
+      // the actual clear gap below every parent's own caption -- never in
+      // the gap below parentY itself, which for a couple is the marriage
+      // line up at circle-center height, well above their captions. Using
+      // parentY here would often land the bus right on top of the caption
+      // text instead of in the empty space beneath it. The vertical run
+      // from parentY down to this busY only ever crosses that caption-height
+      // band at parentAnchorX, in the gap between the two circles, so it
+      // never passes over the text itself.
+      const parentCaptionClearY = Math.max(...parentRects.map(r => r.bottom));
+      const busY = parentCaptionClearY + (childTopY - parentCaptionClearY) / 2;
 
       const sortedChildren = childRects.slice().sort((a, b) => a.centerX - b.centerX);
       const leftmost = sortedChildren[0];
