@@ -319,7 +319,7 @@ body {
 .centric-metric-btn:hover:not(.active) { background: #f1ead9; }
 .centric-metric-btn.active { background: var(--accent); color: #fff; }
 
-.centric-center-card {
+.centric-center-card .person-photo {
   border-color: var(--accent);
   box-shadow: 0 6px 18px rgba(60,45,20,0.28);
 }
@@ -362,55 +362,54 @@ body {
 .person-card {
   position: absolute;
   width: 150px;
-  background: var(--surface);
-  border: 2px solid var(--card-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   cursor: pointer;
-  overflow: hidden;
   user-select: none;
   /* left/top drive the animated re-layout transition (see animateLayoutIn
      in app.js) -- kept separate from the hover lift's own transform
      transition above so the two never fight over one property. */
-  transition: transform .12s, box-shadow .12s, border-color .12s,
-    left .38s ease, top .38s ease;
+  transition: transform .12s, left .38s ease, top .38s ease;
   flex-shrink: 0;
 }
-.person-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 14px rgba(60,45,20,0.22);
-}
+.person-card:hover { transform: translateY(-3px); }
+.person-card:hover .person-photo { box-shadow: 0 6px 14px rgba(60,45,20,0.22); }
 .person-card.deceased { filter: grayscale(0.35); opacity: 0.88; }
-.person-card.married-in { border-style: dashed; border-color: var(--line); }
-.person-card.highlight {
-  outline: 3px solid #ffd54a;
-  outline-offset: 2px;
+.person-card.married-in .person-photo { border-style: dashed; border-color: var(--line); }
+.person-card.highlight .person-photo {
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px #ffd54a;
 }
 
 .person-photo {
-  width: 100%;
-  height: 110px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 2px solid var(--card-border);
   background: #eee2c9;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.2rem;
+  font-size: 1.6rem;
   color: #b79f7c;
   overflow: hidden;
+  /* Border/shadow (state rings) are the only things that ever change here
+     -- position/layout transitions live on .person-card itself. */
+  transition: border-color .12s, box-shadow .12s;
 }
 .person-photo img { width: 100%; height: 100%; object-fit: cover; }
 
-.person-info { padding: 8px 9px; }
+.person-info { margin-top: 8px; text-align: center; width: 100%; }
 .person-name {
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   line-height: 1.2;
-  margin-bottom: 3px;
   word-break: break-word;
 }
 .person-dates {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--ink-soft);
+  margin-top: 2px;
 }
 
 /* ---------- Modal ---------- */

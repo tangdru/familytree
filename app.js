@@ -3365,16 +3365,25 @@
     // view.scale != 1. offsetLeft/Top are relative to #treeContent (the
     // nearest positioned ancestor) and are transform-independent, matching
     // how cards were positioned in the first place.
+    // Anchor to the circular .person-photo, not the wider .person-card box
+    // around it -- the card is only as wide as it is so a long name has
+    // room to wrap, and connecting to its own edges would leave lines
+    // dangling in the blank space beside/below the circle instead of
+    // meeting it. .person-photo is a non-positioned child of the
+    // position:absolute .person-card, so its offsetLeft/Top are already
+    // card-local and just need the card's own offset added back in.
     const cardRect = (id) => {
       const el = els.content.querySelector(`[data-id="${id}"]`);
       if (!el) return null;
+      const photo = el.querySelector('.person-photo') || el;
+      const left = el.offsetLeft + photo.offsetLeft;
+      const top = el.offsetTop + photo.offsetTop;
       return {
-        left: el.offsetLeft,
-        top: el.offsetTop,
-        right: el.offsetLeft + el.offsetWidth,
-        bottom: el.offsetTop + el.offsetHeight,
-        centerX: el.offsetLeft + el.offsetWidth / 2,
-        centerY: el.offsetTop + el.offsetHeight / 2,
+        left, top,
+        right: left + photo.offsetWidth,
+        bottom: top + photo.offsetHeight,
+        centerX: left + photo.offsetWidth / 2,
+        centerY: top + photo.offsetHeight / 2,
       };
     };
 
@@ -3382,6 +3391,17 @@
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+
+    // Adjacency between spouses is decided by their .person-card slots
+    // (always CARD_WIDTH + SPOUSE_GAP apart when next to each other), not
+    // by the narrower circles inside them -- the circle's own inset from
+    // its slot's edges would otherwise read as a much bigger, inconsistent
+    // gap and break the "are these two actually next to each other" check.
+    const slotRect = (id) => {
+      const el = els.content.querySelector(`[data-id="${id}"]`);
+      if (!el) return null;
+      return { left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
+    };
 
     const people = data.people;
     const drawnSpousePairs = new Set();
@@ -3395,14 +3415,17 @@
         drawnSpousePairs.add(key);
         const r1 = cardRect(p.id), r2 = cardRect(sid);
         if (!r1 || !r2 || Math.abs(r1.centerY - r2.centerY) > 5) continue; // only same-row spouses
+        const sl1 = slotRect(p.id), sl2 = slotRect(sid);
         const y = r1.centerY;
-        const x1 = r1.right < r2.left ? r1.right : r2.right;
-        const x2 = r1.right < r2.left ? r2.left : r1.left;
+        const pIsLeft = sl1.right < sl2.left;
+        const slotGap = pIsLeft ? sl2.left - sl1.right : sl1.left - sl2.right;
         // A hub with 2+ spouses (a remarriage) puts them in the same row --
         // only tie together cards that are actually next to each other, so
         // a tie to the far spouse doesn't draw straight through whoever
         // else's card sits in between.
-        if (Math.abs(x2 - x1) > SPOUSE_GAP + 2) continue;
+        if (Math.abs(slotGap) > SPOUSE_GAP + 2) continue;
+        const x1 = pIsLeft ? r1.right : r2.right;
+        const x2 = pIsLeft ? r2.left : r1.left;
         svg.appendChild(svgLine(x1, y, x2, y));
       }
     }
