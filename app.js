@@ -3471,7 +3471,17 @@
       const sharedSpouseY = parentRects.length === 2 ? spouseLineY(group.parents[0], group.parents[1]) : null;
       const parentY = sharedSpouseY != null ? sharedSpouseY : Math.max(...parentRects.map(r => r.bottom));
       const childTopY = Math.min(...childRects.map(r => r.top));
-      const busY = parentY + (childTopY - parentY) / 2;
+      // The bus (the horizontal run the trunk bends into) always centers in
+      // the actual clear gap below every parent's own caption -- never in
+      // the gap below parentY itself, which for a couple is the marriage
+      // line up at circle-center height, well above their captions. Using
+      // parentY here would often land the bus right on top of the caption
+      // text instead of in the empty space beneath it. The vertical run
+      // from parentY down to this busY only ever crosses that caption-height
+      // band at parentAnchorX, in the gap between the two circles, so it
+      // never passes over the text itself.
+      const parentCaptionClearY = Math.max(...parentRects.map(r => r.bottom));
+      const busY = parentCaptionClearY + (childTopY - parentCaptionClearY) / 2;
 
       const sortedChildren = childRects.slice().sort((a, b) => a.centerX - b.centerX);
       const leftmost = sortedChildren[0];
