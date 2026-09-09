@@ -3413,6 +3413,16 @@
     const people = data.people;
     const drawnSpousePairs = new Set();
 
+    // Built here (rather than down where it's consumed, next to the actual
+    // parent-child line drawing) so the spouse-line loop below can already
+    // tell whether a given couple has children together.
+    const familyGroups = {};
+    for (const p of Object.values(people)) {
+      if (!p.parents.length) continue;
+      const key = familyKey(p.parents);
+      (familyGroups[key] = familyGroups[key] || { parents: p.parents, children: [] }).children.push(p.id);
+    }
+
     // Spouse lines. In Traditional/Zodiac clustering the two are always
     // the same row (same Y), so a plain horizontal line joins them; in
     // Chronological view they sit at their own birth year, which puts a
@@ -3448,6 +3458,17 @@
             { x: bendX, y: rightR.centerY },
             { x: rightR.left, y: rightR.centerY },
           ], CONNECTOR_CORNER_RADIUS));
+          // If this couple has children together, the parent-child trunk
+          // below starts at the lower spouse's own card bottom (see
+          // parentY in the loop below) -- extend this elbow's trunk down
+          // to meet it exactly, through the clear gap beside the lower
+          // spouse's caption, instead of stopping right at their circle
+          // and leaving a visible break before the trunk resumes.
+          const lowerR = leftR.centerY > rightR.centerY ? leftR : rightR;
+          if (familyGroups[familyKey([p.id, sid])]) {
+            const trunkStartY = Math.max(leftR.bottom, rightR.bottom);
+            svg.appendChild(svgLine(bendX, lowerR.centerY, bendX, trunkStartY));
+          }
         }
       }
     }
@@ -3469,14 +3490,8 @@
       return rA.centerY;
     };
 
-    // Parent-child lines, grouped by family (parent set)
-    const familyGroups = {};
-    for (const p of Object.values(people)) {
-      if (!p.parents.length) continue;
-      const key = familyKey(p.parents);
-      (familyGroups[key] = familyGroups[key] || { parents: p.parents, children: [] }).children.push(p.id);
-    }
-
+    // Parent-child lines, grouped by family (parent set; familyGroups
+    // itself was already built above, before the spouse-line loop).
     for (const group of Object.values(familyGroups)) {
       const parentRects = group.parents.map(cardRect).filter(Boolean);
       const childRects = group.children.map(cardRect).filter(Boolean);
