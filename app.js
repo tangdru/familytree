@@ -1162,16 +1162,28 @@
       // perfectly centered every frame, not the generic corner-based fit
       // animateFitToView does.)
     } else {
-      // Deliberately NOT fitToView() here -- switching modes should feel
-      // like the same content rearranging itself under a still camera, not
-      // a new scene: pan/zoom (view.x/y/scale) stay exactly where the user
-      // left them, and only the tree layout animates underneath (see
-      // animateLayoutIn). Still need applyTransform() though, since the
-      // chrono ruler's own transform is only kept in sync with view.{x,y,
-      // scale} while chronological mode is actually active (see
-      // applyTransform) -- it can otherwise go stale while panning/zooming
-      // in traditional mode with the ruler faded out.
-      applyTransform();
+      // 'traditional' or 'chronological'.
+      const stayingWithinTradAndChrono =
+        (previousViewMode === 'traditional' || previousViewMode === 'chronological') &&
+        (viewMode === 'traditional' || viewMode === 'chronological');
+      if (stayingWithinTradAndChrono) {
+        // Switching directly between these two is unchanged: switching
+        // modes should feel like the same content rearranging itself
+        // under a still camera, not a new scene -- pan/zoom (view.x/y/
+        // scale) stay exactly where the user left them, and only the tree
+        // layout animates underneath (see animateLayoutIn). Still need
+        // applyTransform() though, since the chrono ruler's own transform
+        // is only kept in sync with view.{x,y,scale} while chronological
+        // mode is actually active (see applyTransform) -- it can
+        // otherwise go stale while panning/zooming in traditional mode
+        // with the ruler faded out.
+        applyTransform();
+      } else {
+        // Arriving here from Zodiac or Centric (or on first load): reframe
+        // to fit, same full (both-axis) fit the manual fit-view button
+        // already does for these two views.
+        animateFitToView();
+      }
     }
   });
 
