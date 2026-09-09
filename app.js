@@ -2154,15 +2154,22 @@
   // candidate birthdates on record and both stay visible. Without a zodiac
   // set there's only ever the one date, shown plainly as before (no
   // "Documented" label -- nothing to disambiguate it from).
+  // Labels here are the truncated "Doc./Zodiac" pair -- deliberately
+  // shorter than the Add/Edit form's own "Documented birthday" label and
+  // "Zodiac-adjusted birthday" hint (see updateZodiacAdjustedHint), which
+  // stay spelled out in full. This pair only feeds the read-only view
+  // cards (single Person View and, via coupleMemberDatesLines, the Couple
+  // View), where space is tighter -- the couple card's 130px-wide columns
+  // in particular wrap the full words across several lines.
   function personViewDatesLines(p) {
     const adjusted = zodiacAdjustedBirthDate(p);
     if (!adjusted) return { primary: personDatesText(p), secondary: '' };
     const documentedBorn = formatDateDisplay(p.birthDate);
     const died = formatDateDisplay(p.deathDate);
-    const primary = died ? `Documented: ${documentedBorn} – ${died}` : `Documented: Born ${documentedBorn}`;
+    const primary = died ? `Doc.: ${documentedBorn} – ${died}` : `Doc.: Born ${documentedBorn}`;
     const age = computeAge(p);
     const adjustedText = `Born ${formatDateDisplay(adjusted)}`;
-    const secondary = `Zodiac-adjusted: ${age != null ? `${adjustedText} · Age ${age}` : adjustedText}`;
+    const secondary = `Zodiac: ${age != null ? `${adjustedText} · Age ${age}` : adjustedText}`;
     return { primary, secondary };
   }
 
