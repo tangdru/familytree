@@ -3891,11 +3891,16 @@
   // animate in sequence (innermost first) rather than all at once -- see
   // animateCentricGrid and centricTransitionDuration.
   const CENTRIC_RING_STAGGER_MS = 70;
-  // Both metrics use the same ring count: Age (0-5/6-15/16-30/30+) and
-  // Location (same city/same country/same hemisphere/elsewhere) each have
-  // exactly 4 tiers, so a ring's color step and the grid's overall shape
-  // never differ by metric -- only what a given ring actually MEANS does.
-  const CENTRIC_RING_COUNT = 4;
+  // Age has 4 tiers, Location has 5 -- see centricAgeRing/centricLocationRing
+  // below. Ring color still steps relative to whichever count is current
+  // (see drawCentricGrid), so the outermost ring of either metric always
+  // reaches the same CENTRIC_OUTER_RING_T shade even though the two counts
+  // differ; switching between the two metrics genuinely adds/removes a
+  // ring (Location's 5th), which is exactly what animateCentricGrid's own
+  // enter/exit handling is for.
+  function centricRingCount(metric) {
+    return metric === 'location' ? 5 : 4;
+  }
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -3913,22 +3918,28 @@
   // Location-proximity ring. There's no geocoding anywhere in this app --
   // just free-text "City, State/Country" strings (see currentLocationOf)
   // -- so "proximity" here is textual/best-effort, not a real distance:
-  // ring 1 is the exact same location string, ring 2 shares the same
-  // guessed country (see guessCountryFromLocationText -- this is a real
-  // country match, not just the same trailing segment, so a US "City,
-  // State" location never falsely matches a "City, Country" one), ring 3
-  // shares the same hemisphere (see hemisphereForLocation), and ring 4 is
+  // ring 1 is the exact same location string; ring 2 shares the same
+  // trailing comma-separated segment (a US state for "City, State", or
+  // just the country again for "City, Country" -- for that shape this
+  // tier and ring 3 naturally coincide); ring 3 shares the same guessed
+  // country (see guessCountryFromLocationText -- a real country match,
+  // not just matching text, so two different-state "City, State" US
+  // locations still land here even though ring 2 missed them); ring 4
+  // shares the same hemisphere (see hemisphereForLocation); ring 5 is
   // everyone else, including anyone with no location set at all.
   function centricLocationRing(centerLoc, personLoc) {
-    if (!centerLoc || !personLoc) return 4;
+    if (!centerLoc || !personLoc) return 5;
     if (personLoc.toLowerCase() === centerLoc.toLowerCase()) return 1;
+    const centerRegion = centerLoc.split(',').pop().trim().toLowerCase();
+    const personRegion = personLoc.split(',').pop().trim().toLowerCase();
+    if (centerRegion && centerRegion === personRegion) return 2;
     const centerCountry = guessCountryFromLocationText(centerLoc);
     const personCountry = guessCountryFromLocationText(personLoc);
-    if (centerCountry && centerCountry === personCountry) return 2;
+    if (centerCountry && centerCountry === personCountry) return 3;
     const centerHemi = hemisphereForLocation(centerLoc);
     const personHemi = hemisphereForLocation(personLoc);
-    if (centerHemi && centerHemi === personHemi) return 3;
-    return 4;
+    if (centerHemi && centerHemi === personHemi) return 4;
+    return 5;
   }
 
   // What a ring actually means for the current metric, shown as an axis
@@ -3936,7 +3947,7 @@
   // label since there's no gridline drawn at radius 0.
   function centricRingLabel(metric, ringIndex) {
     const labels = metric === 'location'
-      ? ['Same city', 'Same country', 'Same hemisphere', 'Elsewhere']
+      ? ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']
       : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
@@ -4016,17 +4027,19 @@
       // never by ring index -- during a transition an "exiting" ring's
       // radius can temporarily exceed an "entering" one's, or vice versa.
       const byRadiusDesc = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
-      // Ring color steps relative to CENTRIC_RING_COUNT (both metrics use
-      // the same count), so the outermost ring always reaches the same
-      // CENTRIC_OUTER_RING_T shade, and "beyond" (t=1, see the background
+      // Ring color is relative to the CURRENT metric's own ring count, not
+      // a fixed total -- so the outermost ring always reaches the same
+      // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
+      // ring or Location's 5th, and "beyond" (t=1, see the background
       // rect above) always reads as one further, darker step past
       // whichever ring is actually outermost for this metric. A ring
       // that's mid-exit (its metric no longer includes it, e.g. Age's 4th
       // ring animating out after switching to Location) can compute
       // slightly past 1 here, so it's clamped -- it's on its way off-
       // screen anyway, so it only needs to not render as an invalid color.
+      const totalRingsForMetric = centricRingCount(centricMetric);
       for (const idx of byRadiusDesc) {
-        const t = Math.min(1, (idx / CENTRIC_RING_COUNT) * CENTRIC_OUTER_RING_T);
+        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
         const disc = document.createElementNS(svgNS, 'circle');
         disc.setAttribute('cx', originX);
         disc.setAttribute('cy', originY);
@@ -4288,14 +4301,14 @@
     const centerYear = effectiveBirthYear(center);
     const centerLoc = currentLocationOf(center);
 
-    // Every ring for the current metric always exists (1..CENTRIC_RING_COUNT),
-    // even ones nobody currently falls into -- so recentering never makes
-    // a ring (and its axis label) pop in or out of existence, only its
-    // radius change. That's what actually reads as "the same grid,
-    // resized," rather than a different set of rings every time you click
-    // someone new.
+    // Every ring for the current metric always exists (1..4 for age, 1..5
+    // for location), even ones nobody currently falls into -- so
+    // recentering never makes a ring (and its axis label) pop in or out
+    // of existence, only its radius change. That's what actually reads as
+    // "the same grid, resized," rather than a different set of rings
+    // every time you click someone new.
     const rings = {}; // ring index -> [person, ...]
-    for (let i = 1; i <= CENTRIC_RING_COUNT; i++) rings[i] = [];
+    for (let i = 1; i <= centricRingCount(centricMetric); i++) rings[i] = [];
     for (const p of Object.values(data.people)) {
       if (p.id === centricCenterId) continue;
       let ring;
