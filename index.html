@@ -11,13 +11,7 @@
 </head>
 <body>
   <header class="toolbar">
-    <button id="addPersonBtn" class="toolbar-add-btn" aria-label="Add person" title="Add person">+</button>
-    <div class="search-wrap" id="searchWrap">
-      <button id="searchToggleBtn" class="search-toggle-btn" type="button" aria-label="Search" aria-expanded="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      </button>
-      <input id="searchInput" class="search-input" type="search" placeholder="Search people…" autocomplete="off">
-    </div>
+    <h1 class="toolbar-title">Family Tree</h1>
     <div class="toolbar-spacer"></div>
     <select id="viewModeSelect" class="view-mode-select" aria-label="Tree view">
       <option value="traditional">Traditional Tree</option>
@@ -26,8 +20,6 @@
       <option value="centric">Centric View</option>
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
-    <h1 class="toolbar-title">Family Tree</h1>
-    <button id="helpBtn" class="toolbar-help-btn" aria-label="Help" title="Help">?</button>
     <button id="exportBtn" class="btn" hidden>Export JSON</button>
   </header>
 
@@ -46,14 +38,27 @@
       <button type="button" class="centric-metric-btn active" data-metric="age">Age</button>
       <button type="button" class="centric-metric-btn" data-metric="location">Location</button>
     </div>
-    <button type="button" id="fitViewBtn" class="fit-view-btn" aria-label="Fit to view" title="Fit to view">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
-        <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
-        <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
-        <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
-      </svg>
-    </button>
+
+    <!-- Floating action stack, top to bottom: add person, search,
+         help, fit-to-view -- see .quick-actions in style.css. -->
+    <div class="quick-actions" id="quickActions">
+      <button id="addPersonBtn" class="quick-action-btn quick-action-primary" aria-label="Add person" title="Add person">+</button>
+      <div class="search-wrap" id="searchWrap">
+        <input id="searchInput" class="search-input" type="search" placeholder="Search people…" autocomplete="off">
+        <button id="searchToggleBtn" class="quick-action-btn" type="button" aria-label="Search" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+      </div>
+      <button id="helpBtn" class="quick-action-btn" aria-label="Help" title="Help">?</button>
+      <button type="button" id="fitViewBtn" class="quick-action-btn" aria-label="Fit to view" title="Fit to view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+          <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+        </svg>
+      </button>
+    </div>
   </main>
 
   <!-- Add / Edit Person Modal -->
