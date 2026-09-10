@@ -868,6 +868,43 @@ body {
 }
 .help-section p { margin: 0; font-size: 0.88rem; line-height: 1.45; }
 .help-list { margin: 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; }
+
+/* Small directional-pad illustration for the swipe-to-navigate feature,
+   reusing the exact same chevron glyphs as the real in-app swipe hints
+   (see .swipe-hint in this file) for visual consistency. */
+.help-swipe-diagram {
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: repeat(3, 36px);
+  justify-content: center;
+  gap: 2px;
+  margin: 12px auto 6px;
+}
+.help-swipe-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-dark);
+}
+.help-swipe-arrow svg { width: 18px; height: 18px; }
+.help-swipe-up { grid-column: 2; grid-row: 1; }
+.help-swipe-left { grid-column: 1; grid-row: 2; }
+.help-swipe-right { grid-column: 3; grid-row: 2; }
+.help-swipe-down { grid-column: 2; grid-row: 3; }
+.help-swipe-center {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--card-border);
+  border-radius: 50%;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.help-swipe-legend { margin: 0; font-size: 0.8rem; color: var(--ink-soft); text-align: center; }
 .help-list li { margin-bottom: 6px; }
 .help-list li:last-child { margin-bottom: 0; }
 

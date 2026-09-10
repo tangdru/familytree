@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609129">
+<link rel="stylesheet" href="style.css?v=202609130">
 </head>
 <body>
   <header class="toolbar">
@@ -40,7 +40,7 @@
     </div>
 
     <!-- Floating action stack, top to bottom: add person, search,
-         help, fit-to-view -- see .quick-actions in style.css. -->
+         fit-to-view, help -- see .quick-actions in style.css. -->
     <div class="quick-actions" id="quickActions">
       <button id="addPersonBtn" class="quick-action-btn quick-action-primary" aria-label="Add person" title="Add person">+</button>
       <div class="search-wrap" id="searchWrap">
@@ -49,7 +49,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         </button>
       </div>
-      <button id="helpBtn" class="quick-action-btn" aria-label="Help" title="Help">?</button>
       <button type="button" id="fitViewBtn" class="quick-action-btn" aria-label="Fit to view" title="Fit to view">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
@@ -58,6 +57,7 @@
           <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
         </svg>
       </button>
+      <button id="helpBtn" class="quick-action-btn" aria-label="Help" title="Help">?</button>
     </div>
   </main>
 
@@ -363,7 +363,23 @@
       <div class="modal-body help-modal-body">
         <section class="help-section">
           <h3>Getting started</h3>
-          <p>Tap anyone's card to see their full profile — photo, dates, contact info, and how they connect to the rest of the family. Tap <strong>+</strong> in the top-left to add someone new.</p>
+          <p>Tap anyone's card to see their full profile — photo, dates, contact info, and how they connect to the rest of the family. From there, swipe to move through the tree. Tap <strong>+</strong> (bottom-right) to add someone new.</p>
+          <div class="help-swipe-diagram" aria-hidden="true">
+            <span class="help-swipe-arrow help-swipe-up">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            </span>
+            <span class="help-swipe-arrow help-swipe-left">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </span>
+            <span class="help-swipe-center">You</span>
+            <span class="help-swipe-arrow help-swipe-right">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+            </span>
+            <span class="help-swipe-arrow help-swipe-down">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </span>
+          </div>
+          <p class="help-swipe-legend">Up/down to a child/parent · left/right to a sibling</p>
         </section>
         <section class="help-section">
           <h3>Views</h3>
@@ -419,7 +435,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609129"></script>
-  <script src="app.js?v=202609129"></script>
+  <script src="config.js?v=202609130"></script>
+  <script src="app.js?v=202609130"></script>
 </body>
 </html>
