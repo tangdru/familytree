@@ -846,6 +846,14 @@ body {
 /* ---------- Help guide ---------- */
 .help-modal { max-width: 480px; }
 .help-modal-body { padding-top: 4px; }
+/* Sibling of .help-modal-body (not nested inside it, see index.html), so
+   it needs its own full padding -- the base .modal-footer rule only ever
+   supplied padding-top, relying on being nested inside a padded
+   .modal-body everywhere else it's used. */
+.help-modal .modal-footer {
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--card-border);
+}
 .help-section { margin-top: 18px; }
 .help-section:first-child { margin-top: 0; }
 .help-section h3 {
