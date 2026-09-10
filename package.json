@@ -1,0 +1,9 @@
+{
+  "name": "familytree",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Family tree app",
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
