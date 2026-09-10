@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609130">
+<link rel="stylesheet" href="style.css?v=202609131">
 </head>
 <body>
   <header class="toolbar">
@@ -363,7 +363,11 @@
       <div class="modal-body help-modal-body">
         <section class="help-section">
           <h3>Getting started</h3>
-          <p>Tap anyone's card to see their full profile — photo, dates, contact info, and how they connect to the rest of the family. From there, swipe to move through the tree. Tap <strong>+</strong> (bottom-right) to add someone new.</p>
+          <p>Tap <strong>+</strong> (bottom-right) to add your first person — name, documented birthday, Chinese zodiac, contact info, locations, parents, and spouses/partners.</p>
+        </section>
+        <section class="help-section">
+          <h3>Viewing a profile</h3>
+          <p>Tap anyone's card to open their full profile — photo, dates, contact info, and how they connect to the rest of the family. Tap <strong>Edit</strong> there to update their details, or swipe to move through the tree:</p>
           <div class="help-swipe-diagram" aria-hidden="true">
             <span class="help-swipe-arrow help-swipe-up">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
@@ -395,16 +399,12 @@
           <p>Drag to pan, pinch or scroll to zoom. Tap the compass button (bottom-right) any time to fit everyone back on screen. Tap the magnifying glass to search for someone by name.</p>
         </section>
         <section class="help-section">
-          <h3>Adding &amp; editing a person</h3>
-          <p>Tap <strong>+</strong>, or open someone's profile and tap <strong>Edit</strong>, to fill in their name, documented birthday, Chinese zodiac, contact info, locations, parents, and spouses/partners.</p>
-        </section>
-        <section class="help-section">
           <h3>Zodiac-adjusted birthdays</h3>
           <p>Some documented birthdays in the family aren't accurate — but the Chinese zodiac sign someone was actually born under usually is. Enter both, and their profile shows the documented birthday (<strong>Doc.:</strong>) alongside a zodiac-corrected one (<strong>Zodiac:</strong>), calculated as the closest birth year matching that sign. When the two already agree, only one date is shown.</p>
         </section>
         <section class="help-section">
           <h3>Couples</h3>
-          <p>Spouses and partners appear together as a shared card, each with their own dates, zodiac, and contact info side by side.</p>
+          <p>Spouses and partners appear together as a shared card, each with their own dates, zodiac, and contact info side by side — but only from Traditional or Chronological view. Tapping a person always opens their info; in Zodiac Tree and Centric View, that's always their own single profile card, even if they're married.</p>
         </section>
       </div>
       <div class="modal-footer">
@@ -435,7 +435,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609130"></script>
-  <script src="app.js?v=202609130"></script>
+  <script src="config.js?v=202609131"></script>
+  <script src="app.js?v=202609131"></script>
 </body>
 </html>
