@@ -65,17 +65,14 @@ body {
   margin: 0;
   white-space: nowrap;
   color: var(--accent-dark);
-  order: 6;
 }
 
 .toolbar-spacer {
   flex: 1 1 auto;
   min-width: 0;
-  order: 3;
 }
 
 .view-mode-select {
-  order: 4;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--accent-dark);
@@ -88,29 +85,11 @@ body {
   min-width: 0;
 }
 
-.toolbar-add-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  order: 1;
-  transition: background .15s, border-color .15s, transform .1s;
-}
-.toolbar-add-btn:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
-.toolbar-add-btn:active { transform: scale(0.94); }
-
 .sync-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  order: 5;
   background: var(--ink-soft);
 }
 .sync-dot.local { background: #b7a98a; }
@@ -118,51 +97,82 @@ body {
 .sync-dot.connected { background: #2e7d3d; }
 .sync-dot.error { background: var(--danger); }
 
-.search-wrap {
-  order: 2;
+/* ---------- Floating quick-actions stack ---------- */
+/* Add person / search / help / fit-to-view, stacked as one column of
+   circular buttons over the bottom-right corner of the tree viewport --
+   grouping them here (rather than spread across the header) keeps every
+   "do something to the tree" action within a thumb's reach on a phone or
+   tablet, where the header itself can otherwise scroll out of easy reach. */
+.quick-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  height: 34px;
-  width: 34px;
-  border-radius: 999px;
+  gap: 10px;
+}
+
+.quick-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   border: 1px solid var(--card-border);
-  background: var(--bg);
-  overflow: hidden;
-  flex-shrink: 1;
-  min-width: 34px;
-  transition: width .22s ease, max-width .22s ease;
-}
-.search-wrap.open {
-  width: 100%;
-  max-width: 260px;
-}
-.search-toggle-btn {
-  width: 34px;
-  height: 34px;
-  border: none;
-  background: none;
-  color: var(--ink);
+  background: var(--surface);
+  color: var(--ink-soft);
+  box-shadow: var(--shadow);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
   padding: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background .15s, border-color .15s, color .15s, transform .1s;
 }
-.search-toggle-btn svg { width: 15px; height: 15px; }
+.quick-action-btn svg { width: 18px; height: 18px; }
+.quick-action-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quick-action-btn:active { transform: scale(0.92); }
+
+.quick-action-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-size: 1.4rem;
+}
+.quick-action-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+
+/* The search toggle is itself a .quick-action-btn (same circle, same
+   spot in the stack); opening it slides a pill-shaped input out from
+   behind it to the left, rather than growing the circle itself, so the
+   button's position in the column never shifts. */
+.search-wrap { position: relative; width: 44px; height: 44px; }
 .search-input {
-  border: none;
-  background: none;
-  outline: none;
-  font: inherit;
+  position: absolute;
+  top: 0;
+  right: 44px;
+  height: 44px;
+  width: 0;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink);
-  width: 100%;
-  min-width: 0;
-  padding: 0 10px 0 0;
+  font: inherit;
+  outline: none;
+  box-shadow: var(--shadow);
   opacity: 0;
-  transition: opacity .18s ease .05s;
+  overflow: hidden;
+  transition: width .22s ease, opacity .18s ease, padding .22s ease;
 }
-.search-wrap.open .search-input { opacity: 1; }
+.search-wrap.open .search-input {
+  width: 200px;
+  opacity: 1;
+  padding: 0 14px;
+}
 
 .btn {
   padding: 7px 12px;
@@ -323,29 +333,6 @@ body {
   border-color: var(--accent);
   box-shadow: 0 6px 18px rgba(60,45,20,0.28);
 }
-
-.fit-view-btn {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--card-border);
-  background: var(--surface);
-  color: var(--ink-soft);
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  z-index: 3;
-  transition: background .15s, border-color .15s, color .15s, transform .1s;
-}
-.fit-view-btn svg { width: 18px; height: 18px; }
-.fit-view-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-.fit-view-btn:active { transform: scale(0.92); }
 
 .empty-state {
   position: absolute;
@@ -855,6 +842,65 @@ body {
 }
 .crop-zoom-row input[type=range] { flex: 1; }
 .crop-modal .hint { display: block; text-align: center; margin-bottom: 4px; }
+
+/* ---------- Help guide ---------- */
+.help-modal { max-width: 480px; }
+.help-modal-body { padding-top: 4px; }
+.help-section { margin-top: 18px; }
+.help-section:first-child { margin-top: 0; }
+.help-section h3 {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--card-border);
+}
+.help-section p { margin: 0; font-size: 0.88rem; line-height: 1.45; }
+.help-list { margin: 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; }
+.help-list li { margin-bottom: 6px; }
+.help-list li:last-child { margin-bottom: 0; }
+
+/* ---------- First-time walkthrough ---------- */
+/* Full-viewport layer, but transparent to clicks itself -- only the
+   highlight ring and tooltip (each opted back in below) should ever
+   intercept a tap, so a step that happens to sit over real content never
+   traps the user's next click. */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+.tour-overlay[hidden] { display: none; }
+/* The dimmed backdrop is a single oversized box-shadow around this box,
+   not a separate full-screen scrim -- the box's own rect (sized/positioned
+   in JS to match whatever control is being introduced, see positionTour()
+   in app.js) is left unpainted, so it reads as a cutout spotlight rather
+   than a highlight drawn on top of a dimmed page. */
+.tour-highlight {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 4000px rgba(20, 16, 10, 0.68), 0 0 0 3px var(--accent);
+  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+  pointer-events: none;
+}
+.tour-tooltip {
+  position: fixed;
+  width: min(280px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  padding: 14px 16px;
+  pointer-events: auto;
+  transition: top .25s ease, left .25s ease;
+}
+.tour-tooltip-text { margin: 0 0 12px; font-size: 0.88rem; line-height: 1.45; }
+.tour-tooltip-footer { display: flex; align-items: center; gap: 8px; }
+.tour-progress { font-size: 0.72rem; color: var(--ink-soft); margin-right: auto; }
 
 /* ---------- Person view (read-only detail) modal ---------- */
 /* Top-aligned rather than the .modal-overlay default of vertically

@@ -2,6 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'familytree.data.v1';
+  const TOUR_SEEN_KEY = 'familytree.tourSeen.v1';
   const SUPABASE_ROW_ID = 'main';
   const PHOTO_BUCKET = 'photos'; // Supabase Storage bucket -- see supabase-schema.sql
   const MAX_EDIT_DIM = 1600; // cap the source image loaded into the crop editor
@@ -330,6 +331,19 @@
 
     addPersonBtn: document.getElementById('addPersonBtn'),
     exportBtn: document.getElementById('exportBtn'),
+
+    helpBtn: document.getElementById('helpBtn'),
+    helpModal: document.getElementById('helpModal'),
+    helpCloseBtn: document.getElementById('helpCloseBtn'),
+    helpDoneBtn: document.getElementById('helpDoneBtn'),
+    replayTourBtn: document.getElementById('replayTourBtn'),
+    tourOverlay: document.getElementById('tourOverlay'),
+    tourHighlight: document.getElementById('tourHighlight'),
+    tourTooltip: document.getElementById('tourTooltip'),
+    tourTooltipText: document.getElementById('tourTooltipText'),
+    tourProgress: document.getElementById('tourProgress'),
+    tourSkipBtn: document.getElementById('tourSkipBtn'),
+    tourNextBtn: document.getElementById('tourNextBtn'),
 
     modal: document.getElementById('personModal'),
     modalTitle: document.getElementById('modalTitle'),
@@ -4676,6 +4690,98 @@
     };
   }
 
+  // ---------- Help & first-time walkthrough ----------
+
+  // Selectors, not element refs: read at tour-start time so the same list
+  // works whether the tour runs on first load (right after seeding/loading
+  // data) or later as a manual replay, and so a step whose target doesn't
+  // currently exist can simply be filtered out instead of breaking the tour.
+  const TOUR_STEPS = [
+    { selector: '#addPersonBtn', text: 'Tap here to add a new person to the family tree.' },
+    { selector: '#viewModeSelect', text: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.' },
+    { selector: '#searchToggleBtn', text: 'Search for anyone in the tree by name.' },
+    { selector: '.person-card', text: 'Tap anyone’s card to see their full profile, family connections, and contact info.' },
+    { selector: '#fitViewBtn', text: 'Lost? Tap here to fit everyone back into view.' },
+    { selector: '#helpBtn', text: 'Come back here any time to reread this guide or replay the walkthrough.' },
+  ];
+
+  let tourSteps = [];
+  let tourIndex = 0;
+
+  function positionTour(targetEl) {
+    const rect = targetEl.getBoundingClientRect();
+    const pad = 6;
+    els.tourHighlight.style.top = `${rect.top - pad}px`;
+    els.tourHighlight.style.left = `${rect.left - pad}px`;
+    els.tourHighlight.style.width = `${rect.width + pad * 2}px`;
+    els.tourHighlight.style.height = `${rect.height + pad * 2}px`;
+
+    // Measure the tooltip itself (off-screen first) so it can be flipped
+    // above the target and clamped within the viewport's edges, regardless
+    // of which corner of the screen the target happens to sit in.
+    const tt = els.tourTooltip;
+    tt.style.top = '-9999px';
+    tt.style.left = '-9999px';
+    const ttRect = tt.getBoundingClientRect();
+    const margin = 12;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= ttRect.height + margin + pad
+      ? rect.bottom + pad + margin
+      : Math.max(margin, rect.top - pad - margin - ttRect.height);
+    let left = rect.left + rect.width / 2 - ttRect.width / 2;
+    left = Math.min(Math.max(left, margin), window.innerWidth - ttRect.width - margin);
+    tt.style.top = `${top}px`;
+    tt.style.left = `${left}px`;
+  }
+
+  function showTourStep(index) {
+    const step = tourSteps[index];
+    els.tourTooltipText.textContent = step.text;
+    els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
+    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
+    positionTour(document.querySelector(step.selector));
+  }
+
+  function nextTourStep() {
+    if (tourIndex + 1 >= tourSteps.length) { endTour(); return; }
+    tourIndex += 1;
+    showTourStep(tourIndex);
+  }
+
+  function startTour() {
+    tourSteps = TOUR_STEPS.filter((step) => document.querySelector(step.selector));
+    if (!tourSteps.length) return;
+    tourIndex = 0;
+    els.tourOverlay.hidden = false;
+    showTourStep(tourIndex);
+  }
+
+  function endTour() {
+    els.tourOverlay.hidden = true;
+    localStorage.setItem(TOUR_SEEN_KEY, '1');
+  }
+
+  els.tourNextBtn.addEventListener('click', nextTourStep);
+  els.tourSkipBtn.addEventListener('click', endTour);
+  window.addEventListener('resize', () => {
+    if (els.tourOverlay.hidden) return;
+    const step = tourSteps[tourIndex];
+    const targetEl = step && document.querySelector(step.selector);
+    if (targetEl) positionTour(targetEl);
+  });
+
+  function openHelpModal() { els.helpModal.hidden = false; }
+  function closeHelpModal() { els.helpModal.hidden = true; }
+
+  els.helpBtn.addEventListener('click', openHelpModal);
+  els.helpCloseBtn.addEventListener('click', closeHelpModal);
+  els.helpDoneBtn.addEventListener('click', closeHelpModal);
+  els.helpModal.addEventListener('click', (e) => { if (e.target === els.helpModal) closeHelpModal(); });
+  els.replayTourBtn.addEventListener('click', () => {
+    closeHelpModal();
+    startTour();
+  });
+
   // ---------- Startup ----------
 
   async function init() {
@@ -4711,6 +4817,16 @@
 
     renderTree();
     fitToView();
+
+    // navigator.webdriver is true for automation-controlled browsers
+    // (Playwright, Selenium, etc.) and false for a real visitor -- skips
+    // the auto-popup for automated testing/scraping without touching the
+    // manual "Replay walkthrough" entry point, which works either way.
+    if (!localStorage.getItem(TOUR_SEEN_KEY) && !navigator.webdriver) {
+      // Let the fit-to-view animation and layout settle first, so the
+      // very first highlighted rect (Add Person) isn't measured mid-shift.
+      setTimeout(startTour, 500);
+    }
   }
 
   // Re-fit when the page is restored from the browser's back-forward cache
