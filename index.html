@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609124">
+<link rel="stylesheet" href="style.css?v=202609126">
 </head>
 <body>
   <header class="toolbar">
@@ -27,6 +27,7 @@
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
     <h1 class="toolbar-title">Family Tree</h1>
+    <button id="helpBtn" class="toolbar-help-btn" aria-label="Help" title="Help">?</button>
     <button id="exportBtn" class="btn" hidden>Export JSON</button>
   </header>
 
@@ -347,12 +348,73 @@
     </div>
   </div>
 
+  <!-- Help guide -->
+  <div id="helpModal" class="modal-overlay" hidden>
+    <div class="modal help-modal">
+      <div class="modal-header">
+        <h2>Help</h2>
+        <button id="helpCloseBtn" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body help-modal-body">
+        <section class="help-section">
+          <h3>Getting started</h3>
+          <p>Tap anyone's card to see their full profile — photo, dates, contact info, and how they connect to the rest of the family. Tap <strong>+</strong> in the top-left to add someone new.</p>
+        </section>
+        <section class="help-section">
+          <h3>Views</h3>
+          <ul class="help-list">
+            <li><strong>Traditional Tree</strong> — the classic generation-by-generation layout, parents above children.</li>
+            <li><strong>Chronological Tree</strong> — everyone lined up by birth year, with a year ruler along the left edge.</li>
+            <li><strong>Zodiac Tree</strong> — grouped into columns by Chinese zodiac sign.</li>
+            <li><strong>Centric View</strong> — concentric rings around one person, showing everyone else's age or location relative to them. Tap a ring member to recenter on them; use the Age/Location switch (top-left) to change what the rings measure.</li>
+          </ul>
+        </section>
+        <section class="help-section">
+          <h3>Finding your way around</h3>
+          <p>Drag to pan, pinch or scroll to zoom. Tap the compass button (bottom-right) any time to fit everyone back on screen. Tap the magnifying glass to search for someone by name.</p>
+        </section>
+        <section class="help-section">
+          <h3>Adding &amp; editing a person</h3>
+          <p>Tap <strong>+</strong>, or open someone's profile and tap <strong>Edit</strong>, to fill in their name, documented birthday, Chinese zodiac, contact info, locations, parents, and spouses/partners.</p>
+        </section>
+        <section class="help-section">
+          <h3>Zodiac-adjusted birthdays</h3>
+          <p>Some documented birthdays in the family aren't accurate — but the Chinese zodiac sign someone was actually born under usually is. Enter both, and their profile shows the documented birthday (<strong>Doc.:</strong>) alongside a zodiac-corrected one (<strong>Zodiac:</strong>), calculated as the closest birth year matching that sign. When the two already agree, only one date is shown.</p>
+        </section>
+        <section class="help-section">
+          <h3>Couples</h3>
+          <p>Spouses and partners appear together as a shared card, each with their own dates, zodiac, and contact info side by side.</p>
+        </section>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="replayTourBtn" class="btn">Replay walkthrough</button>
+        <div class="spacer"></div>
+        <button type="button" id="helpDoneBtn" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-time walkthrough: a short sequence of coach-mark tooltips
+       pointing at real toolbar controls, shown once automatically (see
+       TOUR_SEEN_KEY in app.js) and replayable from the Help guide above. -->
+  <div id="tourOverlay" class="tour-overlay" hidden>
+    <div class="tour-highlight" id="tourHighlight"></div>
+    <div class="tour-tooltip" id="tourTooltip">
+      <p class="tour-tooltip-text" id="tourTooltipText"></p>
+      <div class="tour-tooltip-footer">
+        <span class="tour-progress" id="tourProgress"></span>
+        <button type="button" class="btn btn-subtle" id="tourSkipBtn">Skip</button>
+        <button type="button" class="btn btn-primary" id="tourNextBtn">Next</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Proper per-country phone formatting for the Contact field -- see
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609124"></script>
-  <script src="app.js?v=202609124"></script>
+  <script src="config.js?v=202609126"></script>
+  <script src="app.js?v=202609126"></script>
 </body>
 </html>

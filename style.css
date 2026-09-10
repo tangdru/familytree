@@ -113,6 +113,24 @@ body {
   order: 5;
   background: var(--ink-soft);
 }
+
+.toolbar-help-btn {
+  order: 7;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.toolbar-help-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 .sync-dot.local { background: #b7a98a; }
 .sync-dot.connecting, .sync-dot.saving { background: #c99a2e; }
 .sync-dot.connected { background: #2e7d3d; }
@@ -855,6 +873,65 @@ body {
 }
 .crop-zoom-row input[type=range] { flex: 1; }
 .crop-modal .hint { display: block; text-align: center; margin-bottom: 4px; }
+
+/* ---------- Help guide ---------- */
+.help-modal { max-width: 480px; }
+.help-modal-body { padding-top: 4px; }
+.help-section { margin-top: 18px; }
+.help-section:first-child { margin-top: 0; }
+.help-section h3 {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--card-border);
+}
+.help-section p { margin: 0; font-size: 0.88rem; line-height: 1.45; }
+.help-list { margin: 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; }
+.help-list li { margin-bottom: 6px; }
+.help-list li:last-child { margin-bottom: 0; }
+
+/* ---------- First-time walkthrough ---------- */
+/* Full-viewport layer, but transparent to clicks itself -- only the
+   highlight ring and tooltip (each opted back in below) should ever
+   intercept a tap, so a step that happens to sit over real content never
+   traps the user's next click. */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+.tour-overlay[hidden] { display: none; }
+/* The dimmed backdrop is a single oversized box-shadow around this box,
+   not a separate full-screen scrim -- the box's own rect (sized/positioned
+   in JS to match whatever control is being introduced, see positionTour()
+   in app.js) is left unpainted, so it reads as a cutout spotlight rather
+   than a highlight drawn on top of a dimmed page. */
+.tour-highlight {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 4000px rgba(20, 16, 10, 0.68), 0 0 0 3px var(--accent);
+  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+  pointer-events: none;
+}
+.tour-tooltip {
+  position: fixed;
+  width: min(280px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  padding: 14px 16px;
+  pointer-events: auto;
+  transition: top .25s ease, left .25s ease;
+}
+.tour-tooltip-text { margin: 0 0 12px; font-size: 0.88rem; line-height: 1.45; }
+.tour-tooltip-footer { display: flex; align-items: center; gap: 8px; }
+.tour-progress { font-size: 0.72rem; color: var(--ink-soft); margin-right: auto; }
 
 /* ---------- Person view (read-only detail) modal ---------- */
 /* Top-aligned rather than the .modal-overlay default of vertically
