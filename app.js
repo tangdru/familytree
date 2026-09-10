@@ -144,6 +144,33 @@
     return COUNTRY_NAME_TO_ISO[last] || null;
   }
 
+  // Best-effort country -> hemisphere (N/S), keyed by the same ISO codes as
+  // COUNTRY_NAME_TO_ISO -- used by Centric view's Location metric to group
+  // by "same hemisphere" (see centricLocationRing). For a country whose
+  // territory actually straddles the equator (Brazil, Indonesia, Kenya,
+  // Ecuador...), this picks whichever hemisphere its capital/majority
+  // population sits in -- good enough for grouping a family tree, not a
+  // GIS tool. Unmapped countries (or no country at all) just don't match
+  // anyone else's hemisphere.
+  const COUNTRY_HEMISPHERE = {
+    US: 'N', GB: 'N', CA: 'N', MX: 'N', FR: 'N', DE: 'N', IT: 'N', ES: 'N', PT: 'N',
+    NL: 'N', BE: 'N', CH: 'N', AT: 'N', IE: 'N', SE: 'N', NO: 'N', DK: 'N', FI: 'N', IS: 'N',
+    PL: 'N', CZ: 'N', HU: 'N', RO: 'N', BG: 'N', GR: 'N', HR: 'N', RS: 'N', UA: 'N', RU: 'N',
+    TR: 'N', IL: 'N', SA: 'N', AE: 'N', EG: 'N',
+    CN: 'N', JP: 'N', KR: 'N', KP: 'N', TW: 'N', HK: 'N', VN: 'N', TH: 'N', PH: 'N',
+    ID: 'S', MY: 'N', SG: 'N',
+    IN: 'N', PK: 'N', BD: 'N', LK: 'N', NP: 'N',
+    ZA: 'S', NG: 'N', KE: 'S', ET: 'N', GH: 'N', MA: 'N', DZ: 'N',
+    BR: 'S', AR: 'S', CL: 'S', CO: 'N', PE: 'S', VE: 'N', EC: 'S',
+    CU: 'N', DO: 'N', HT: 'N', JM: 'N', PR: 'N',
+    AU: 'S', NZ: 'S', LU: 'N',
+  };
+
+  function hemisphereForLocation(loc) {
+    const country = guessCountryFromLocationText(loc);
+    return country ? (COUNTRY_HEMISPHERE[country] || null) : null;
+  }
+
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -3434,15 +3461,22 @@
     nameEl.textContent = person.name || '(unnamed)';
     const datesEl = document.createElement('div');
     datesEl.className = 'person-dates';
-    // The zodiac-adjusted year when there is one, so the year shown here
-    // always matches whatever year actually drives Chronological/Centric
-    // positioning -- see effectiveBirthYear.
-    const born = effectiveBirthYear(person);
-    const died = formatYear(person.deathDate);
-    if (born && died) datesEl.textContent = `${born} – ${died}`;
-    else if (born) datesEl.textContent = `b. ${born}`;
-    else if (died) datesEl.textContent = `d. ${died}`;
-    else datesEl.textContent = '';
+    if (options && options.subtitle !== undefined) {
+      // Centric view overrides this line to show whatever the active
+      // metric actually measures (age or current location) instead of
+      // the birth year every other view shows -- see renderCentric.
+      datesEl.textContent = options.subtitle;
+    } else {
+      // The zodiac-adjusted year when there is one, so the year shown here
+      // always matches whatever year actually drives Chronological/Centric
+      // positioning -- see effectiveBirthYear.
+      const born = effectiveBirthYear(person);
+      const died = formatYear(person.deathDate);
+      if (born && died) datesEl.textContent = `${born} – ${died}`;
+      else if (born) datesEl.textContent = `b. ${born}`;
+      else if (died) datesEl.textContent = `d. ${died}`;
+      else datesEl.textContent = '';
+    }
 
     info.appendChild(nameEl);
     info.appendChild(datesEl);
@@ -3857,6 +3891,11 @@
   // animate in sequence (innermost first) rather than all at once -- see
   // animateCentricGrid and centricTransitionDuration.
   const CENTRIC_RING_STAGGER_MS = 70;
+  // Both metrics use the same ring count: Age (0-5/6-15/16-30/30+) and
+  // Location (same city/same country/same hemisphere/elsewhere) each have
+  // exactly 4 tiers, so a ring's color step and the grid's overall shape
+  // never differ by metric -- only what a given ring actually MEANS does.
+  const CENTRIC_RING_COUNT = 4;
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -3873,17 +3912,23 @@
 
   // Location-proximity ring. There's no geocoding anywhere in this app --
   // just free-text "City, State/Country" strings (see currentLocationOf)
-  // -- so "proximity" here is textual, not a real distance: ring 1 is the
-  // exact same location string, ring 2 shares the same trailing
-  // state/country segment, ring 3 is everyone else, including anyone with
-  // no location set at all.
+  // -- so "proximity" here is textual/best-effort, not a real distance:
+  // ring 1 is the exact same location string, ring 2 shares the same
+  // guessed country (see guessCountryFromLocationText -- this is a real
+  // country match, not just the same trailing segment, so a US "City,
+  // State" location never falsely matches a "City, Country" one), ring 3
+  // shares the same hemisphere (see hemisphereForLocation), and ring 4 is
+  // everyone else, including anyone with no location set at all.
   function centricLocationRing(centerLoc, personLoc) {
-    if (!centerLoc || !personLoc) return 3;
+    if (!centerLoc || !personLoc) return 4;
     if (personLoc.toLowerCase() === centerLoc.toLowerCase()) return 1;
-    const centerRegion = centerLoc.split(',').pop().trim().toLowerCase();
-    const personRegion = personLoc.split(',').pop().trim().toLowerCase();
-    if (centerRegion && centerRegion === personRegion) return 2;
-    return 3;
+    const centerCountry = guessCountryFromLocationText(centerLoc);
+    const personCountry = guessCountryFromLocationText(personLoc);
+    if (centerCountry && centerCountry === personCountry) return 2;
+    const centerHemi = hemisphereForLocation(centerLoc);
+    const personHemi = hemisphereForLocation(personLoc);
+    if (centerHemi && centerHemi === personHemi) return 3;
+    return 4;
   }
 
   // What a ring actually means for the current metric, shown as an axis
@@ -3891,7 +3936,7 @@
   // label since there's no gridline drawn at radius 0.
   function centricRingLabel(metric, ringIndex) {
     const labels = metric === 'location'
-      ? ['Same city', 'Same region', 'Elsewhere']
+      ? ['Same city', 'Same country', 'Same hemisphere', 'Elsewhere']
       : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
@@ -3971,19 +4016,17 @@
       // never by ring index -- during a transition an "exiting" ring's
       // radius can temporarily exceed an "entering" one's, or vice versa.
       const byRadiusDesc = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
-      // Ring color is relative to the CURRENT metric's own ring count, not
-      // a fixed total -- so the outermost ring always reaches the same
-      // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
-      // ring or Location's 3rd, and "beyond" (t=1, see the background
+      // Ring color steps relative to CENTRIC_RING_COUNT (both metrics use
+      // the same count), so the outermost ring always reaches the same
+      // CENTRIC_OUTER_RING_T shade, and "beyond" (t=1, see the background
       // rect above) always reads as one further, darker step past
       // whichever ring is actually outermost for this metric. A ring
       // that's mid-exit (its metric no longer includes it, e.g. Age's 4th
       // ring animating out after switching to Location) can compute
       // slightly past 1 here, so it's clamped -- it's on its way off-
       // screen anyway, so it only needs to not render as an invalid color.
-      const totalRingsForMetric = centricMetric === 'location' ? 3 : 4;
       for (const idx of byRadiusDesc) {
-        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
+        const t = Math.min(1, (idx / CENTRIC_RING_COUNT) * CENTRIC_OUTER_RING_T);
         const disc = document.createElementNS(svgNS, 'circle');
         disc.setAttribute('cx', originX);
         disc.setAttribute('cy', originY);
@@ -4245,15 +4288,14 @@
     const centerYear = effectiveBirthYear(center);
     const centerLoc = currentLocationOf(center);
 
-    // Every ring for the current metric always exists (1..4 for age,
-    // 1..3 for location), even ones nobody currently falls into -- so
-    // recentering never makes a ring (and its axis label) pop in or out
-    // of existence, only its radius change. That's what actually reads as
-    // "the same grid, resized," rather than a different set of rings
-    // every time you click someone new.
-    const totalRings = centricMetric === 'location' ? 3 : 4;
+    // Every ring for the current metric always exists (1..CENTRIC_RING_COUNT),
+    // even ones nobody currently falls into -- so recentering never makes
+    // a ring (and its axis label) pop in or out of existence, only its
+    // radius change. That's what actually reads as "the same grid,
+    // resized," rather than a different set of rings every time you click
+    // someone new.
     const rings = {}; // ring index -> [person, ...]
-    for (let i = 1; i <= totalRings; i++) rings[i] = [];
+    for (let i = 1; i <= CENTRIC_RING_COUNT; i++) rings[i] = [];
     for (const p of Object.values(data.people)) {
       if (p.id === centricCenterId) continue;
       let ring;
@@ -4290,8 +4332,18 @@
     const originX = maxRadius + CENTRIC_PAD;
     const originY = maxRadius + CENTRIC_PAD;
 
+    // What each card's subtitle line shows in Centric view: whatever the
+    // active metric actually measures, replacing the birth year every
+    // other view (and Centric itself, before this) shows there -- age as
+    // a number for the Age metric, current location text for Location.
+    function centricSubtitle(person) {
+      if (centricMetric === 'location') return currentLocationOf(person) || '';
+      const age = computeAge(person);
+      return age != null ? `Age ${age}` : '';
+    }
+
     const cardEls = {};
-    const centerCard = buildCard(center);
+    const centerCard = buildCard(center, { subtitle: centricSubtitle(center) });
     centerCard.classList.add('centric-center-card');
     centerCard.style.left = `${originX - CARD_WIDTH / 2}px`;
     els.content.appendChild(centerCard);
@@ -4312,7 +4364,7 @@
       const ringStartAngle = -Math.PI / 2 + idx * (Math.PI / 6);
       members.forEach((p, i) => {
         const angle = ringStartAngle + (i / members.length) * Math.PI * 2;
-        const card = buildCard(p);
+        const card = buildCard(p, { subtitle: centricSubtitle(p) });
         card.style.left = `${originX + radius * Math.cos(angle) - CARD_WIDTH / 2}px`;
         els.content.appendChild(card);
         cardEls[p.id] = card;
