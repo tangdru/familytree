@@ -49,15 +49,15 @@ try {
   });
   await page.mouse.click(cardBox.x + cardBox.w / 2, cardBox.y + cardBox.h / 2);
   await page.waitForTimeout(300);
-  const viewDatesText = await page.evaluate(() => document.getElementById('viewDates').textContent);
-  const viewDatesAdjustedText = await page.evaluate(() => document.getElementById('viewDatesAdjusted').textContent);
-  console.log('viewDates:', JSON.stringify(viewDatesText));
-  console.log('viewDatesAdjusted:', JSON.stringify(viewDatesAdjustedText));
-  if (!viewDatesText.startsWith('Doc.:') || !viewDatesText.includes('1975')) {
-    throw new Error(`Expected viewDates to show "Doc.: ... 1975 ...", got: ${viewDatesText}`);
+  const detailLines = await page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
+  console.log('detail lines:', JSON.stringify(detailLines));
+  const documentedLine = detailLines.find(l => l.startsWith('Documented:'));
+  const adjustedLine = detailLines.find(l => l.startsWith('Zodiac-adjusted:'));
+  if (!documentedLine || !documentedLine.includes('1975')) {
+    throw new Error(`Expected a "Documented: ... 1975 ..." line, got: ${JSON.stringify(detailLines)}`);
   }
-  if (!viewDatesAdjustedText.startsWith('Zodiac:') || !viewDatesAdjustedText.includes('1970')) {
-    throw new Error(`Expected viewDatesAdjusted to show "Zodiac: ... 1970 ...", got: ${viewDatesAdjustedText}`);
+  if (!adjustedLine || !adjustedLine.includes('1970')) {
+    throw new Error(`Expected a "Zodiac-adjusted: ... 1970 ..." line, got: ${JSON.stringify(detailLines)}`);
   }
   console.log('Confirmed: Person View shows both dates, clearly labeled, neither hidden.');
 
@@ -83,11 +83,12 @@ try {
   });
   await page.mouse.click(cardBox2.x + cardBox2.w / 2, cardBox2.y + cardBox2.h / 2);
   await page.waitForTimeout(300);
-  const viewDatesText2 = await page.evaluate(() => document.getElementById('viewDates').textContent);
-  const viewDatesAdjustedHidden2 = await page.evaluate(() => document.getElementById('viewDatesAdjusted').hidden);
-  console.log('viewDates (no zodiac):', JSON.stringify(viewDatesText2), 'adjusted hidden:', viewDatesAdjustedHidden2);
-  if (viewDatesText2.startsWith('Doc.:')) throw new Error(`Expected plain date text with no "Documented:" label when no zodiac is set, got: ${viewDatesText2}`);
-  if (!viewDatesAdjustedHidden2) throw new Error('Expected the zodiac-adjusted line to stay hidden when no zodiac is set');
+  const detailLines2 = await page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
+  console.log('detail lines (no zodiac):', JSON.stringify(detailLines2));
+  if (detailLines2.some(l => l.startsWith('Documented:') || l.startsWith('Zodiac-adjusted:'))) {
+    throw new Error(`Expected plain date text with no Documented:/Zodiac-adjusted: labels when no zodiac is set, got: ${JSON.stringify(detailLines2)}`);
+  }
+  if (!detailLines2.some(l => l.startsWith('Born '))) throw new Error(`Expected a plain "Born ..." line, got: ${JSON.stringify(detailLines2)}`);
   console.log('Confirmed: no zodiac set means no extra labeling, just the plain date as before.');
 
   console.log('\nERRORS:', errors);

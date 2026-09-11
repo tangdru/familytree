@@ -69,10 +69,10 @@ try {
   console.log('saved locations:', JSON.stringify(saved.locations));
   if (saved.locations[0] !== 'Denver, CO') throw new Error('Expected the reordered list to persist on save');
 
-  console.log('\n=== Saving returns to the view card: current line should now read Denver ===');
-  const viewLoc = await page.textContent('#viewLocation');
-  console.log('view card current location:', viewLoc);
-  if (viewLoc !== 'Denver, CO') throw new Error('Expected the view card to show Denver as current after reordering');
+  console.log('\n=== Saving returns to the view card: meta row should now read Denver as current ===');
+  const viewMeta = await page.textContent('#viewMeta');
+  console.log('view card meta row:', viewMeta);
+  if (!viewMeta.includes('Denver, CO')) throw new Error('Expected the meta row to show Denver as current after reordering');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

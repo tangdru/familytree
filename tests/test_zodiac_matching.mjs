@@ -34,11 +34,12 @@ try {
   });
   await page.mouse.click(cardBox.x + cardBox.w / 2, cardBox.y + cardBox.h / 2);
   await page.waitForTimeout(300);
-  const viewDatesText = await page.evaluate(() => document.getElementById('viewDates').textContent);
-  const viewDatesAdjustedHidden = await page.evaluate(() => document.getElementById('viewDatesAdjusted').hidden);
-  console.log('viewDates:', JSON.stringify(viewDatesText), '| adjusted line hidden:', viewDatesAdjustedHidden);
-  if (viewDatesText.startsWith('Documented:')) throw new Error(`Expected a single plain date (no "Documented:" label) when both align, got: ${viewDatesText}`);
-  if (!viewDatesAdjustedHidden) throw new Error('Expected the zodiac-adjusted line to stay hidden when both dates already align');
+  const detailLines = await page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
+  console.log('detail lines:', JSON.stringify(detailLines));
+  if (detailLines.some(l => l.startsWith('Documented:') || l.startsWith('Zodiac-adjusted:'))) {
+    throw new Error(`Expected a single plain "Born ..." line (no Documented:/Zodiac-adjusted: split) when both align, got: ${JSON.stringify(detailLines)}`);
+  }
+  if (!detailLines.some(l => l.startsWith('Born '))) throw new Error(`Expected a plain "Born ..." line, got: ${JSON.stringify(detailLines)}`);
   console.log('Confirmed: aligned dates collapse to a single plain birthday line, no redundant second line.');
 
   console.log('\nERRORS:', errors);

@@ -38,9 +38,9 @@ try {
   await page.mouse.up();
   await page.waitForTimeout(400);
 
-  const coupleMembers = await page.evaluate(() => Array.from(document.querySelectorAll('.view-couple-name')).map(n => n.textContent));
-  console.log('Couple card members after swiping down (expect exactly 2):', JSON.stringify(coupleMembers));
-  if (coupleMembers.length !== 2) throw new Error('Expected the couple card to cap at 2 members even with 3 recorded parents');
+  const coupleMembers = await page.evaluate(() => document.querySelectorAll('#viewPhotoPair .view-photo-pair-member').length);
+  console.log('Couple card photo-pair members after swiping down (expect exactly 2):', coupleMembers);
+  if (coupleMembers !== 2) throw new Error('Expected the couple card to cap at 2 members even with 3 recorded parents');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

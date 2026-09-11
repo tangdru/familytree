@@ -28,12 +28,11 @@ try {
   await page.waitForTimeout(300);
 
   const state = () => page.evaluate(() => {
-    const coupleHidden = document.getElementById('viewCouple').hidden;
-    const singleHidden = document.getElementById('viewPersonSingle').hidden;
-    const members = Array.from(document.querySelectorAll('.view-couple-member')).map(m => m.querySelector('.view-couple-name').textContent);
+    const coupleHidden = document.getElementById('viewPhotoPair').hidden;
+    const members = Array.from(document.querySelectorAll('#viewPhotoPair .view-photo-pair-member')).map(m => m.title);
     const avatarCount = document.getElementById('viewSpouseAvatars').children.length;
     return {
-      mode: coupleHidden ? (singleHidden ? 'none' : 'single') : 'couple',
+      mode: coupleHidden ? 'single' : 'couple',
       singleName: document.getElementById('viewName').textContent,
       members,
       avatarsHidden: document.getElementById('viewSpouseAvatars').hidden,

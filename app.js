@@ -13,7 +13,8 @@
 
   // Matches the placeholder markup baked into #viewPhotoPlaceholder in
   // index.html -- needed again here so a couple card's dynamically-built
-  // member photos (see buildCoupleMember) can show the same placeholder.
+  // photo-pair members (see buildPhotoPairMember) can show the same
+  // placeholder.
   const PERSON_PLACEHOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
 
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
@@ -414,33 +415,36 @@
     viewCloseBtn: document.getElementById('viewCloseBtn'),
     viewEditBtn: document.getElementById('viewEditBtn'),
     viewSwipeZone: document.getElementById('viewSwipeZone'),
-    viewPersonSingle: document.getElementById('viewPersonSingle'),
+    viewPhotoBlock: document.getElementById('viewPhotoBlock'),
     viewPhoto: document.getElementById('viewPhoto'),
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
-    swipeHintUp: document.getElementById('swipeHintUp'),
-    swipeHintDown: document.getElementById('swipeHintDown'),
-    swipeHintLeft: document.getElementById('swipeHintLeft'),
-    swipeHintRight: document.getElementById('swipeHintRight'),
-    viewCouple: document.getElementById('viewCouple'),
-    viewCoupleContacts: document.getElementById('viewCoupleContacts'),
+    viewPhotoPair: document.getElementById('viewPhotoPair'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
-    viewDates: document.getElementById('viewDates'),
-    viewDatesAdjusted: document.getElementById('viewDatesAdjusted'),
-    viewBirthLocation: document.getElementById('viewBirthLocation'),
-    viewZodiac: document.getElementById('viewZodiac'),
+    viewMeta: document.getElementById('viewMeta'),
+    viewDetailsDivider: document.getElementById('viewDetailsDivider'),
+    viewDetails: document.getElementById('viewDetails'),
+    viewDotsParents: document.getElementById('viewDotsParents'),
+    viewDotsChildren: document.getElementById('viewDotsChildren'),
+    viewDotsSideLeft: document.getElementById('viewDotsSideLeft'),
+    viewDotsSideRight: document.getElementById('viewDotsSideRight'),
     viewContact: document.getElementById('viewContact'),
-    viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
+    viewRelationsDivider: document.getElementById('viewRelationsDivider'),
+    viewNotesDivider: document.getElementById('viewNotesDivider'),
     viewParentsSection: document.getElementById('viewParentsSection'),
     viewParentsList: document.getElementById('viewParentsList'),
+    viewSiblingsDivider: document.getElementById('viewSiblingsDivider'),
     viewSiblingsSection: document.getElementById('viewSiblingsSection'),
     viewSiblingsList: document.getElementById('viewSiblingsList'),
+    viewSpousesDivider: document.getElementById('viewSpousesDivider'),
     viewSpousesSection: document.getElementById('viewSpousesSection'),
     viewSpousesList: document.getElementById('viewSpousesList'),
+    viewChildrenDivider: document.getElementById('viewChildrenDivider'),
     viewChildrenSection: document.getElementById('viewChildrenSection'),
     viewChildrenList: document.getElementById('viewChildrenList'),
+    viewLocationsDivider: document.getElementById('viewLocationsDivider'),
     viewLocationsSection: document.getElementById('viewLocationsSection'),
     viewLocationsList: document.getElementById('viewLocationsList'),
   };
@@ -2123,6 +2127,32 @@
     sectionEl.hidden = false;
   }
 
+  // Shows exactly one hairline divider between each pair of adjacent
+  // VISIBLE blocks -- the Details block above, then Notes/relation
+  // sections below -- never a rule under every section's own label.
+  // sawVisible starts true (the Details/photo/info block above is always
+  // there), so the very first visible item in the chain still gets its
+  // own leading divider even when Notes is empty and Parents is the first
+  // thing to show. Walks the rest of the chain in display order, and a
+  // divider is shown only when the section right after it is visible AND
+  // some earlier block was too, so skipping a hidden section in between
+  // never leaves a stray line or a missing one.
+  function updateSectionDividers() {
+    const chain = [
+      { divider: els.viewRelationsDivider, visible: !els.viewNotes.hidden },
+      { divider: els.viewNotesDivider, visible: !els.viewParentsSection.hidden },
+      { divider: els.viewSiblingsDivider, visible: !els.viewSiblingsSection.hidden },
+      { divider: els.viewSpousesDivider, visible: !els.viewSpousesSection.hidden },
+      { divider: els.viewChildrenDivider, visible: !els.viewChildrenSection.hidden },
+      { divider: els.viewLocationsDivider, visible: !els.viewLocationsSection.hidden },
+    ];
+    let sawVisible = true;
+    for (const { divider, visible } of chain) {
+      if (divider) divider.hidden = !(visible && sawVisible);
+      sawVisible = sawVisible || visible;
+    }
+  }
+
   // Whoever's "selected" right now -- the person Edit/the sibling swipe/
   // relation links act on. On a couple card that's whichever of the two is
   // ringed.
@@ -2193,76 +2223,43 @@
     return person.contact ? [person.contact] : [];
   }
 
-  // A couple's shared location: shown once for both, since they usually live
-  // together -- the selected member's location if the two differ or only one
-  // is known, otherwise the (matching) value both share.
-  function sharedLocation(ids, selectedId) {
-    const selLoc = currentLocationOf(data.people[selectedId]);
-    const otherId = ids.find(id => id !== selectedId);
-    const otherLoc = currentLocationOf(data.people[otherId]);
-    return selLoc || otherLoc;
-  }
-
-  function personDatesText(p) {
-    const born = formatDateDisplay(p.birthDate);
-    const died = formatDateDisplay(p.deathDate);
-    return born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
-  }
-
-  // The single Person View's two birthdate lines. When there's a zodiac
-  // sign to adjust against, BOTH the documented and zodiac-adjusted dates
-  // show, clearly labeled -- nothing is hidden, this person just has two
-  // candidate birthdates on record and both stay visible. Without a zodiac
-  // set there's only ever the one date, shown plainly as before (no
-  // "Documented" label -- nothing to disambiguate it from).
-  // Labels here are the truncated "Doc./Zodiac" pair -- deliberately
-  // shorter than the Add/Edit form's own "Documented birthday" label and
-  // "Zodiac-adjusted birthday" hint (see updateZodiacAdjustedHint), which
-  // stay spelled out in full. This pair only feeds the read-only view
-  // cards (single Person View and, via coupleMemberDatesLines, the Couple
-  // View), where space is tighter -- the couple card's 130px-wide columns
-  // in particular wrap the full words across several lines.
-  function personViewDatesLines(p) {
+  // The Person View's grouped detail block (single card or couple card
+  // alike, for whichever person is selected): birth location, documented/
+  // zodiac-adjusted birthdate, and death date, each its own line, present
+  // only when known. Documented/zodiac-adjusted only split into two
+  // labeled lines when there's an actual adjustment to show (see
+  // zodiacAdjustedBirthDate) -- otherwise it's one plain "Born ..." line.
+  // Death gets its own row rather than folding into that line, since age
+  // (which used to justify keeping death alongside birth on one line) now
+  // shows up in the meta row instead.
+  function personViewDetailLines(p) {
+    const lines = [];
+    const shortBirthLocation = shortenLocationText(p.birthLocation || '');
+    if (shortBirthLocation) lines.push(`Born in ${shortBirthLocation}`);
     const adjusted = zodiacAdjustedBirthDate(p);
-    if (!adjusted) return { primary: personDatesText(p), secondary: '' };
     const documentedBorn = formatDateDisplay(p.birthDate);
+    if (adjusted) {
+      if (documentedBorn) lines.push(`Documented: ${documentedBorn}`);
+      lines.push(`Zodiac-adjusted: ${formatDateDisplay(adjusted)}`);
+    } else if (documentedBorn) {
+      lines.push(`Born ${documentedBorn}`);
+    }
     const died = formatDateDisplay(p.deathDate);
-    const primary = died ? `Doc.: ${documentedBorn} – ${died}` : `Doc.: Born ${documentedBorn}`;
-    const age = computeAge(p);
-    const adjustedText = `Born ${formatDateDisplay(adjusted)}`;
-    const secondary = `Zodiac: ${age != null ? `${adjustedText} · Age ${age}` : adjustedText}`;
-    return { primary, secondary };
+    if (died) lines.push(`Died: ${died}`);
+    return lines;
   }
 
-  function personDatesAndAgeText(p) {
-    const text = personDatesText(p);
-    const age = computeAge(p);
-    if (age == null) return text;
-    return text ? `${text} · Age ${age}` : `Age ${age}`;
-  }
-
-  // A couple card member's two possible date lines -- mirrors
-  // personViewDatesLines' Documented/Zodiac-adjusted split when there's an
-  // adjustment to show, so a couple card member with a fabricated birth
-  // year is exactly as transparent as the single Person View. Without an
-  // adjustment, keeps the couple card's own existing convention (age
-  // folded into the one line) rather than personViewDatesLines' plain
-  // (no age) single line, since that's what a couple card has always shown.
-  function coupleMemberDatesLines(p) {
-    if (!zodiacAdjustedBirthDate(p)) return { primary: personDatesAndAgeText(p), secondary: '' };
-    return personViewDatesLines(p);
-  }
-
-  // One half of a couple card's visuals: photo, name, dates+age, ringed
-  // when selected -- with no click behavior of its own, so a swipe-preview
-  // peek card (see buildSwipePeekCard) can reuse the exact same markup
-  // without becoming tappable before the swipe it belongs to has committed.
-  function buildCoupleMemberVisual(personId, isSelected) {
+  // One photo of a couple card's pair -- just the circle itself, ringed
+  // when selected. Everything that used to live alongside each member's
+  // own photo (name, dates) now belongs to the single shared info block
+  // below instead (see renderPersonView), since only the selected
+  // person's own info ever shows at once.
+  function buildPhotoPairMember(personId, isSelected) {
     const p = data.people[personId];
-    const wrap = document.createElement('div');
-    wrap.className = 'view-couple-member';
     const photo = document.createElement('div');
-    photo.className = 'view-couple-photo' + (isSelected ? ' selected' : '');
+    photo.className = 'view-photo-pair-member' + (isSelected ? ' selected' : '');
+    photo.dataset.id = personId;
+    photo.title = p.name || '(unnamed)';
     if (p.photo) {
       const img = document.createElement('img');
       img.src = p.photo;
@@ -2271,38 +2268,15 @@
     } else {
       photo.innerHTML = PERSON_PLACEHOLDER_SVG;
     }
-    const name = document.createElement('div');
-    name.className = 'view-couple-name';
-    name.textContent = p.name || '(unnamed)';
-    wrap.appendChild(photo);
-    wrap.appendChild(name);
-
-    const { primary, secondary } = coupleMemberDatesLines(p);
-    const dates = document.createElement('div');
-    dates.className = 'view-couple-dates';
-    dates.textContent = primary;
-    wrap.appendChild(dates);
-    if (secondary) {
-      const adjustedDates = document.createElement('div');
-      adjustedDates.className = 'view-couple-dates view-couple-dates-adjusted';
-      adjustedDates.textContent = secondary;
-      wrap.appendChild(adjustedDates);
-    }
-    return wrap;
+    photo.addEventListener('click', () => selectCoupleMember(personId));
+    return photo;
   }
 
-  // Clicking a member switches which side of the couple drives navigation,
-  // without touching the vertical thread itself -- see selectCoupleMember.
-  function buildCoupleMember(personId, isSelected) {
-    const wrap = buildCoupleMemberVisual(personId, isSelected);
-    wrap.addEventListener('click', () => selectCoupleMember(personId));
-    return wrap;
-  }
-
-  // Switches which half of the current couple card is "selected" -- i.e.
-  // whose parents/siblings show and whose tree further swipes follow. This
-  // is a lateral change within the current thread position, not a
-  // navigation: it doesn't touch verticalPath/verticalIndex.
+  // Switches which side of the couple is "selected" -- i.e. whose name,
+  // contact info, details, and parents/siblings show below, and whose tree
+  // further swipes follow. This is a lateral change within the current
+  // thread position, not a navigation: it doesn't touch
+  // verticalPath/verticalIndex.
   function selectCoupleMember(personId) {
     const node = verticalPath[verticalIndex];
     if (!node || node.selected === personId || !node.ids.includes(personId)) return;
@@ -2328,75 +2302,97 @@
     renderThreadPosition();
   }
 
+  // Fills a dot-indicator strip with `count` plain dots, hiding the whole
+  // strip when there's nothing to show -- see renderPersonView.
+  function renderDots(container, count) {
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'view-dot';
+      container.appendChild(dot);
+    }
+    container.hidden = count === 0;
+  }
+
   function renderPersonView(ids, selectedId) {
     const p = data.people[selectedId];
     if (!p) return;
     currentViewId = selectedId;
 
+    // A couple card is this same info block (name, meta, contacts, details,
+    // dots) fed from whichever person is SELECTED -- the only thing that
+    // differs by mode is the photo area: one photo, or a tappable pair with
+    // the selected one ringed (see buildPhotoPairMember/selectCoupleMember).
+    // Every line below already reads from `p`/`selectedId`, i.e. the
+    // selection, so none of it needs an isCouple branch of its own.
     const isCouple = ids.length > 1;
-    els.viewPersonSingle.hidden = isCouple;
-    els.viewCouple.hidden = !isCouple;
+    els.viewPhoto.hidden = isCouple;
+    els.viewPhotoPair.hidden = !isCouple;
+    els.viewPhotoBlock.classList.toggle('is-couple', isCouple);
 
     if (isCouple) {
-      els.viewCouple.innerHTML = '';
-      ids.forEach(id => els.viewCouple.appendChild(buildCoupleMember(id, id === selectedId)));
+      els.viewPhotoPair.innerHTML = '';
+      ids.forEach(id => els.viewPhotoPair.appendChild(buildPhotoPairMember(id, id === selectedId)));
+    } else if (p.photo) {
+      els.viewPhotoImg.src = p.photo;
+      els.viewPhotoImg.alt = p.name || '';
+      els.viewPhotoImg.hidden = false;
+      els.viewPhotoPlaceholder.hidden = true;
     } else {
-      if (p.photo) {
-        els.viewPhotoImg.src = p.photo;
-        els.viewPhotoImg.alt = p.name || '';
-        els.viewPhotoImg.hidden = false;
-        els.viewPhotoPlaceholder.hidden = true;
-      } else {
-        els.viewPhotoImg.hidden = true;
-        els.viewPhotoImg.removeAttribute('src');
-        els.viewPhotoPlaceholder.hidden = false;
-      }
-      els.viewName.textContent = p.name || '(unnamed)';
-      const { primary: datesPrimary, secondary: datesSecondary } = personViewDatesLines(p);
-      els.viewDates.textContent = datesPrimary;
-      els.viewDates.hidden = !datesPrimary;
-      els.viewDatesAdjusted.textContent = datesSecondary;
-      els.viewDatesAdjusted.hidden = !datesSecondary;
-      const shortBirthLocation = shortenLocationText(p.birthLocation || '');
-      els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
-      els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
-      const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
-      els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
-      els.viewZodiac.hidden = !els.viewZodiac.textContent;
-      els.viewContact.innerHTML = '';
-      const contacts = contactsOf(p);
-      if (contacts.length) {
-        const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
-        contacts.forEach(contact => els.viewContact.appendChild(buildContactChip(contact, countryHint)));
-      }
-      els.viewContact.hidden = !contacts.length;
+      els.viewPhotoImg.hidden = true;
+      els.viewPhotoImg.removeAttribute('src');
+      els.viewPhotoPlaceholder.hidden = false;
     }
 
-    // Couple card contacts: one column per person, headed by their first
-    // name -- unlike the single view above, the couple card needs that
-    // heading since two people's chips sit side by side.
-    els.viewCoupleContacts.innerHTML = '';
-    if (isCouple) {
-      let anyContacts = false;
-      ids.forEach(id => {
-        const person = data.people[id];
-        const contacts = contactsOf(person);
-        if (!contacts.length) return;
-        anyContacts = true;
-        const col = document.createElement('div');
-        col.className = 'view-couple-contact-col';
-        const heading = document.createElement('p');
-        heading.className = 'view-couple-contact-name';
-        heading.textContent = (person.name || '').trim().split(/\s+/)[0] || '(unnamed)';
-        col.appendChild(heading);
-        const countryHint = guessCountryFromLocationText(currentLocationOf(person) || person.birthLocation || '') || 'US';
-        contacts.forEach(contact => col.appendChild(buildContactChip(contact, countryHint)));
-        els.viewCoupleContacts.appendChild(col);
-      });
-      els.viewCoupleContacts.hidden = !anyContacts;
-    } else {
-      els.viewCoupleContacts.hidden = true;
+    els.viewName.textContent = p.name || '(unnamed)';
+
+    // Meta row: age, current location, and zodiac sign on one line,
+    // directly under the name. Each piece only appears if known, and the
+    // " · " separators only appear between two pieces that are both
+    // actually there (never a dangling separator at either end).
+    const age = computeAge(p);
+    const currentLoc = currentLocationOf(p);
+    const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
+    const metaParts = [];
+    if (age != null) metaParts.push(`Age ${age}`);
+    if (currentLoc) metaParts.push(currentLoc);
+    if (zodiacEmoji) metaParts.push(`${zodiacEmoji} ${p.zodiac}`);
+    els.viewMeta.textContent = metaParts.join(' · ');
+    els.viewMeta.hidden = !metaParts.length;
+
+    els.viewContact.innerHTML = '';
+    const contacts = contactsOf(p);
+    if (contacts.length) {
+      const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
+      contacts.forEach(contact => els.viewContact.appendChild(buildContactChip(contact, countryHint)));
     }
+    els.viewContact.hidden = !contacts.length;
+
+    // Grouped detail block: birth location, documented/zodiac-adjusted
+    // birthdate, death date -- see personViewDetailLines.
+    els.viewDetails.innerHTML = '';
+    const detailLines = personViewDetailLines(p);
+    detailLines.forEach(line => {
+      const lineEl = document.createElement('p');
+      lineEl.textContent = line;
+      els.viewDetails.appendChild(lineEl);
+    });
+    els.viewDetails.hidden = !detailLines.length;
+    els.viewDetailsDivider.hidden = !detailLines.length;
+
+    // Dot indicators around the photo (or photo pair) -- how many parents/
+    // children/siblings are a swipe away in each direction, plus (via the
+    // side dots' left/right split) this person's own birth-order position
+    // among their siblings. These ARE the swipe indicators (see Figma):
+    // up reaches children, down reaches parents, and among siblings, right
+    // is older / left is younger -- so the dots are a preview of real
+    // swipe destinations, not just a decoration.
+    renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length);
+    renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length);
+    const siblings = siblingSet(selectedId);
+    const myIndex = siblings.indexOf(selectedId);
+    renderDots(els.viewDotsSideLeft, siblings.length - 1 - myIndex); // younger siblings -- swipe left
+    renderDots(els.viewDotsSideRight, myIndex); // older siblings -- swipe right
 
     // Spouses already shown as the other half of a couple card don't need
     // repeating in the small avatar row -- that row is for reaching anyone
@@ -2405,9 +2401,6 @@
     const spouseIds = (p.spouses || []).filter(sid => data.people[sid] && !ids.includes(sid));
     spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
     els.viewSpouseAvatars.hidden = !spouseIds.length;
-
-    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : currentLocationOf(p);
-    els.viewLocation.hidden = !els.viewLocation.textContent;
 
     els.viewNotes.textContent = p.notes || '';
     els.viewNotes.hidden = !p.notes;
@@ -2433,7 +2426,8 @@
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
 
-    updateSwipeHints();
+    updateSectionDividers();
+
     els.viewModal.hidden = false;
   }
 
@@ -2588,10 +2582,10 @@
   }
 
   // Read-only mirrors of verticalGoUp/verticalGoDown's own logic, for the
-  // swipe-drag preview (see the pointermove handler below) and the edge
-  // hints (updateSwipeHints) to check "is there actually somewhere to go"
-  // without mutating verticalPath -- the real navigation still always goes
-  // through verticalGoUp/verticalGoDown themselves once a swipe commits.
+  // swipe-drag preview (see the pointermove handler below) to check "is
+  // there actually somewhere to go" without mutating verticalPath -- the
+  // real navigation still always goes through verticalGoUp/verticalGoDown
+  // themselves once a swipe commits.
   function peekChildIds() {
     if (!verticalPath.length) return null;
     if (verticalIndex + 1 < verticalPath.length) return verticalPath[verticalIndex + 1];
@@ -2604,21 +2598,6 @@
     if (verticalIndex > 0) return verticalPath[verticalIndex - 1];
     const parentIds = parentIdsOf(verticalPath[0].selected);
     return parentIds.length ? { ids: parentIds, selected: parentIds[0] } : null;
-  }
-
-  // Whether the swipe-edge hints (see updateSwipeHints) should show for
-  // each direction -- mirrors exactly what a swipe in that direction would
-  // actually do, so a hint never promises a swipe that would be a no-op.
-  function canSwipeLeft() { return siblingNeighborId(currentViewId, 1) !== null; }
-  function canSwipeRight() { return siblingNeighborId(currentViewId, -1) !== null; }
-  function canSwipeUp() { return peekChildIds() !== null; }
-  function canSwipeDown() { return peekParentIds() !== null; }
-
-  function updateSwipeHints() {
-    els.swipeHintLeft.hidden = !canSwipeLeft();
-    els.swipeHintRight.hidden = !canSwipeRight();
-    els.swipeHintUp.hidden = !canSwipeUp();
-    els.swipeHintDown.hidden = !canSwipeDown();
   }
 
   const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes

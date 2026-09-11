@@ -80,8 +80,8 @@ try {
 
   console.log('\n=== Saving returned to Michael\'s view -- should now show the couple card with Susan ===');
   const viewState = await page.evaluate(() => ({
-    mode: document.getElementById('viewCouple').hidden ? 'single' : 'couple',
-    members: Array.from(document.querySelectorAll('.view-couple-member .view-couple-name')).map(n => n.textContent),
+    mode: document.getElementById('viewPhotoPair').hidden ? 'single' : 'couple',
+    members: Array.from(document.querySelectorAll('#viewPhotoPair .view-photo-pair-member')).map(m => m.title),
   }));
   console.log(JSON.stringify(viewState));
   if (viewState.mode !== 'couple' || !viewState.members.includes('Susan Hart')) {

@@ -16,12 +16,12 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== No zodiac set: view card should not show a zodiac line ===');
+  console.log('=== No zodiac set: meta row should not mention one ===');
   await page.click('.person-card:has-text("Jane Doe")');
   await page.waitForTimeout(200);
-  let hidden = await page.getAttribute('#viewZodiac', 'hidden');
-  console.log('viewZodiac hidden (expect non-null):', hidden);
-  if (hidden === null) throw new Error('Expected no zodiac line when unset');
+  let metaText = await page.textContent('#viewMeta');
+  console.log('meta row (expect no zodiac mention):', metaText);
+  if (/Dragon/.test(metaText)) throw new Error('Expected no zodiac mention when unset');
 
   console.log('\n=== Set zodiac to Dragon in the edit form, save ===');
   await page.click('#viewEditBtn');
@@ -37,10 +37,10 @@ try {
   console.log('saved zodiac:', saved.zodiac);
   if (saved.zodiac !== 'Dragon') throw new Error('Expected zodiac to be saved as Dragon');
 
-  console.log('\n=== Saving now returns straight to the Person View: should show the Dragon emoji + name ===');
-  const zodiacText = await page.textContent('#viewZodiac');
-  console.log('view card zodiac line:', zodiacText);
-  if (zodiacText !== '🐉 Dragon') throw new Error('Expected the view card to show "🐉 Dragon"');
+  console.log('\n=== Saving now returns straight to the Person View: meta row should show the Dragon emoji + name ===');
+  const metaWithZodiac = await page.textContent('#viewMeta');
+  console.log('meta row:', metaWithZodiac);
+  if (!metaWithZodiac.includes('🐉 Dragon')) throw new Error('Expected the meta row to include "🐉 Dragon"');
 
   console.log('\n=== Reopen edit form: dropdown should preselect Dragon ===');
   await page.click('#viewEditBtn');
@@ -53,9 +53,9 @@ try {
   await page.selectOption('#zodiacInput', '');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(300);
-  hidden = await page.getAttribute('#viewZodiac', 'hidden');
-  console.log('viewZodiac hidden after clearing (expect non-null):', hidden);
-  if (hidden === null) throw new Error('Expected the zodiac line to disappear after clearing');
+  metaText = await page.textContent('#viewMeta');
+  console.log('meta row after clearing (expect no zodiac mention):', metaText);
+  if (/Dragon/.test(metaText)) throw new Error('Expected the zodiac mention to disappear after clearing');
   const savedCleared = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1.zodiac);
   console.log('saved zodiac after clearing:', JSON.stringify(savedCleared));
   if (savedCleared !== '') throw new Error('Expected saved zodiac to be an empty string after clearing');
