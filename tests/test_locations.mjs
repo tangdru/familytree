@@ -16,16 +16,15 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== Legacy person (old singular `location` field): view card should show it as current, no Previous location(s) section (nothing to show yet) ===');
+  console.log('=== Legacy person (old singular `location` field): view card should show it as current (meta row), no Previous location(s) section (nothing to show yet) ===');
   await page.click('.person-card:has-text("Legacy Person")');
   await page.waitForTimeout(200);
   let viewState = await page.evaluate(() => ({
-    location: document.getElementById('viewLocation').textContent,
-    locationHidden: document.getElementById('viewLocation').hidden,
+    meta: document.getElementById('viewMeta').textContent,
     sectionHidden: document.getElementById('viewLocationsSection').hidden,
   }));
   console.log(JSON.stringify(viewState));
-  if (viewState.locationHidden || viewState.location !== 'Old City, Oldland') throw new Error('Expected legacy location to show as current under photo');
+  if (!viewState.meta.includes('Old City, Oldland')) throw new Error('Expected legacy location to show as current in the meta row');
   if (!viewState.sectionHidden) {
     throw new Error('Expected the Previous location(s) section to stay hidden when there is only a current location');
   }
@@ -67,17 +66,16 @@ try {
   if (saved.location !== undefined) throw new Error('Expected the stale singular `location` field to be removed after save');
   if (saved.birthLocation !== 'Home Town, Homeland') throw new Error('Expected birthLocation to be saved');
 
-  console.log('\n=== Saving returns to the view card: current under the photo, Previous location(s) lists only the rest, birth location line ===');
+  console.log('\n=== Saving returns to the view card: current in the meta row, Previous location(s) lists only the rest, birth location line in the grouped details block ===');
   viewState = await page.evaluate(() => ({
-    location: document.getElementById('viewLocation').textContent,
-    birthLocation: document.getElementById('viewBirthLocation').textContent,
-    birthLocationHidden: document.getElementById('viewBirthLocation').hidden,
+    meta: document.getElementById('viewMeta').textContent,
+    details: Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent),
     sectionHidden: document.getElementById('viewLocationsSection').hidden,
     historyRows: Array.from(document.querySelectorAll('#viewLocationsList li')).map(li => li.querySelector('.view-location-text').textContent),
   }));
   console.log(JSON.stringify(viewState));
-  if (viewState.location !== 'Old City, Oldland') throw new Error('Expected the first (current) location under the photo');
-  if (viewState.birthLocationHidden || viewState.birthLocation !== 'Born in Home Town, Homeland') throw new Error('Expected the birth location line');
+  if (!viewState.meta.includes('Old City, Oldland')) throw new Error('Expected the first (current) location in the meta row');
+  if (!viewState.details.includes('Born in Home Town, Homeland')) throw new Error('Expected the birth location line in the grouped details block, got: ' + JSON.stringify(viewState.details));
   if (viewState.sectionHidden || viewState.historyRows.length !== 1 || viewState.historyRows[0] !== 'Birth City, Birthland') {
     throw new Error('Expected only the non-current location in Previous location(s), got: ' + JSON.stringify(viewState.historyRows));
   }

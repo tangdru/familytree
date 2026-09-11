@@ -975,7 +975,7 @@ body {
 /* A bit more top padding than the default .modal-body -- with no header
    bar above it anymore, the card's top edge needs its own breathing room
    instead of relying on a header to separate it from the swipe zone. */
-.view-modal-body { flex: 1; min-height: 0; padding-top: 40px; }
+.view-modal-body { flex: 1; min-height: 0; padding-top: 40px; padding-bottom: 24px; }
 /* Sibling of .view-modal-body now (see index.html), not nested inside
    it, so it stays pinned to the card's bottom edge instead of scrolling
    away with the content or floating right after it on a short card. It
@@ -1035,10 +1035,72 @@ body {
 }
 .swipe-card-slot.swipe-settling { transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1); }
 
+.view-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+.view-person[hidden] { display: none; }
+.view-photo-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+/* Fixed 1fr/auto/1fr columns (not just a centered flex row) so the photo
+   stays exactly centered even when one side has more dots than the
+   other -- an empty or hidden side dot strip still holds its own 1fr
+   column, rather than letting the photo drift toward whichever side has
+   fewer dots. */
+.view-photo-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  justify-items: center;
+  width: 100%;
+}
+.view-dots { display: flex; align-items: center; gap: 5px; min-height: 6px; }
+.view-dots[hidden] { display: none; }
+.view-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  flex-shrink: 0;
+}
+.view-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.view-name-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.view-divider { width: 100%; height: 1px; background: var(--card-border); flex-shrink: 0; }
+.view-divider[hidden] { display: none; }
+.view-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+.view-details p { margin: 0; }
+.view-details[hidden] { display: none; }
 .view-photo {
   width: 160px;
   height: 160px;
-  margin: 0 auto 8px;
   border-radius: 50%;
   background: #eee2c9;
   display: flex;
@@ -1138,12 +1200,22 @@ body {
 }
 
 .view-name {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
   text-align: center;
 }
-.view-dates, .view-location, .view-birth-location, .view-zodiac {
+/* Meta row: age, current location, and zodiac sign on one line under the
+   name (see renderPersonView) -- .view-location is separate and stays in
+   use only by the couple card's shared-location line below. */
+.view-meta {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+.view-meta[hidden] { display: none; }
+.view-location {
   margin: 0 0 2px;
   text-align: center;
   color: var(--ink-soft);
@@ -1159,7 +1231,7 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  margin: 4px 0 2px;
+  margin: 0;
 }
 .view-contact[hidden] { display: none; }
 

@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609142">
+<link rel="stylesheet" href="style.css?v=202609143">
 </head>
 <body>
   <header class="toolbar">
@@ -293,21 +293,37 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
           </span>
           <div class="view-person" id="viewPersonSingle">
-            <div class="view-photo" id="viewPhoto">
-              <span id="viewPhotoPlaceholder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                  <circle cx="12" cy="13" r="4"></circle>
-                </svg>
-              </span>
-              <img id="viewPhotoImg" alt="" hidden>
+            <!-- Dot indicators around the photo, similar to a photo carousel's
+                 page dots: how many parents/children/siblings a swipe away in
+                 each direction, and (for the side dots) this person's own
+                 birth-order position among their siblings. Counted and shown
+                 in JS -- see renderDots() in app.js. -->
+            <div class="view-photo-block">
+              <div class="view-dots" id="viewDotsParents" hidden></div>
+              <div class="view-photo-row">
+                <div class="view-dots" id="viewDotsSideLeft" hidden></div>
+                <div class="view-photo" id="viewPhoto">
+                  <span id="viewPhotoPlaceholder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                  </span>
+                  <img id="viewPhotoImg" alt="" hidden>
+                </div>
+                <div class="view-dots" id="viewDotsSideRight" hidden></div>
+              </div>
+              <div class="view-dots" id="viewDotsChildren" hidden></div>
             </div>
-            <h3 class="view-name" id="viewName"></h3>
-            <p class="view-dates" id="viewDates" hidden></p>
-            <p class="view-dates view-dates-adjusted" id="viewDatesAdjusted" hidden></p>
-            <p class="view-birth-location" id="viewBirthLocation" hidden></p>
-            <p class="view-zodiac" id="viewZodiac" hidden></p>
-            <div class="view-contact" id="viewContact" hidden></div>
+            <div class="view-info">
+              <div class="view-name-block">
+                <h3 class="view-name" id="viewName"></h3>
+                <p class="view-meta" id="viewMeta" hidden></p>
+              </div>
+              <div class="view-contact" id="viewContact" hidden></div>
+              <div class="view-divider" id="viewDetailsDivider" hidden></div>
+              <div class="view-details" id="viewDetails" hidden></div>
+            </div>
           </div>
           <!-- A couple's shared card: two equal-size member blocks, built and
                populated in JS by buildCoupleMember() -- see renderPersonView(). -->
@@ -319,6 +335,12 @@
           <p class="view-location" id="viewLocation" hidden></p>
         </div>
         <p class="view-notes" id="viewNotes" hidden></p>
+        <!-- Shared by single and couple cards alike, ahead of whichever
+             relation sections below actually render -- hidden in JS when
+             none of them do (e.g. a person with no recorded relations at
+             all), same "hidden unless populated" convention as those
+             sections themselves. -->
+        <div class="view-divider" id="viewRelationsDivider" hidden></div>
 
         <div class="view-section" id="viewParentsSection" hidden>
           <h4>Parents</h4>
@@ -436,7 +458,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609142"></script>
-  <script src="app.js?v=202609142"></script>
+  <script src="config.js?v=202609143"></script>
+  <script src="app.js?v=202609143"></script>
 </body>
 </html>

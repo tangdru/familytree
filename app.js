@@ -426,13 +426,17 @@
     viewCoupleContacts: document.getElementById('viewCoupleContacts'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
-    viewDates: document.getElementById('viewDates'),
-    viewDatesAdjusted: document.getElementById('viewDatesAdjusted'),
-    viewBirthLocation: document.getElementById('viewBirthLocation'),
-    viewZodiac: document.getElementById('viewZodiac'),
+    viewMeta: document.getElementById('viewMeta'),
+    viewDetailsDivider: document.getElementById('viewDetailsDivider'),
+    viewDetails: document.getElementById('viewDetails'),
+    viewDotsParents: document.getElementById('viewDotsParents'),
+    viewDotsChildren: document.getElementById('viewDotsChildren'),
+    viewDotsSideLeft: document.getElementById('viewDotsSideLeft'),
+    viewDotsSideRight: document.getElementById('viewDotsSideRight'),
     viewContact: document.getElementById('viewContact'),
     viewLocation: document.getElementById('viewLocation'),
     viewNotes: document.getElementById('viewNotes'),
+    viewRelationsDivider: document.getElementById('viewRelationsDivider'),
     viewParentsSection: document.getElementById('viewParentsSection'),
     viewParentsList: document.getElementById('viewParentsList'),
     viewSiblingsSection: document.getElementById('viewSiblingsSection'),
@@ -2209,6 +2213,32 @@
     return born && died ? `${born} – ${died}` : born ? `Born ${born}` : died ? `Died ${died}` : '';
   }
 
+  // The single Person View's grouped detail block: birth location,
+  // documented/zodiac-adjusted birthdate, and death date, each its own
+  // line, present only when known. Documented/zodiac-adjusted only split
+  // into two labeled lines when there's an actual adjustment to show (see
+  // zodiacAdjustedBirthDate) -- otherwise it's one plain "Born ..." line,
+  // same collapsing rule as personViewDatesLines below, just no longer
+  // folding the death date into that same line: death gets its own row
+  // here instead, since age (which used to justify keeping death
+  // alongside birth on one line) now shows up in the meta row instead.
+  function personViewDetailLines(p) {
+    const lines = [];
+    const shortBirthLocation = shortenLocationText(p.birthLocation || '');
+    if (shortBirthLocation) lines.push(`Born in ${shortBirthLocation}`);
+    const adjusted = zodiacAdjustedBirthDate(p);
+    const documentedBorn = formatDateDisplay(p.birthDate);
+    if (adjusted) {
+      if (documentedBorn) lines.push(`Documented: ${documentedBorn}`);
+      lines.push(`Zodiac-adjusted: ${formatDateDisplay(adjusted)}`);
+    } else if (documentedBorn) {
+      lines.push(`Born ${documentedBorn}`);
+    }
+    const died = formatDateDisplay(p.deathDate);
+    if (died) lines.push(`Died: ${died}`);
+    return lines;
+  }
+
   // The single Person View's two birthdate lines. When there's a zodiac
   // sign to adjust against, BOTH the documented and zodiac-adjusted dates
   // show, clearly labeled -- nothing is hidden, this person just has two
@@ -2328,6 +2358,18 @@
     renderThreadPosition();
   }
 
+  // Fills a dot-indicator strip with `count` plain dots, hiding the whole
+  // strip when there's nothing to show -- see renderPersonView.
+  function renderDots(container, count) {
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'view-dot';
+      container.appendChild(dot);
+    }
+    container.hidden = count === 0;
+  }
+
   function renderPersonView(ids, selectedId) {
     const p = data.people[selectedId];
     if (!p) return;
@@ -2352,17 +2394,22 @@
         els.viewPhotoPlaceholder.hidden = false;
       }
       els.viewName.textContent = p.name || '(unnamed)';
-      const { primary: datesPrimary, secondary: datesSecondary } = personViewDatesLines(p);
-      els.viewDates.textContent = datesPrimary;
-      els.viewDates.hidden = !datesPrimary;
-      els.viewDatesAdjusted.textContent = datesSecondary;
-      els.viewDatesAdjusted.hidden = !datesSecondary;
-      const shortBirthLocation = shortenLocationText(p.birthLocation || '');
-      els.viewBirthLocation.textContent = shortBirthLocation ? `Born in ${shortBirthLocation}` : '';
-      els.viewBirthLocation.hidden = !els.viewBirthLocation.textContent;
+
+      // Meta row: age, current location, and zodiac sign on one line,
+      // directly under the name -- replaces the old stacked
+      // dates/location/zodiac lines. Each piece only appears if known, and
+      // the " · " separators only appear between two pieces that are both
+      // actually there (never a dangling separator at either end).
+      const age = computeAge(p);
+      const currentLoc = currentLocationOf(p);
       const zodiacEmoji = ZODIAC_EMOJI[p.zodiac];
-      els.viewZodiac.textContent = zodiacEmoji ? `${zodiacEmoji} ${p.zodiac}` : '';
-      els.viewZodiac.hidden = !els.viewZodiac.textContent;
+      const metaParts = [];
+      if (age != null) metaParts.push(`Age ${age}`);
+      if (currentLoc) metaParts.push(currentLoc);
+      if (zodiacEmoji) metaParts.push(`${zodiacEmoji} ${p.zodiac}`);
+      els.viewMeta.textContent = metaParts.join(' · ');
+      els.viewMeta.hidden = !metaParts.length;
+
       els.viewContact.innerHTML = '';
       const contacts = contactsOf(p);
       if (contacts.length) {
@@ -2370,6 +2417,33 @@
         contacts.forEach(contact => els.viewContact.appendChild(buildContactChip(contact, countryHint)));
       }
       els.viewContact.hidden = !contacts.length;
+
+      // Grouped detail block: birth location, documented/zodiac-adjusted
+      // birthdate, death date -- see personViewDetailLines.
+      els.viewDetails.innerHTML = '';
+      const detailLines = personViewDetailLines(p);
+      detailLines.forEach(line => {
+        const lineEl = document.createElement('p');
+        lineEl.textContent = line;
+        els.viewDetails.appendChild(lineEl);
+      });
+      els.viewDetails.hidden = !detailLines.length;
+      els.viewDetailsDivider.hidden = !detailLines.length;
+
+      // Dot indicators around the photo -- how many parents/children/
+      // siblings are a swipe away in each direction, plus (via the side
+      // dots' left/right split) this person's own birth-order position
+      // among their siblings. Matches the app's existing swipe directions
+      // exactly: up reaches children, down reaches parents (see
+      // canSwipeUp/canSwipeDown), and among siblings, right is older /
+      // left is younger (see canSwipeLeft/canSwipeRight) -- so the dots
+      // are a preview of real swipe destinations, not just a decoration.
+      renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length);
+      renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length);
+      const siblings = siblingSet(selectedId);
+      const myIndex = siblings.indexOf(selectedId);
+      renderDots(els.viewDotsSideLeft, siblings.length - 1 - myIndex); // younger siblings -- swipe left
+      renderDots(els.viewDotsSideRight, myIndex); // older siblings -- swipe right
     }
 
     // Couple card contacts: one column per person, headed by their first
@@ -2406,7 +2480,10 @@
     spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
     els.viewSpouseAvatars.hidden = !spouseIds.length;
 
-    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : currentLocationOf(p);
+    // Single mode already shows current location in the meta row under the
+    // name -- .view-location now only serves the couple card's shared
+    // location line.
+    els.viewLocation.textContent = isCouple ? sharedLocation(ids, selectedId) : '';
     els.viewLocation.hidden = !els.viewLocation.textContent;
 
     els.viewNotes.textContent = p.notes || '';
@@ -2432,6 +2509,16 @@
     fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds, undefined, true);
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
+
+    // Shown only ahead of whatever relation sections actually rendered --
+    // same "hidden unless populated" rule those sections themselves use,
+    // so a person with none of them recorded doesn't get an orphan line
+    // with nothing below it.
+    els.viewRelationsDivider.hidden = els.viewParentsSection.hidden
+      && els.viewSiblingsSection.hidden
+      && els.viewSpousesSection.hidden
+      && els.viewChildrenSection.hidden
+      && els.viewLocationsSection.hidden;
 
     updateSwipeHints();
     els.viewModal.hidden = false;

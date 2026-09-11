@@ -31,15 +31,14 @@ try {
   await page.click('#cancelBtn');
   await page.waitForTimeout(200);
 
-  console.log('\n=== Single Person View: uses truncated "Doc./Zodiac" ===');
+  console.log('\n=== Single Person View: grouped details block uses full "Documented:/Zodiac-adjusted:" labels ===');
   await page.click('.person-card[data-id="thomas"]');
   await page.waitForTimeout(300);
-  const viewDates = await page.evaluate(() => document.getElementById('viewDates').textContent);
-  const viewDatesAdjusted = await page.evaluate(() => document.getElementById('viewDatesAdjusted').textContent);
-  console.log('viewDates:', viewDates, '| viewDatesAdjusted:', viewDatesAdjusted);
-  if (!viewDates.startsWith('Doc.:')) throw new Error(`Expected "Doc.:" prefix, got: ${viewDates}`);
-  if (!viewDatesAdjusted.startsWith('Zodiac:')) throw new Error(`Expected "Zodiac:" prefix, got: ${viewDatesAdjusted}`);
-  console.log('Confirmed: single Person View uses the truncated labels.');
+  const detailLines = await page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
+  console.log('detail lines:', JSON.stringify(detailLines));
+  if (!detailLines.some(l => l.startsWith('Documented:'))) throw new Error(`Expected a "Documented:" line, got: ${JSON.stringify(detailLines)}`);
+  if (!detailLines.some(l => l.startsWith('Zodiac-adjusted:'))) throw new Error(`Expected a "Zodiac-adjusted:" line, got: ${JSON.stringify(detailLines)}`);
+  console.log('Confirmed: single Person View uses the full labels.');
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
 

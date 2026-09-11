@@ -26,17 +26,17 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== View card: current line, birth location, and history should all show shortened text ===');
+  console.log('=== View card: meta row, birth location, and history should all show shortened text ===');
   await page.click('.person-card:has-text("Andrew Tang")');
   await page.waitForTimeout(200);
   let viewState = await page.evaluate(() => ({
-    location: document.getElementById('viewLocation').textContent,
-    birthLocation: document.getElementById('viewBirthLocation').textContent,
+    meta: document.getElementById('viewMeta').textContent,
+    details: Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent),
     history: Array.from(document.querySelectorAll('#viewLocationsList .view-location-text')).map(el => el.textContent),
   }));
   console.log(JSON.stringify(viewState, null, 2));
-  if (viewState.location !== 'Melrose, Massachusetts') throw new Error('Expected the current-location line to be shortened');
-  if (viewState.birthLocation !== 'Born in Melrose, Massachusetts') throw new Error('Expected the birth location line to be shortened');
+  if (!viewState.meta.includes('Melrose, Massachusetts')) throw new Error('Expected the meta row\'s current location to be shortened');
+  if (!viewState.details.includes('Born in Melrose, Massachusetts')) throw new Error('Expected the birth location line to be shortened, got: ' + JSON.stringify(viewState.details));
   const expectedHistory = ['Melrose, Massachusetts', 'Bellingham, Washington', 'Paris, France', 'Boston, Massachusetts'];
   const expectedPrevious = expectedHistory.slice(1); // the current (index 0) already shows under the photo
   if (JSON.stringify(viewState.history) !== JSON.stringify(expectedPrevious)) {
