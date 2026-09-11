@@ -4088,12 +4088,20 @@
       grid.background.setAttribute('y', originY - overscan);
       grid.background.setAttribute('width', overscan * 2);
       grid.background.setAttribute('height', overscan * 2);
-      // One fixed step darker than whichever ring is actually last FOR
-      // THIS METRIC (see centricColorT's own note) -- Age's background
-      // (nothing past ring 4) lands on the same absolute shade as
-      // Location's real ring 5; Location's background (nothing past ring
-      // 5) goes one step further still, a shade Age never shows.
-      const backgroundT = centricColorT(centricRingCount(centricMetric) + 1);
+      // One fixed step darker than whichever ring is actually the
+      // outermost CURRENTLY VISIBLE one (see centricColorT's own note) --
+      // deliberately keyed to `visible`, not centricMetric directly.
+      // centricMetric itself flips the instant a metric switch is
+      // clicked, before the transition even starts, but ring 5 stays
+      // visible (animating out) for the entire Location -> Age
+      // transition -- if the background jumped to Age's resting shade
+      // immediately, it would already be the exact same color as ring 5
+      // itself (that's literally what Age's background is defined to be),
+      // making the still-animating ring invisible against it for the
+      // whole transition. Tracking `visible` instead means the
+      // background only advances to Age's own shade once ring 5 actually
+      // stops being drawn, at the final settled frame.
+      const backgroundT = centricColorT(Math.max(...visible) + 1);
       grid.background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, backgroundT)));
     }
 
