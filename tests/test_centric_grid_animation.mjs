@@ -32,7 +32,7 @@ try {
   // now (see ensureCentricGridElements in app.js) -- a ring beyond the
   // current metric's count sits hidden (display:none), so it's filtered
   // out here rather than counted as a real, currently-shown ring.
-  const readLabels = () => page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text'))
+  const readLabels = () => page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text'))
     .filter(t => t.style.display !== 'none')
     .map(t => t.textContent));
 

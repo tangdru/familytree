@@ -102,7 +102,7 @@ try {
   console.log('Confirmed: same-city < same-country < same-hemisphere < elsewhere, and cross-hemisphere lands with no-location in the outermost ring.');
 
   console.log('\n=== Ring axis labels reflect the new 4-tier location scheme ===');
-  const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text')).map(t => t.textContent));
+  const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   for (const expected of ['Same city', 'Same country', 'Same hemisphere', 'Elsewhere']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got labels: ${JSON.stringify(labels)}`);
   }

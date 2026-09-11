@@ -77,7 +77,7 @@ try {
     const boundaryCircles = Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
       .filter(c => c.style.display !== 'none')
       .map(c => parseFloat(c.getAttribute('r')));
-    const labels = Array.from(document.querySelectorAll('#linesSvg text'))
+    const labels = Array.from(document.querySelectorAll('#centricLabelsSvg text'))
       .filter(t => t.style.display !== 'none')
       .map(t => t.textContent);
     return { boundaryCircles, labels };
@@ -145,7 +145,7 @@ try {
   // ring's own CARD_MOVE_MS -- wait past centricTransitionDuration(4)
   // worth of margin before checking the final, settled label set.
   await page.waitForTimeout(700);
-  const locationLabels = await page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text')).map(t => t.textContent));
+  const locationLabels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('location labels:', JSON.stringify(locationLabels));
   if (locationLabels.length !== 5) throw new Error(`Expected exactly 5 settled location-metric labels, got ${JSON.stringify(locationLabels)}`);
   for (const expected of ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']) {
