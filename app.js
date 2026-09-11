@@ -4425,8 +4425,18 @@
       runningRadius = radius;
     }
     const maxRadius = runningRadius;
-    const originX = maxRadius + CENTRIC_PAD;
-    const originY = maxRadius + CENTRIC_PAD;
+    // The origin only ever moves when the CENTER PERSON actually changes
+    // (a real recenter) -- switching metrics or re-rendering the same
+    // center reuses the exact same origin, so the rings visibly stay
+    // anchored in place while only their radii change, and nothing needs
+    // a compensating pan. This used to recompute origin from the new
+    // metric's own maxRadius on every render and rely on animateCentricPan
+    // to counter-pan the resulting shift -- technically correct at rest,
+    // but visibly wobbly in transit, since the origin jumped immediately
+    // while the pan eased to catch up over the same duration.
+    const sameCenterAsBefore = prevCentricGrid && prevCentricGrid.centerId === centricCenterId;
+    const originX = sameCenterAsBefore ? prevCentricGrid.originX : maxRadius + CENTRIC_PAD;
+    const originY = sameCenterAsBefore ? prevCentricGrid.originY : maxRadius + CENTRIC_PAD;
 
     // What each card's subtitle line shows in Centric view: whatever the
     // active metric actually measures, replacing the birth year every
@@ -4480,7 +4490,7 @@
     // grows out to off-screen instead of just vanishing.
     const isFirstEntry = !prevCentricGrid;
     const priorGrid = prevCentricGrid;
-    const newGrid = { originX, originY, ringIndices, radiusByRing };
+    const newGrid = { originX, originY, ringIndices, radiusByRing, centerId: centricCenterId };
     const unionRingCount = new Set([...(priorGrid ? priorGrid.ringIndices : []), ...ringIndices]).size;
     animateCentricGrid(priorGrid, newGrid);
     prevCentricGrid = newGrid;
@@ -4492,9 +4502,11 @@
     // like Traditional/Chronological, which also never re-fit on their own
     // re-renders -- so panning/zooming to look at a particular part of the
     // rings stays put through further clicks instead of snapping back to a
-    // fit view after every one. That leaves the origin itself free to move
-    // in content space (ring layout resizing changes it), so
-    // animateCentricPan corrects for exactly that shift with a plain pan,
+    // fit view after every one. Switching metric keeps the same origin
+    // (see sameCenterAsBefore above), so there's nothing for
+    // animateCentricPan to do there; genuinely recentering on someone else
+    // DOES move the origin (a new center means a new layout), and that's
+    // exactly what animateCentricPan corrects for with a plain pan,
     // keeping the grid visually anchored without rescaling or recentering.
     if (isFirstEntry) {
       const fitTarget = computeFitTransform();
