@@ -1250,23 +1250,42 @@ body {
 .contact-chip-icon { width: 13px; height: 13px; flex-shrink: 0; display: flex; }
 .contact-chip-icon svg { width: 100%; height: 100%; }
 
+/* Notes, the relations divider, and every relation section below all sit
+   in this one flex column, spaced by its own gap -- matching .view-info's
+   rhythm above -- rather than each carrying its own margin. A hidden
+   child (display:none) drops out of flex flow entirely, so the gap
+   automatically closes up around whichever notes/divider/sections aren't
+   currently shown. */
+.view-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
 .view-notes {
-  margin: 12px 0 0;
+  margin: 0;
   font-size: 0.88rem;
   line-height: 1.45;
   white-space: pre-wrap;
 }
 
-.view-section { margin-top: 18px; }
+.view-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Needs its own [hidden] override, same reason as .view-photo/.view-photo-pair
+   above -- .view-section's own explicit display:flex would otherwise beat
+   the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
+.view-section[hidden] { display: none; }
 .view-section h4 {
-  margin: 0 0 8px;
-  padding-bottom: 8px;
+  margin: 0;
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-soft);
-  border-bottom: 1px solid var(--card-border);
 }
 .view-relation-list { list-style: none; margin: 0; padding: 0; }
 /* Siblings/Children only (see buildRelationRow's useFirstName) -- Parents

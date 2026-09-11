@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609146">
+<link rel="stylesheet" href="style.css?v=202609147">
 </head>
 <body>
   <header class="toolbar">
@@ -338,33 +338,42 @@
           </div>
           <div class="view-spouse-avatars" id="viewSpouseAvatars" hidden></div>
         </div>
-        <p class="view-notes" id="viewNotes" hidden></p>
-        <!-- Shared by single and couple cards alike, ahead of whichever
-             relation sections below actually render -- hidden in JS when
-             none of them do (e.g. a person with no recorded relations at
-             all), same "hidden unless populated" convention as those
-             sections themselves. -->
-        <div class="view-divider" id="viewRelationsDivider" hidden></div>
+        <!-- One shared hairline divider between each pair of adjacent
+             VISIBLE blocks below (never a rule under every label) -- each
+             divider's hidden state is recomputed in JS (see
+             updateSectionDividers in app.js) from its two neighbors, so
+             skipping a hidden section in between never leaves a stray
+             line or a missing one. Spacing between every child here comes
+             from .view-relations' own flex gap, matching the same rhythm
+             as .view-info above. -->
+        <div class="view-relations">
+          <p class="view-notes" id="viewNotes" hidden></p>
+          <div class="view-divider" id="viewRelationsDivider" hidden></div>
 
-        <div class="view-section" id="viewParentsSection" hidden>
-          <h4>Parents</h4>
-          <ul class="view-relation-list" id="viewParentsList"></ul>
-        </div>
-        <div class="view-section" id="viewSiblingsSection" hidden>
-          <h4>Siblings</h4>
-          <ul class="view-relation-list view-relation-grid" id="viewSiblingsList"></ul>
-        </div>
-        <div class="view-section" id="viewSpousesSection" hidden>
-          <h4>Spouses</h4>
-          <ul class="view-relation-list" id="viewSpousesList"></ul>
-        </div>
-        <div class="view-section" id="viewChildrenSection" hidden>
-          <h4>Children</h4>
-          <ul class="view-relation-list view-relation-grid" id="viewChildrenList"></ul>
-        </div>
-        <div class="view-section" id="viewLocationsSection" hidden>
-          <h4>Previous location(s)</h4>
-          <ul class="view-relation-list" id="viewLocationsList"></ul>
+          <div class="view-section" id="viewParentsSection" hidden>
+            <h4>Parents</h4>
+            <ul class="view-relation-list" id="viewParentsList"></ul>
+          </div>
+          <div class="view-divider" id="viewSiblingsDivider" hidden></div>
+          <div class="view-section" id="viewSiblingsSection" hidden>
+            <h4>Siblings</h4>
+            <ul class="view-relation-list view-relation-grid" id="viewSiblingsList"></ul>
+          </div>
+          <div class="view-divider" id="viewSpousesDivider" hidden></div>
+          <div class="view-section" id="viewSpousesSection" hidden>
+            <h4>Spouses</h4>
+            <ul class="view-relation-list" id="viewSpousesList"></ul>
+          </div>
+          <div class="view-divider" id="viewChildrenDivider" hidden></div>
+          <div class="view-section" id="viewChildrenSection" hidden>
+            <h4>Children</h4>
+            <ul class="view-relation-list view-relation-grid" id="viewChildrenList"></ul>
+          </div>
+          <div class="view-divider" id="viewLocationsDivider" hidden></div>
+          <div class="view-section" id="viewLocationsSection" hidden>
+            <h4>Previous location(s)</h4>
+            <ul class="view-relation-list" id="viewLocationsList"></ul>
+          </div>
         </div>
       </div>
       <!-- Sibling of .modal-body (not nested inside it) so it stays pinned
@@ -462,7 +471,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609146"></script>
-  <script src="app.js?v=202609146"></script>
+  <script src="config.js?v=202609147"></script>
+  <script src="app.js?v=202609147"></script>
 </body>
 </html>

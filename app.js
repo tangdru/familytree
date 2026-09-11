@@ -438,12 +438,16 @@
     viewRelationsDivider: document.getElementById('viewRelationsDivider'),
     viewParentsSection: document.getElementById('viewParentsSection'),
     viewParentsList: document.getElementById('viewParentsList'),
+    viewSiblingsDivider: document.getElementById('viewSiblingsDivider'),
     viewSiblingsSection: document.getElementById('viewSiblingsSection'),
     viewSiblingsList: document.getElementById('viewSiblingsList'),
+    viewSpousesDivider: document.getElementById('viewSpousesDivider'),
     viewSpousesSection: document.getElementById('viewSpousesSection'),
     viewSpousesList: document.getElementById('viewSpousesList'),
+    viewChildrenDivider: document.getElementById('viewChildrenDivider'),
     viewChildrenSection: document.getElementById('viewChildrenSection'),
     viewChildrenList: document.getElementById('viewChildrenList'),
+    viewLocationsDivider: document.getElementById('viewLocationsDivider'),
     viewLocationsSection: document.getElementById('viewLocationsSection'),
     viewLocationsList: document.getElementById('viewLocationsList'),
   };
@@ -2126,6 +2130,30 @@
     sectionEl.hidden = false;
   }
 
+  // Shows exactly one hairline divider between each pair of adjacent
+  // VISIBLE blocks in the Notes/relation-sections chain -- never a rule
+  // under every section's own label. Walks the chain in display order,
+  // and a divider is shown only when the section right after it is
+  // visible AND some earlier block in the chain was too, so skipping a
+  // hidden section in between never leaves a stray line (nothing above
+  // it) or a missing one (something above it, wrongly treated as if it
+  // were the very first block).
+  function updateSectionDividers() {
+    const chain = [
+      { visible: !els.viewNotes.hidden },
+      { divider: els.viewRelationsDivider, visible: !els.viewParentsSection.hidden },
+      { divider: els.viewSiblingsDivider, visible: !els.viewSiblingsSection.hidden },
+      { divider: els.viewSpousesDivider, visible: !els.viewSpousesSection.hidden },
+      { divider: els.viewChildrenDivider, visible: !els.viewChildrenSection.hidden },
+      { divider: els.viewLocationsDivider, visible: !els.viewLocationsSection.hidden },
+    ];
+    let sawVisible = false;
+    for (const { divider, visible } of chain) {
+      if (divider) divider.hidden = !(visible && sawVisible);
+      sawVisible = sawVisible || visible;
+    }
+  }
+
   // Whoever's "selected" right now -- the person Edit/the sibling swipe/
   // relation links act on. On a couple card that's whichever of the two is
   // ringed.
@@ -2400,15 +2428,7 @@
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
 
-    // Shown only ahead of whatever relation sections actually rendered --
-    // same "hidden unless populated" rule those sections themselves use,
-    // so a person with none of them recorded doesn't get an orphan line
-    // with nothing below it.
-    els.viewRelationsDivider.hidden = els.viewParentsSection.hidden
-      && els.viewSiblingsSection.hidden
-      && els.viewSpousesSection.hidden
-      && els.viewChildrenSection.hidden
-      && els.viewLocationsSection.hidden;
+    updateSectionDividers();
 
     updateSwipeHints();
     els.viewModal.hidden = false;
