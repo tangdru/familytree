@@ -4222,17 +4222,21 @@
     // destroy, only ever one to move.
     const allIndices = Array.from({ length: CENTRIC_MAX_RINGS }, (_, i) => i + 1);
     // First entry ever (from === null) always builds innermost-first,
-    // outward -- the confirmed-correct "radar powering on" feel. Removing
-    // rings (e.g. Age -> Location, ring 4 exiting) also stays
-    // innermost-first: the persisting rings settle first, and the exiting
-    // ring -- the one that would have been built LAST -- leaves last too.
-    // But ADDING rings back on top of an existing grid (e.g. Location ->
-    // Age, ring 4 returning) needs to read as the exact reverse of that
-    // same removal, not a repeat of the from-scratch build: the ring
-    // that's returning goes FIRST (mirroring how it would've been the
-    // last thing removed), then each successively inner ring follows,
-    // working inward -- outermost to innermost, the timeline of a removal
-    // played backward.
+    // outward -- the confirmed-correct "radar powering on" feel, and the
+    // one case where every ring genuinely staggers (see `stagger` below).
+    // Persisting rings on any OTHER transition (real both before and
+    // after -- rings 1-4, switching between Age and Location, or any
+    // ring at all when just recentering) keep that same innermost-first
+    // cascade too. ADDING rings to an existing grid (Age -> Location,
+    // ring 5 appearing) reads as the reverse of a removal: the ring
+    // that's returning goes FIRST, then each successively inner
+    // (persisting) ring follows, working inward -- outermost to
+    // innermost, the timeline of a removal played backward. REMOVING a
+    // ring (Location -> Age, ring 5 disappearing) is NOT symmetric with
+    // that, on purpose: the exiting ring gets no stagger delay at all
+    // (see `persists` below) rather than leaving last, so it finishes
+    // within the same window the cards themselves move in instead of
+    // visibly lagging behind them once they've already settled.
     const addingRingsToExisting = from && to.ringIndices.length > from.ringIndices.length;
     const order = [...allIndices].sort((a, b) => addingRingsToExisting ? b - a : a - b);
     // Comfortably past the outermost real ring on either side of this
@@ -4246,13 +4250,28 @@
     const priorMax = from ? Math.max(0, ...Object.values(from.radiusByRing)) : 0;
     const nextMax = Math.max(0, ...Object.values(to.radiusByRing));
     const offscreenRadius = Math.max(priorMax, nextMax) * 2 + 1000;
-    const startRadius = {}, endRadius = {};
-    for (const idx of allIndices) {
+    const startRadius = {}, endRadius = {}, stagger = {};
+    order.forEach((idx, i) => {
       const wasActive = from && from.ringIndices.includes(idx);
       const willBeActive = to.ringIndices.includes(idx);
       startRadius[idx] = wasActive ? from.radiusByRing[idx] : offscreenRadius;
       endRadius[idx] = willBeActive ? to.radiusByRing[idx] : offscreenRadius;
-    }
+      // A ring that's appearing or disappearing entirely (real on only
+      // one side of this transition) always animates with NO stagger
+      // delay, so it finishes within the exact same CARD_MOVE_MS window
+      // the cards themselves move in. Entering already worked this way
+      // (an added ring sorts first in `order`, i === 0); exiting didn't --
+      // it used the same innermost-first cascade as the rings that
+      // persist, so it didn't even start easing until every other ring's
+      // own delay had elapsed, finishing well after the cards had already
+      // settled into place. Persisting rings (real both before and
+      // after) keep the cascade -- as does every ring on a genuine first
+      // entry (from === null, so nothing "persists" by this check), where
+      // there's no card movement to stay in sync with and the staggered
+      // "build outward" feel is the entire point.
+      const persists = wasActive && willBeActive;
+      stagger[idx] = (!from || persists) ? i * CENTRIC_RING_STAGGER_MS : 0;
+    });
     // Visible while animating: only rings actually in play on either side
     // of this transition (e.g. just [1,2,3,4] for an Age-only recenter --
     // ring 5 has no work to do at all, see the allDone check above, so it
@@ -4267,8 +4286,8 @@
       const elapsed = now - startTime;
       const radiusByRing = {};
       let allDone = true;
-      order.forEach((idx, i) => {
-        const ringElapsed = Math.max(0, elapsed - i * CENTRIC_RING_STAGGER_MS);
+      order.forEach((idx) => {
+        const ringElapsed = Math.max(0, elapsed - stagger[idx]);
         const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
         // A ring with no actual work to do (parked before AND after --
         // e.g. ring 5 throughout an Age-only recenter) never counts

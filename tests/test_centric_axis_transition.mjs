@@ -128,16 +128,22 @@ try {
   console.log('Confirmed: the newly-appearing ring 5 starts shrinking in immediately (no stagger delay for an added ring).');
   await page.waitForTimeout(700);
 
-  console.log('\n=== Location -> Age (removing a ring): ring 5 still leaves LAST (starts moving late) ===');
+  console.log('\n=== Location -> Age (removing a ring): ring 5 starts growing out IMMEDIATELY, no stagger delay ===');
   const beforeBack = await readOuterBoundaryRadius();
   await page.click('.centric-metric-btn[data-metric="age"]');
-  await page.waitForTimeout(60); // still within ring 5's own stagger delay -- should NOT have moved yet
+  // The exiting ring 5 gets no stagger delay at all (same as an entering
+  // ring) -- it should already be visibly growing within the first 60ms,
+  // not waiting for other rings' own delays to elapse first. This is
+  // deliberately NOT symmetric with removal's old "leaves last" behavior:
+  // ring 5 needs to finish within the same window the cards themselves
+  // move in (CARD_MOVE_MS), not lag behind them once they've settled.
+  await page.waitForTimeout(60);
   const justAfterBack = await readOuterBoundaryRadius();
   console.log(`outermost boundary radius: before click ${beforeBack.toFixed(0)}, ~60ms after clicking Age ${justAfterBack.toFixed(0)}`);
-  if (Math.abs(justAfterBack - beforeBack) > 1) {
-    throw new Error(`Expected the exiting ring 5 to still be stationary this early (innermost-first stagger for removal), moved from ${beforeBack} to ${justAfterBack}`);
+  if (justAfterBack <= beforeBack) {
+    throw new Error(`Expected the exiting ring 5 to already be growing within the first 60ms (no stagger delay), got ${beforeBack} then ${justAfterBack}`);
   }
-  console.log('Confirmed: removing ring 5 waits its turn before leaving (innermost rings settle first).');
+  console.log('Confirmed: removing ring 5 starts growing out immediately (no stagger delay for an exiting ring).');
   await page.waitForTimeout(700);
   const settledBack = await page.evaluate(() =>
     Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
