@@ -34,17 +34,16 @@ try {
   await page.waitForTimeout(300);
 
   const state = () => page.evaluate(() => {
-    const coupleHidden = document.getElementById('viewCouple').hidden;
-    const singleHidden = document.getElementById('viewPersonSingle').hidden;
-    const members = Array.from(document.querySelectorAll('.view-couple-member')).map(m => ({
-      name: m.querySelector('.view-couple-name').textContent,
-      selected: m.querySelector('.view-couple-photo').classList.contains('selected'),
+    const coupleHidden = document.getElementById('viewPhotoPair').hidden;
+    const members = Array.from(document.querySelectorAll('#viewPhotoPair .view-photo-pair-member')).map(m => ({
+      name: m.title,
+      selected: m.classList.contains('selected'),
     }));
     return {
-      mode: coupleHidden ? (singleHidden ? 'none' : 'single') : 'couple',
+      mode: coupleHidden ? 'single' : 'couple',
       singleName: document.getElementById('viewName').textContent,
       members,
-      location: document.getElementById('viewLocation').textContent,
+      meta: document.getElementById('viewMeta').textContent,
       siblings: Array.from(document.querySelectorAll('#viewSiblingsList .view-relation-link')).map(a => a.textContent),
       parents: Array.from(document.querySelectorAll('#viewParentsList .view-relation-link')).map(a => a.textContent),
       spousesHidden: document.getElementById('viewSpousesSection').hidden,
@@ -69,7 +68,7 @@ try {
     await page.waitForTimeout(400); // outlasts the swipe's own settle-animation delay before it commits
   }
   async function tapMember(name) {
-    await page.click(`.view-couple-member:has-text("${name}")`);
+    await page.click(`#viewPhotoPair .view-photo-pair-member[title="${name}"]`);
     await page.waitForTimeout(150);
   }
 
@@ -84,8 +83,8 @@ try {
   if (s.mode !== 'couple') throw new Error('Expected couple card after swiping down from a 2-parent child');
   if (!s.members.find(m => m.name === 'Michael Doe' && m.selected)) throw new Error('Expected Michael selected by default (Parent 1)');
   if (!s.members.find(m => m.name === 'Susan Hart' && !m.selected)) throw new Error('Expected Susan present, not selected');
-  console.log('location shown (expect Chicago, shared):', s.location);
-  if (s.location !== 'Chicago') throw new Error('Expected shared location Chicago');
+  console.log('meta row (expect Chicago, Michael\'s own current location):', s.meta);
+  if (!s.meta.includes('Chicago')) throw new Error('Expected Michael\'s own current location, Chicago, in the meta row');
 
   console.log('\n=== Tap Susan to switch selection ===');
   await tapMember('Susan Hart');

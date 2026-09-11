@@ -25,7 +25,7 @@ try {
   console.log('=== Sanity check: clicking Alice in TRADITIONAL view opens the paired Couple View ===');
   await page.click(`[data-id="${A}"]`);
   await page.waitForTimeout(300);
-  const isCoupleInTraditional = await page.evaluate(() => !document.getElementById('viewCouple').hidden);
+  const isCoupleInTraditional = await page.evaluate(() => !document.getElementById('viewPhotoPair').hidden);
   if (!isCoupleInTraditional) throw new Error('Expected Traditional view to still open the Couple View for a married person (unchanged baseline)');
   console.log('Confirmed: Traditional view behavior is unchanged (couple view for a spouse).');
   await page.click('#viewCloseBtn');
@@ -36,10 +36,9 @@ try {
   await page.waitForTimeout(600);
   await page.click(`[data-id="${A}"]`);
   await page.waitForTimeout(300);
-  const singleHiddenZodiac = await page.evaluate(() => document.getElementById('viewPersonSingle').hidden);
-  const coupleHiddenZodiac = await page.evaluate(() => document.getElementById('viewCouple').hidden);
-  if (singleHiddenZodiac || !coupleHiddenZodiac) {
-    throw new Error(`Expected single Person View in zodiac view (singleHidden=${singleHiddenZodiac}, coupleHidden=${coupleHiddenZodiac})`);
+  const pairHiddenZodiac = await page.evaluate(() => document.getElementById('viewPhotoPair').hidden);
+  if (!pairHiddenZodiac) {
+    throw new Error('Expected single Person View (photo pair hidden) in zodiac view');
   }
   const zodiacModalName = await page.evaluate(() => document.getElementById('viewName').textContent);
   if (!zodiacModalName.includes('Alice')) throw new Error(`Expected modal to show Alice, got "${zodiacModalName}"`);
@@ -53,10 +52,9 @@ try {
   // Default center is Alice (first person) -- clicking her (already centered) opens her modal.
   await page.click(`[data-id="${A}"]`);
   await page.waitForTimeout(300);
-  const singleHiddenCentric = await page.evaluate(() => document.getElementById('viewPersonSingle').hidden);
-  const coupleHiddenCentric = await page.evaluate(() => document.getElementById('viewCouple').hidden);
-  if (singleHiddenCentric || !coupleHiddenCentric) {
-    throw new Error(`Expected single Person View in centric view (singleHidden=${singleHiddenCentric}, coupleHidden=${coupleHiddenCentric})`);
+  const pairHiddenCentric = await page.evaluate(() => document.getElementById('viewPhotoPair').hidden);
+  if (!pairHiddenCentric) {
+    throw new Error('Expected single Person View (photo pair hidden) in centric view');
   }
   console.log('Confirmed: centric view opens single Person View even for a married center person.');
   await page.click('#viewCloseBtn');

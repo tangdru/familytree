@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609144">
+<link rel="stylesheet" href="style.css?v=202609146">
 </head>
 <body>
   <header class="toolbar">
@@ -296,9 +296,14 @@
             <!-- Dot indicators around the photo, similar to a photo carousel's
                  page dots: how many parents/children/siblings a swipe away in
                  each direction, and (for the side dots) this person's own
-                 birth-order position among their siblings. Counted and shown
-                 in JS -- see renderDots() in app.js. -->
-            <div class="view-photo-block">
+                 birth-order position among their siblings -- always for
+                 whichever person is currently SELECTED (see currentViewId),
+                 single card or couple card alike, since a couple card is
+                 really just this same single-person info block with a photo
+                 PAIR standing in for the one photo (see .view-photo-pair
+                 below), not a separate person's worth of content. Counted
+                 and shown in JS -- see renderDots() in app.js. -->
+            <div class="view-photo-block" id="viewPhotoBlock">
               <div class="view-dots" id="viewDotsParents" hidden></div>
               <div class="view-photo-row">
                 <div class="view-dots" id="viewDotsSideLeft" hidden></div>
@@ -311,6 +316,12 @@
                   </span>
                   <img id="viewPhotoImg" alt="" hidden>
                 </div>
+                <!-- Couple mode only: two tappable photos side by side, the
+                     selected one ringed -- built in JS by
+                     buildPhotoPairMember(). Occupies the same grid column as
+                     #viewPhoto (see .view-photo-pair in style.css), the two
+                     never shown at once. -->
+                <div class="view-photo-pair" id="viewPhotoPair" hidden></div>
                 <div class="view-dots" id="viewDotsSideRight" hidden></div>
               </div>
               <div class="view-dots" id="viewDotsChildren" hidden></div>
@@ -325,14 +336,7 @@
               <div class="view-details" id="viewDetails" hidden></div>
             </div>
           </div>
-          <!-- A couple's shared card: two equal-size member blocks, built and
-               populated in JS by buildCoupleMember() -- see renderPersonView(). -->
-          <div class="view-couple" id="viewCouple" hidden></div>
-          <!-- One column of contact chips per partner, populated in JS by
-               renderPersonView() -- see viewCoupleContacts. -->
-          <div class="view-couple-contacts" id="viewCoupleContacts" hidden></div>
           <div class="view-spouse-avatars" id="viewSpouseAvatars" hidden></div>
-          <p class="view-location" id="viewLocation" hidden></p>
         </div>
         <p class="view-notes" id="viewNotes" hidden></p>
         <!-- Shared by single and couple cards alike, ahead of whichever
@@ -458,7 +462,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609144"></script>
-  <script src="app.js?v=202609144"></script>
+  <script src="config.js?v=202609146"></script>
+  <script src="app.js?v=202609146"></script>
 </body>
 </html>

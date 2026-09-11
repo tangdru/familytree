@@ -16,32 +16,30 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== Couple View: Eleanor (zodiac mismatch) shows Doc./Zodiac split ===');
+  console.log('=== Couple View: Eleanor (zodiac mismatch, selected by default) shows Documented:/Zodiac-adjusted: split in the shared details block ===');
   await page.click('.person-card[data-id="eleanor"]');
   await page.waitForTimeout(300);
-  const memberTexts = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('.view-couple-member')).map(m => ({
-      name: m.querySelector('.view-couple-name').textContent,
-      dateLines: Array.from(m.querySelectorAll('.view-couple-dates')).map(d => d.textContent),
-    }));
-  });
-  console.log(JSON.stringify(memberTexts, null, 2));
+  const detailLines = () => page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
 
-  const eleanor = memberTexts.find(m => m.name === 'Eleanor Hayes');
-  const walter = memberTexts.find(m => m.name === 'Walter Hayes');
-  if (eleanor.dateLines.length !== 2) throw new Error(`Expected Eleanor to show 2 date lines, got ${eleanor.dateLines.length}: ${JSON.stringify(eleanor.dateLines)}`);
-  if (!eleanor.dateLines[0].startsWith('Doc.:') || !eleanor.dateLines[0].includes('1948')) {
-    throw new Error(`Expected Eleanor's first line to be "Doc.: ... 1948 ...", got: ${eleanor.dateLines[0]}`);
-  }
-  if (!eleanor.dateLines[1].startsWith('Zodiac:') || !eleanor.dateLines[1].includes('1943')) {
-    throw new Error(`Expected Eleanor's second line to be "Zodiac: ... 1943 ...", got: ${eleanor.dateLines[1]}`);
-  }
+  let lines = await detailLines();
+  console.log('Eleanor (selected) detail lines:', JSON.stringify(lines));
+  const documentedLine = lines.find(l => l.startsWith('Documented:'));
+  const adjustedLine = lines.find(l => l.startsWith('Zodiac-adjusted:'));
+  if (!documentedLine || !documentedLine.includes('1948')) throw new Error(`Expected a "Documented: ... 1948 ..." line, got: ${JSON.stringify(lines)}`);
+  if (!adjustedLine || !adjustedLine.includes('1943')) throw new Error(`Expected a "Zodiac-adjusted: ... 1943 ..." line, got: ${JSON.stringify(lines)}`);
   console.log('Confirmed: Eleanor (zodiac mismatch) shows both labeled lines in the couple card.');
 
-  if (walter.dateLines.length !== 1) throw new Error(`Expected Walter (no zodiac) to show just 1 date line, got ${walter.dateLines.length}: ${JSON.stringify(walter.dateLines)}`);
-  if (walter.dateLines[0].startsWith('Doc.:')) throw new Error(`Expected Walter's line to be plain (no zodiac set), got: ${walter.dateLines[0]}`);
-  if (!walter.dateLines[0].includes('Age')) throw new Error(`Expected Walter's plain line to still include an age, got: ${walter.dateLines[0]}`);
-  console.log('Confirmed: Walter (no zodiac) still shows the original single line with age, unaffected.');
+  console.log('\n=== Selecting Walter (no zodiac set) instead: plain "Born ..." line, no Documented/Zodiac-adjusted split ===');
+  await page.click('#viewPhotoPair .view-photo-pair-member[title="Walter Hayes"]');
+  await page.waitForTimeout(200);
+  lines = await detailLines();
+  const meta = await page.textContent('#viewMeta');
+  console.log('Walter (selected) detail lines:', JSON.stringify(lines), '| meta:', meta);
+  if (lines.some(l => l.startsWith('Documented:') || l.startsWith('Zodiac-adjusted:'))) {
+    throw new Error(`Expected Walter's details to be a plain line (no zodiac set), got: ${JSON.stringify(lines)}`);
+  }
+  if (!meta.includes('Age')) throw new Error(`Expected Walter's meta row to still include an age, got: ${meta}`);
+  console.log('Confirmed: Walter (no zodiac) shows the plain form, unaffected, once selected.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

@@ -42,17 +42,14 @@ try {
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
 
-  console.log('\n=== Couple View: also uses truncated "Doc./Zodiac" ===');
+  console.log('\n=== Couple View: same shared details block, same full labels, for whichever member is selected ===');
   await page.click('.person-card[data-id="eleanor"]');
   await page.waitForTimeout(300);
-  const coupleLines = await page.evaluate(() => {
-    const eleanorMember = Array.from(document.querySelectorAll('.view-couple-member')).find(m => m.querySelector('.view-couple-name').textContent === 'Eleanor Hayes');
-    return Array.from(eleanorMember.querySelectorAll('.view-couple-dates')).map(d => d.textContent);
-  });
-  console.log('Eleanor couple lines:', JSON.stringify(coupleLines));
-  if (!coupleLines[0].startsWith('Doc.:')) throw new Error(`Expected "Doc.:" prefix in couple card, got: ${coupleLines[0]}`);
-  if (!coupleLines[1].startsWith('Zodiac:')) throw new Error(`Expected "Zodiac:" prefix in couple card, got: ${coupleLines[1]}`);
-  console.log('Confirmed: Couple View also uses the truncated labels.');
+  const coupleLines = await page.evaluate(() => Array.from(document.querySelectorAll('#viewDetails p')).map(p => p.textContent));
+  console.log('Eleanor (selected by default) detail lines:', JSON.stringify(coupleLines));
+  if (!coupleLines.some(l => l.startsWith('Documented:'))) throw new Error(`Expected a "Documented:" line in the couple card, got: ${JSON.stringify(coupleLines)}`);
+  if (!coupleLines.some(l => l.startsWith('Zodiac-adjusted:'))) throw new Error(`Expected a "Zodiac-adjusted:" line in the couple card, got: ${JSON.stringify(coupleLines)}`);
+  console.log('Confirmed: the couple card uses the exact same shared details block as the single card.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

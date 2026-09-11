@@ -21,9 +21,9 @@ try {
   await page.waitForTimeout(300);
 
   const cardState = () => page.evaluate(() => ({
-    mode: document.getElementById('viewCouple').hidden ? 'single' : 'couple',
+    mode: document.getElementById('viewPhotoPair').hidden ? 'single' : 'couple',
     singleName: document.getElementById('viewName').textContent,
-    members: Array.from(document.querySelectorAll('.view-couple-name')).map(n => n.textContent),
+    members: Array.from(document.querySelectorAll('#viewPhotoPair .view-photo-pair-member')).map(m => m.title),
   }));
 
   console.log('=== BioParent has a current (Step) and a former (Ex) spouse -- should pair with Step, not Ex ===');
