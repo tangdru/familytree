@@ -77,16 +77,19 @@ try {
   const settledLocation = await readRadii();
   if (settledLocation.length !== 5) throw new Error(`Expected 5 rings settled in Location metric, got ${settledLocation.length}`);
 
-  console.log('\n=== Location -> Age (removing a ring): ring 5 still leaves LAST (starts moving late) ===');
+  console.log('\n=== Location -> Age (removing a ring): ring 5 starts growing out IMMEDIATELY, no stagger delay ===');
   const beforeLocToAge = await readMaxRadius();
   await page.click('.centric-metric-btn[data-metric="age"]');
-  await page.waitForTimeout(60); // still within ring 5's own stagger delay -- should NOT have moved yet
+  // No stagger delay for an exiting ring (same as entering) -- it needs
+  // to finish within the same window the cards themselves move in, not
+  // lag behind waiting for other rings' own delays to elapse first.
+  await page.waitForTimeout(60);
   const justAfterToAge = await readMaxRadius();
   console.log(`outermost radius: before click ${beforeLocToAge.toFixed(0)}, ~60ms after clicking Age ${justAfterToAge.toFixed(0)}`);
-  if (Math.abs(justAfterToAge - beforeLocToAge) > 1) {
-    throw new Error(`Expected the exiting ring 5 to still be stationary this early, moved from ${beforeLocToAge} to ${justAfterToAge}`);
+  if (justAfterToAge <= beforeLocToAge) {
+    throw new Error(`Expected the exiting ring 5 to already be growing within the first 60ms, got ${beforeLocToAge} then ${justAfterToAge}`);
   }
-  console.log('Confirmed: removing ring 5 waits its turn before leaving.');
+  console.log('Confirmed: removing ring 5 starts growing out immediately, no stagger delay.');
   await page.waitForTimeout(700);
   const settledAge = await readRadii();
   if (settledAge.length !== 4) throw new Error(`Expected 4 rings settled back in Age metric, got ${settledAge.length}`);
