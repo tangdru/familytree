@@ -3882,22 +3882,12 @@
   const CENTRIC_RING_GAP = 200; // minimum radial gap between successive rings
   const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
   const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
-  // How far up the light-to-dark scale the OUTERMOST ring of any metric
-  // reaches (see updateCentricGrid) -- leaves room above it (up to t=1) for
-  // the "beyond" background to read as one further, darker step past
-  // whichever ring is actually last, for either metric.
-  const CENTRIC_OUTER_RING_T = 0.85;
   // Stagger between each successive ring's build-in/out start, so rings
   // animate in sequence (innermost first) rather than all at once -- see
   // animateCentricGrid and centricTransitionDuration.
   const CENTRIC_RING_STAGGER_MS = 70;
   // Age has 4 tiers, Location has 5 -- see centricAgeRing/centricLocationRing
-  // below. Ring color still steps relative to whichever count is current
-  // (see updateCentricGrid), so the outermost ring of either metric always
-  // reaches the same CENTRIC_OUTER_RING_T shade even though the two counts
-  // differ; switching between the two metrics genuinely adds/removes a
-  // ring (Location's 5th), which is exactly what animateCentricGrid's own
-  // enter/exit handling is for.
+  // below.
   function centricRingCount(metric) {
     return metric === 'location' ? 5 : 4;
   }
@@ -3907,6 +3897,25 @@
   // switching metrics never creates or destroys a ring element, only
   // moves one to/from its parked (off-screen) radius.
   const CENTRIC_MAX_RINGS = Math.max(centricRingCount('age'), centricRingCount('location'));
+  // Ring color is an ABSOLUTE step on a fixed light-to-dark scale, keyed
+  // to the ring's own index -- NOT relative to whichever metric is
+  // active. Ring 4 is the same fixed shade whether you're looking at
+  // Age's 4th ring or Location's 4th, and ring 5 (which only Location
+  // ever shows) is one fixed step darker still. There are
+  // CENTRIC_MAX_RINGS + 1 steps in total -- the "+1" is the "beyond the
+  // last real ring" background step, so it's always one step darker than
+  // whichever ring actually is last FOR THAT METRIC (see
+  // updateCentricGrid): Age's background lands on the exact same step as
+  // Location's real ring 5 (Age's own last ring, 4, plus one), while
+  // Location's background goes one step further still (its last ring, 5,
+  // plus one) -- a step Age never reaches at all. This is deliberately
+  // NOT the same as the old design, which normalized each metric's own
+  // outermost ring (and its background) to identical shades regardless
+  // of ring count.
+  const CENTRIC_COLOR_STEPS = CENTRIC_MAX_RINGS + 1;
+  function centricColorT(step) {
+    return step / CENTRIC_COLOR_STEPS;
+  }
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -4059,12 +4068,12 @@
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
 
+    const lightColor = readHexColorVar('--centric-inner');
+    const darkColor = readHexColorVar('--centric-outer');
     const visible = new Set(visibleIndices);
     const showBackground = !skipBackground && visible.size > 0;
     grid.background.style.display = showBackground ? '' : 'none';
     if (showBackground) {
-      const lightColor = readHexColorVar('--centric-inner');
-      const darkColor = readHexColorVar('--centric-outer');
       // Beyond the outermost ring: covers the whole VIEWPORT, not just the
       // content's own (often smaller, or differently-shaped) bounding
       // box, so there's never a strip of plain page background visible
@@ -4079,22 +4088,15 @@
       grid.background.setAttribute('y', originY - overscan);
       grid.background.setAttribute('width', overscan * 2);
       grid.background.setAttribute('height', overscan * 2);
-      grid.background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
+      // One fixed step darker than whichever ring is actually last FOR
+      // THIS METRIC (see centricColorT's own note) -- Age's background
+      // (nothing past ring 4) lands on the same absolute shade as
+      // Location's real ring 5; Location's background (nothing past ring
+      // 5) goes one step further still, a shade Age never shows.
+      const backgroundT = centricColorT(centricRingCount(centricMetric) + 1);
+      grid.background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, backgroundT)));
     }
 
-    const lightColor = readHexColorVar('--centric-inner');
-    const darkColor = readHexColorVar('--centric-outer');
-    // Ring color is relative to the CURRENT metric's own ring count, not
-    // a fixed total -- so the outermost ring always reaches the same
-    // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
-    // ring or Location's 5th, and "beyond" (t=1, see the background rect
-    // above) always reads as one further, darker step past whichever
-    // ring is actually outermost for this metric. A ring that's mid-exit
-    // (its metric no longer includes it, e.g. Age's 4th ring animating
-    // out after switching to Location) can compute slightly past 1 here,
-    // so it's clamped -- it's on its way off-screen anyway, so it only
-    // needs to not render as an invalid color.
-    const totalRingsForMetric = centricRingCount(centricMetric);
     for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
       const disc = grid.discs[idx];
       const label = grid.labels[idx];
@@ -4109,8 +4111,10 @@
       label.setAttribute('x', originX);
       label.setAttribute('y', originY - radius - 8);
       if (isVisible) {
-        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
-        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, t)));
+        // Absolute step by ring index -- see centricColorT -- not
+        // relative to this metric's own ring count, so ring 4 is the
+        // same fixed shade in both Age and Location.
+        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, centricColorT(idx))));
         label.textContent = centricRingLabel(centricMetric, idx);
       }
     }

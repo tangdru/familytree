@@ -43,28 +43,57 @@ try {
       .map(c => ({ r: parseFloat(c.getAttribute('r')), color: parseRgb(c.getAttribute('fill')) }))
       .sort((a, b) => a.r - b.r);
   });
+  const readBackgroundColor = () => page.evaluate(() => {
+    const parseRgb = (s) => { const m = s.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/); return m ? { r: +m[1], g: +m[2], b: +m[3] } : null; };
+    return parseRgb(document.querySelector('#linesSvg rect').getAttribute('fill'));
+  });
 
   console.log('=== Age metric settled: 4 rings, note the color of each ===');
   const ageColors = await readDiscColors();
-  console.log('age ring colors (by radius, innermost first):', JSON.stringify(ageColors));
+  const ageBackground = await readBackgroundColor();
+  console.log('age ring colors (by radius, innermost first):', JSON.stringify(ageColors), 'background:', JSON.stringify(ageBackground));
   if (ageColors.length !== 4) throw new Error(`Expected 4 discs in Age metric, got ${ageColors.length}`);
 
-  // Location has 5 tiers (city/region/country/hemisphere/elsewhere) vs
-  // Age's 4, and ring color is relative to EACH metric's own ring count
-  // (see centricRingCount) -- so only the outermost ring is guaranteed to
-  // reach the same shade across metrics; inner rings can differ slightly.
-  console.log('\n=== Switch to Location: its OUTERMOST ring matches Age\'s outermost ring color exactly ===');
+  // Ring color is an ABSOLUTE step keyed to ring index (see centricColorT
+  // in app.js), not relative to either metric's own ring count -- so
+  // rings 1-4 are the exact same fixed shades in both metrics, and
+  // Location's extra 5th ring is one further fixed step darker, distinct
+  // from either metric's own outermost-ring shade.
+  console.log('\n=== Switch to Location: rings 1-4 keep the EXACT SAME shades as Age, ring 5 is a new, distinct, darker shade ===');
   await page.click('.centric-metric-btn[data-metric="location"]');
   await page.waitForTimeout(700);
   const locationColors = await readDiscColors();
   console.log('location ring colors (by radius, innermost first):', JSON.stringify(locationColors));
   if (locationColors.length !== 5) throw new Error(`Expected 5 discs settled in Location metric, got ${locationColors.length}`);
-  const ageOutermost = ageColors[ageColors.length - 1].color;
-  const locationOutermost = locationColors[locationColors.length - 1].color;
-  if (ageOutermost.r !== locationOutermost.r || ageOutermost.g !== locationOutermost.g || ageOutermost.b !== locationOutermost.b) {
-    throw new Error(`Expected Location's outermost ring to match Age's outermost ring color exactly, got ${JSON.stringify(locationOutermost)} vs ${JSON.stringify(ageOutermost)}`);
+  for (let i = 0; i < 4; i++) {
+    const a = ageColors[i].color, l = locationColors[i].color;
+    if (a.r !== l.r || a.g !== l.g || a.b !== l.b) {
+      throw new Error(`Expected ring ${i + 1} to be the identical absolute shade in both metrics, got Age=${JSON.stringify(a)} vs Location=${JSON.stringify(l)}`);
+    }
   }
-  console.log("Confirmed: Location's outermost ring matches Age's outermost ring color exactly.");
+  const ring4 = locationColors[3].color;
+  const ring5 = locationColors[4].color;
+  if (ring4.r === ring5.r && ring4.g === ring5.g && ring4.b === ring5.b) {
+    throw new Error(`Expected Location's ring 5 to be a distinct, darker shade than ring 4, both were ${JSON.stringify(ring4)}`);
+  }
+  console.log("Confirmed: rings 1-4 are identical absolute shades across metrics, ring 5 is a new distinct shade.");
+
+  // Age's background (nothing past its own last ring, 4) should land on
+  // the exact same absolute step as Location's real ring 5 -- Age never
+  // shows that step as a ring, but it's the same shade either way.
+  // Location's OWN background (nothing past its last ring, 5) should be
+  // one further, distinct step darker still -- a shade Age never reaches
+  // at all, since Age has no ring 5 to go one step past.
+  console.log("\n=== Age's background matches Location's ring 5 exactly; Location's own background is a new, further step ===");
+  const locationBackground = await readBackgroundColor();
+  console.log('age background:', JSON.stringify(ageBackground), 'location background:', JSON.stringify(locationBackground));
+  if (ageBackground.r !== ring5.r || ageBackground.g !== ring5.g || ageBackground.b !== ring5.b) {
+    throw new Error(`Expected Age's background to match Location's ring 5 exactly, got background=${JSON.stringify(ageBackground)} vs ring5=${JSON.stringify(ring5)}`);
+  }
+  if (locationBackground.r === ageBackground.r && locationBackground.g === ageBackground.g && locationBackground.b === ageBackground.b) {
+    throw new Error(`Expected Location's own background to be a distinct, further step than Age's background, both were ${JSON.stringify(ageBackground)}`);
+  }
+  console.log("Confirmed: Age's background matches Location's ring 5 exactly; Location's background is a further, distinct step.");
 
   const boundariesAfterToLocation = await readBoundaryCircles();
   if (boundariesAfterToLocation.length !== 5) throw new Error(`Expected exactly 5 settled boundary rings in Location metric, got ${boundariesAfterToLocation.length}`);
