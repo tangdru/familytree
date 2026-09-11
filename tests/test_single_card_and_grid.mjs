@@ -67,17 +67,33 @@ try {
   if (zodiacCardCount !== 4) throw new Error(`Expected 4 individual cards in zodiac view, found ${zodiacCardCount}`);
   console.log('Confirmed: 4 individual cards, no merged couple card.');
 
-  console.log('\n=== Concentric grid: dashed boundary circles + axis labels appear, one per ring, matching the metric ===');
+  console.log('\n=== Concentric grid: ring discs + axis labels appear, one per ring, matching the metric ===');
   const grid = await page.evaluate(() => {
-    const boundaryCircles = Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r')));
-    const labels = Array.from(document.querySelectorAll('#linesSvg text')).map(t => t.textContent);
+    // The grid keeps CENTRIC_MAX_RINGS (5) disc/label elements alive at
+    // all times now (see ensureCentricGridElements in app.js) -- a ring
+    // beyond the current metric's count sits hidden (display:none) at a
+    // parked radius rather than not existing, so both queries filter
+    // those out.
+    const boundaryCircles = Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r')));
+    const labels = Array.from(document.querySelectorAll('#linesSvg text'))
+      .filter(t => t.style.display !== 'none')
+      .map(t => t.textContent);
     return { boundaryCircles, labels };
   });
   console.log('boundary circles (radii):', JSON.stringify(grid.boundaryCircles), 'labels:', JSON.stringify(grid.labels));
   if (grid.boundaryCircles.length < 2) throw new Error(`Expected at least 2 concentric ring circles, got ${grid.boundaryCircles.length}`);
   if (grid.boundaryCircles.length !== grid.labels.length) throw new Error('Expected exactly one axis label per gridline circle');
+  // Not asserting the raw query order itself is increasing: the discs are
+  // deliberately reordered in the DOM by CURRENT radius (largest first)
+  // so smaller rings paint on top -- see updateCentricGrid -- which isn't
+  // the same thing as ring-index order. What actually matters is that
+  // each ring's radius is strictly larger than the last, so sort first.
   const sorted = [...grid.boundaryCircles].sort((a, b) => a - b);
-  if (JSON.stringify(sorted) !== JSON.stringify(grid.boundaryCircles)) throw new Error('Expected ring circles listed in increasing radius order');
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] <= sorted[i - 1]) throw new Error(`Expected strictly increasing ring radii, got ${JSON.stringify(sorted)}`);
+  }
   if (!grid.labels.some(l => /yrs/.test(l))) throw new Error('Expected age-metric labels (e.g. "0–5 yrs") by default');
   console.log('Confirmed: concentric gridlines + axis labels present and ordered by radius, age-metric labels shown.');
 
@@ -88,6 +104,7 @@ try {
       return m ? { r: +m[1], g: +m[2], b: +m[3] } : null;
     };
     const discs = Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
       .map(c => ({ r: parseFloat(c.getAttribute('r')), color: parseRgb(c.getAttribute('fill')) }))
       .sort((a, b) => a.r - b.r);
     const bg = document.querySelector('#linesSvg rect');

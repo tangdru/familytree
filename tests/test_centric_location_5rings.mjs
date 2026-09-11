@@ -68,16 +68,19 @@ try {
   }
   console.log('Confirmed: 5-tier ordering correct, cross-hemisphere and no-location share the outermost ring.');
 
-  console.log('\n=== Switching Age <-> Location now genuinely adds/removes the 5th ring ===');
+  console.log('\n=== Switching Age <-> Location shows/hides the 5th ring (element itself persists, see ensureCentricGridElements) ===');
+  const countVisibleRings = () => page.evaluate(() =>
+    Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]')).filter(c => c.style.display !== 'none').length
+  );
   await page.click('.centric-metric-btn[data-metric="age"]');
   await page.waitForTimeout(700);
-  const ageRingCount = (await page.evaluate(() => document.querySelectorAll('#linesSvg circle[stroke-dasharray]').length));
-  if (ageRingCount !== 4) throw new Error(`Expected 4 rings in Age metric, got ${ageRingCount}`);
+  const ageRingCount = await countVisibleRings();
+  if (ageRingCount !== 4) throw new Error(`Expected 4 visible rings in Age metric, got ${ageRingCount}`);
   await page.click('.centric-metric-btn[data-metric="location"]');
   await page.waitForTimeout(700);
-  const locRingCount = (await page.evaluate(() => document.querySelectorAll('#linesSvg circle[stroke-dasharray]').length));
-  if (locRingCount !== 5) throw new Error(`Expected 5 rings in Location metric, got ${locRingCount}`);
-  console.log('Confirmed: Age has 4 rings, Location has 5.');
+  const locRingCount = await countVisibleRings();
+  if (locRingCount !== 5) throw new Error(`Expected 5 visible rings in Location metric, got ${locRingCount}`);
+  console.log('Confirmed: Age shows 4 rings, Location shows 5.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);
