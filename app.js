@@ -4047,7 +4047,7 @@
     const labelSvg = (svg === els.svg) ? ensureCentricLabelsSvg() : svg;
     const labelGroup = document.createElementNS(svgNS, 'g');
     labelSvg.appendChild(labelGroup);
-    const discs = {}, labels = {}, labelChips = {};
+    const discs = {}, labels = {};
     for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
       const disc = document.createElementNS(svgNS, 'circle');
       disc.setAttribute('stroke', 'none');
@@ -4056,27 +4056,16 @@
       // Always along the same fixed axis (straight up), regardless of
       // where that ring's own cards happen to start (see the per-ring
       // stagger in renderCentric) -- reading top-to-bottom like a ruler
-      // is clearer than chasing each ring's staggered start angle. Each
-      // label gets its own background chip so it stays legible against
-      // whichever ring color (or, now that labels paint above cards,
-      // whichever card) happens to sit behind it.
-      const labelWrap = document.createElementNS(svgNS, 'g');
-      const chip = document.createElementNS(svgNS, 'rect');
-      chip.setAttribute('fill', 'var(--surface)');
-      chip.setAttribute('stroke', 'var(--card-border)');
-      chip.setAttribute('rx', '5');
+      // is clearer than chasing each ring's staggered start angle.
       const label = document.createElementNS(svgNS, 'text');
       label.setAttribute('text-anchor', 'middle');
       label.setAttribute('fill', 'var(--ink)');
-      label.setAttribute('font-size', '13');
+      label.setAttribute('font-size', '16');
       label.setAttribute('font-weight', '700');
-      labelWrap.appendChild(chip);
-      labelWrap.appendChild(label);
-      labelGroup.appendChild(labelWrap);
+      labelGroup.appendChild(label);
       labels[idx] = label;
-      labelChips[idx] = chip;
     }
-    svg._centricGrid = { background, discs, labels, labelChips, labelSvg };
+    svg._centricGrid = { background, discs, labels, labelSvg };
     return svg._centricGrid;
   }
 
@@ -4156,12 +4145,10 @@
     for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
       const disc = grid.discs[idx];
       const label = grid.labels[idx];
-      const chip = grid.labelChips[idx];
       const radius = radiusByRing[idx];
       const isVisible = visible.has(idx);
       disc.style.display = isVisible ? '' : 'none';
       label.style.display = isVisible ? '' : 'none';
-      chip.style.display = isVisible ? '' : 'none';
       if (radius == null) continue; // never positioned yet -- stays parked wherever it was
       disc.setAttribute('cx', originX);
       disc.setAttribute('cy', originY);
@@ -4174,16 +4161,6 @@
         // same fixed shade in both Age and Location.
         disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, centricColorT(idx))));
         label.textContent = centricRingLabel(centricMetric, idx);
-        // Sized to the text's own rendered bounding box (padded a bit),
-        // so the chip always fits the label exactly regardless of how
-        // long it is -- getBBox needs the element actually in the
-        // document with real content, which it always is here.
-        const box = label.getBBox();
-        const padX = 6, padY = 3;
-        chip.setAttribute('x', box.x - padX);
-        chip.setAttribute('y', box.y - padY);
-        chip.setAttribute('width', box.width + padX * 2);
-        chip.setAttribute('height', box.height + padY * 2);
       }
     }
 
