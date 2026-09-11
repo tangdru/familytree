@@ -421,7 +421,6 @@
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
     viewPhotoPair: document.getElementById('viewPhotoPair'),
     swipeHintUp: document.getElementById('swipeHintUp'),
-    swipeHintDown: document.getElementById('swipeHintDown'),
     swipeHintLeft: document.getElementById('swipeHintLeft'),
     swipeHintRight: document.getElementById('swipeHintRight'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
@@ -2609,13 +2608,11 @@
   function canSwipeLeft() { return siblingNeighborId(currentViewId, 1) !== null; }
   function canSwipeRight() { return siblingNeighborId(currentViewId, -1) !== null; }
   function canSwipeUp() { return peekChildIds() !== null; }
-  function canSwipeDown() { return peekParentIds() !== null; }
 
   function updateSwipeHints() {
     els.swipeHintLeft.hidden = !canSwipeLeft();
     els.swipeHintRight.hidden = !canSwipeRight();
     els.swipeHintUp.hidden = !canSwipeUp();
-    els.swipeHintDown.hidden = !canSwipeDown();
   }
 
   const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes

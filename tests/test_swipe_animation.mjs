@@ -29,15 +29,14 @@ try {
   await page.click('.person-card:has-text("Middle Doe")');
   await page.waitForTimeout(200);
 
-  console.log('=== Hints reflect availability: left(older sib)=visible, right(younger sib)=visible, up(child)=visible, down(parents)=visible ===');
+  console.log('=== Hints reflect availability: left(older sib)=visible, right(younger sib)=visible, up(child)=visible ===');
   let hints = await page.evaluate(() => ({
     left: !document.getElementById('swipeHintLeft').hidden,
     right: !document.getElementById('swipeHintRight').hidden,
     up: !document.getElementById('swipeHintUp').hidden,
-    down: !document.getElementById('swipeHintDown').hidden,
   }));
   console.log(JSON.stringify(hints));
-  if (!hints.left || !hints.right || !hints.up || !hints.down) throw new Error('Expected all four hints visible for Middle Doe: ' + JSON.stringify(hints));
+  if (!hints.left || !hints.right || !hints.up) throw new Error('Expected all three hints visible for Middle Doe: ' + JSON.stringify(hints));
 
   const zoneBox = await page.locator('#viewSwipeZone').boundingBox();
   const cx = zoneBox.x + zoneBox.width / 2;
