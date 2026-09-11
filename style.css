@@ -870,9 +870,10 @@ body {
 .help-section p + p { margin-top: 10px; }
 .help-list { margin: 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; }
 
-/* Small directional-pad illustration for the swipe-to-navigate feature,
-   reusing the exact same chevron glyphs as the real in-app swipe hints
-   (see .swipe-hint in this file) for visual consistency. */
+/* Small directional-pad illustration for the swipe-to-navigate feature --
+   its own standalone chevron glyphs, purely explanatory (the real card's
+   own swipe indicators are the dot strips around the photo, not chevrons;
+   see renderDots in app.js). */
 .help-swipe-diagram {
   display: grid;
   grid-template-columns: repeat(3, 36px);
@@ -991,25 +992,6 @@ body {
    lets a vertical drag mean "go to parent/child" instead of just scrolling. */
 .view-swipe-zone { position: relative; touch-action: none; cursor: grab; }
 .view-swipe-zone:active { cursor: grabbing; }
-
-/* Faint chevrons hinting a swipe works in a given direction -- purely
-   decorative (pointer-events: none), toggled per render by
-   updateSwipeHints() in app.js. Sit just outside the card itself, in the
-   modal-body's own padding gutter, so they never overlap real content. */
-.swipe-hint {
-  position: absolute;
-  display: flex;
-  color: var(--ink-soft);
-  opacity: 0.5;
-  pointer-events: none;
-  width: 16px;
-  height: 16px;
-}
-.swipe-hint[hidden] { display: none; }
-.swipe-hint svg { width: 100%; height: 100%; }
-.swipe-hint-up { top: -13px; left: 50%; transform: translateX(-50%); }
-.swipe-hint-left { left: -14px; top: 50%; transform: translateY(-50%); }
-.swipe-hint-right { right: -14px; top: 50%; transform: translateY(-50%); }
 
 /* ---------- Swipe drag-follow overlay ---------- */
 /* While a card swipe is in progress, the real #personViewCard (the whole

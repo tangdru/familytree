@@ -29,14 +29,14 @@ try {
   await page.click('.person-card:has-text("Middle Doe")');
   await page.waitForTimeout(200);
 
-  console.log('=== Hints reflect availability: left(older sib)=visible, right(younger sib)=visible, up(child)=visible ===');
+  console.log('=== Dot indicators reflect availability: left(younger sib)=visible, right(older sib)=visible, up(child)=visible ===');
   let hints = await page.evaluate(() => ({
-    left: !document.getElementById('swipeHintLeft').hidden,
-    right: !document.getElementById('swipeHintRight').hidden,
-    up: !document.getElementById('swipeHintUp').hidden,
+    left: !document.getElementById('viewDotsSideLeft').hidden, // younger siblings, swipe left
+    right: !document.getElementById('viewDotsSideRight').hidden, // older siblings, swipe right
+    up: !document.getElementById('viewDotsChildren').hidden,
   }));
   console.log(JSON.stringify(hints));
-  if (!hints.left || !hints.right || !hints.up) throw new Error('Expected all three hints visible for Middle Doe: ' + JSON.stringify(hints));
+  if (!hints.left || !hints.right || !hints.up) throw new Error('Expected all three dot indicators visible for Middle Doe: ' + JSON.stringify(hints));
 
   const zoneBox = await page.locator('#viewSwipeZone').boundingBox();
   const cx = zoneBox.x + zoneBox.width / 2;
@@ -78,10 +78,10 @@ try {
 
   console.log('\n=== Younger Sib Doe has no younger sibling: dead-end drag left should spring back, no navigation ===');
   hints = await page.evaluate(() => ({
-    left: !document.getElementById('swipeHintLeft').hidden,
+    left: !document.getElementById('viewDotsSideLeft').hidden,
   }));
-  console.log('left hint for Younger Sib Doe (expect false, no younger sibling):', hints.left);
-  if (hints.left) throw new Error('Expected no left hint for the youngest sibling');
+  console.log('left dot indicator for Younger Sib Doe (expect false, no younger sibling):', hints.left);
+  if (hints.left) throw new Error('Expected no left dot indicator for the youngest sibling');
 
   const zoneBox2 = await page.locator('#viewSwipeZone').boundingBox();
   const cx2 = zoneBox2.x + zoneBox2.width / 2;

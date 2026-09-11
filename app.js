@@ -420,9 +420,6 @@
     viewPhotoImg: document.getElementById('viewPhotoImg'),
     viewPhotoPlaceholder: document.getElementById('viewPhotoPlaceholder'),
     viewPhotoPair: document.getElementById('viewPhotoPair'),
-    swipeHintUp: document.getElementById('swipeHintUp'),
-    swipeHintLeft: document.getElementById('swipeHintLeft'),
-    swipeHintRight: document.getElementById('swipeHintRight'),
     viewSpouseAvatars: document.getElementById('viewSpouseAvatars'),
     viewName: document.getElementById('viewName'),
     viewMeta: document.getElementById('viewMeta'),
@@ -435,6 +432,7 @@
     viewContact: document.getElementById('viewContact'),
     viewNotes: document.getElementById('viewNotes'),
     viewRelationsDivider: document.getElementById('viewRelationsDivider'),
+    viewNotesDivider: document.getElementById('viewNotesDivider'),
     viewParentsSection: document.getElementById('viewParentsSection'),
     viewParentsList: document.getElementById('viewParentsList'),
     viewSiblingsDivider: document.getElementById('viewSiblingsDivider'),
@@ -2130,23 +2128,25 @@
   }
 
   // Shows exactly one hairline divider between each pair of adjacent
-  // VISIBLE blocks in the Notes/relation-sections chain -- never a rule
-  // under every section's own label. Walks the chain in display order,
-  // and a divider is shown only when the section right after it is
-  // visible AND some earlier block in the chain was too, so skipping a
-  // hidden section in between never leaves a stray line (nothing above
-  // it) or a missing one (something above it, wrongly treated as if it
-  // were the very first block).
+  // VISIBLE blocks -- the Details block above, then Notes/relation
+  // sections below -- never a rule under every section's own label.
+  // sawVisible starts true (the Details/photo/info block above is always
+  // there), so the very first visible item in the chain still gets its
+  // own leading divider even when Notes is empty and Parents is the first
+  // thing to show. Walks the rest of the chain in display order, and a
+  // divider is shown only when the section right after it is visible AND
+  // some earlier block was too, so skipping a hidden section in between
+  // never leaves a stray line or a missing one.
   function updateSectionDividers() {
     const chain = [
-      { visible: !els.viewNotes.hidden },
-      { divider: els.viewRelationsDivider, visible: !els.viewParentsSection.hidden },
+      { divider: els.viewRelationsDivider, visible: !els.viewNotes.hidden },
+      { divider: els.viewNotesDivider, visible: !els.viewParentsSection.hidden },
       { divider: els.viewSiblingsDivider, visible: !els.viewSiblingsSection.hidden },
       { divider: els.viewSpousesDivider, visible: !els.viewSpousesSection.hidden },
       { divider: els.viewChildrenDivider, visible: !els.viewChildrenSection.hidden },
       { divider: els.viewLocationsDivider, visible: !els.viewLocationsSection.hidden },
     ];
-    let sawVisible = false;
+    let sawVisible = true;
     for (const { divider, visible } of chain) {
       if (divider) divider.hidden = !(visible && sawVisible);
       sawVisible = sawVisible || visible;
@@ -2383,11 +2383,10 @@
     // Dot indicators around the photo (or photo pair) -- how many parents/
     // children/siblings are a swipe away in each direction, plus (via the
     // side dots' left/right split) this person's own birth-order position
-    // among their siblings. Matches the app's existing swipe directions
-    // exactly: up reaches children, down reaches parents (see
-    // canSwipeUp/canSwipeDown), and among siblings, right is older / left
-    // is younger (see canSwipeLeft/canSwipeRight) -- so the dots are a
-    // preview of real swipe destinations, not just a decoration.
+    // among their siblings. These ARE the swipe indicators (see Figma):
+    // up reaches children, down reaches parents, and among siblings, right
+    // is older / left is younger -- so the dots are a preview of real
+    // swipe destinations, not just a decoration.
     renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length);
     renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length);
     const siblings = siblingSet(selectedId);
@@ -2429,7 +2428,6 @@
 
     updateSectionDividers();
 
-    updateSwipeHints();
     els.viewModal.hidden = false;
   }
 
@@ -2584,10 +2582,10 @@
   }
 
   // Read-only mirrors of verticalGoUp/verticalGoDown's own logic, for the
-  // swipe-drag preview (see the pointermove handler below) and the edge
-  // hints (updateSwipeHints) to check "is there actually somewhere to go"
-  // without mutating verticalPath -- the real navigation still always goes
-  // through verticalGoUp/verticalGoDown themselves once a swipe commits.
+  // swipe-drag preview (see the pointermove handler below) to check "is
+  // there actually somewhere to go" without mutating verticalPath -- the
+  // real navigation still always goes through verticalGoUp/verticalGoDown
+  // themselves once a swipe commits.
   function peekChildIds() {
     if (!verticalPath.length) return null;
     if (verticalIndex + 1 < verticalPath.length) return verticalPath[verticalIndex + 1];
@@ -2600,19 +2598,6 @@
     if (verticalIndex > 0) return verticalPath[verticalIndex - 1];
     const parentIds = parentIdsOf(verticalPath[0].selected);
     return parentIds.length ? { ids: parentIds, selected: parentIds[0] } : null;
-  }
-
-  // Whether the swipe-edge hints (see updateSwipeHints) should show for
-  // each direction -- mirrors exactly what a swipe in that direction would
-  // actually do, so a hint never promises a swipe that would be a no-op.
-  function canSwipeLeft() { return siblingNeighborId(currentViewId, 1) !== null; }
-  function canSwipeRight() { return siblingNeighborId(currentViewId, -1) !== null; }
-  function canSwipeUp() { return peekChildIds() !== null; }
-
-  function updateSwipeHints() {
-    els.swipeHintLeft.hidden = !canSwipeLeft();
-    els.swipeHintRight.hidden = !canSwipeRight();
-    els.swipeHintUp.hidden = !canSwipeUp();
   }
 
   const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes
