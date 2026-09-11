@@ -2302,16 +2302,26 @@
     renderThreadPosition();
   }
 
-  // Fills a dot-indicator strip with `count` plain dots, hiding the whole
-  // strip when there's nothing to show -- see renderPersonView.
-  function renderDots(container, count) {
+  // Fills a dot-indicator strip with `count` plain dots. By default the
+  // whole strip hides when there's nothing to show (the side strips: an
+  // empty one there just means "no siblings on this side," and hiding it
+  // is harmless since .view-photo-row's own grid columns -- not this
+  // strip's content -- are what keep the photo horizontally centered).
+  // reserveSpace keeps the strip in flow even at count 0 -- used for the
+  // parents/children strips above/below the photo, which sit in a plain
+  // flex column with .view-photo-block: hiding one of those would collapse
+  // its slot AND the flex gap around it, shifting the photo itself up or
+  // down depending on whether this particular person happens to have any
+  // recorded parents/children -- exactly the bug this option exists to
+  // avoid, since the photo's own position should never depend on that.
+  function renderDots(container, count, reserveSpace) {
     container.innerHTML = '';
     for (let i = 0; i < count; i++) {
       const dot = document.createElement('span');
       dot.className = 'view-dot';
       container.appendChild(dot);
     }
-    container.hidden = count === 0;
+    container.hidden = !reserveSpace && count === 0;
   }
 
   function renderPersonView(ids, selectedId) {
@@ -2389,8 +2399,8 @@
     // this person's left in the tree is older, and one to their right is
     // younger -- e.g. the oldest of three has 0 dots on the left and 2 on
     // the right.
-    renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length);
-    renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length);
+    renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length, true);
+    renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length, true);
     const siblings = siblingSet(selectedId);
     const myIndex = siblings.indexOf(selectedId);
     renderDots(els.viewDotsSideLeft, myIndex); // older siblings -- to the left in the tree
