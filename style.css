@@ -1062,6 +1062,14 @@ body {
   justify-items: center;
   width: 100%;
 }
+/* Pin the photo to the middle track explicitly -- a hidden (display:none)
+   side-dot strip drops out of grid flow entirely, so without this,
+   auto-placement would slide the photo into column 1 (and any dots on
+   the other side into column 2) the moment a person has siblings on only
+   one side, or none at all. */
+.view-photo { grid-column: 2; }
+#viewDotsSideLeft { grid-column: 1; }
+#viewDotsSideRight { grid-column: 3; }
 .view-dots { display: flex; align-items: center; gap: 5px; min-height: 6px; }
 .view-dots[hidden] { display: none; }
 .view-dot {
