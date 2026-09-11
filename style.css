@@ -867,6 +867,7 @@ body {
   border-bottom: 1px solid var(--card-border);
 }
 .help-section p { margin: 0; font-size: 0.88rem; line-height: 1.45; }
+.help-section p + p { margin-top: 10px; }
 .help-list { margin: 0; padding-left: 18px; font-size: 0.88rem; line-height: 1.5; }
 
 /* Small directional-pad illustration for the swipe-to-navigate feature,
