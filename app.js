@@ -2383,16 +2383,18 @@
     // Dot indicators around the photo (or photo pair) -- how many parents/
     // children/siblings are a swipe away in each direction, plus (via the
     // side dots' left/right split) this person's own birth-order position
-    // among their siblings. These ARE the swipe indicators (see Figma):
-    // up reaches children, down reaches parents, and among siblings, right
-    // is older / left is younger -- so the dots are a preview of real
-    // swipe destinations, not just a decoration.
+    // among their siblings. The side split mirrors the actual family tree
+    // layout, not the swipe gesture: computeOrder/buildClusters place
+    // siblings left-to-right oldest-to-youngest, so a sibling physically to
+    // this person's left in the tree is older, and one to their right is
+    // younger -- e.g. the oldest of three has 0 dots on the left and 2 on
+    // the right.
     renderDots(els.viewDotsParents, (p.parents || []).filter(id => data.people[id]).length);
     renderDots(els.viewDotsChildren, Object.keys(data.people).filter(id => data.people[id].parents.includes(selectedId)).length);
     const siblings = siblingSet(selectedId);
     const myIndex = siblings.indexOf(selectedId);
-    renderDots(els.viewDotsSideLeft, siblings.length - 1 - myIndex); // younger siblings -- swipe left
-    renderDots(els.viewDotsSideRight, myIndex); // older siblings -- swipe right
+    renderDots(els.viewDotsSideLeft, myIndex); // older siblings -- to the left in the tree
+    renderDots(els.viewDotsSideRight, siblings.length - 1 - myIndex); // younger siblings -- to the right in the tree
 
     // Spouses already shown as the other half of a couple card don't need
     // repeating in the small avatar row -- that row is for reaching anyone

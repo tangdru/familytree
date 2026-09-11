@@ -29,10 +29,10 @@ try {
   await page.click('.person-card:has-text("Middle Doe")');
   await page.waitForTimeout(200);
 
-  console.log('=== Dot indicators reflect availability: left(younger sib)=visible, right(older sib)=visible, up(child)=visible ===');
+  console.log('=== Dot indicators reflect availability: left(older sib)=visible, right(younger sib)=visible, up(child)=visible ===');
   let hints = await page.evaluate(() => ({
-    left: !document.getElementById('viewDotsSideLeft').hidden, // younger siblings, swipe left
-    right: !document.getElementById('viewDotsSideRight').hidden, // older siblings, swipe right
+    left: !document.getElementById('viewDotsSideLeft').hidden, // older siblings, to the left in the tree
+    right: !document.getElementById('viewDotsSideRight').hidden, // younger siblings, to the right in the tree
     up: !document.getElementById('viewDotsChildren').hidden,
   }));
   console.log(JSON.stringify(hints));
@@ -78,10 +78,10 @@ try {
 
   console.log('\n=== Younger Sib Doe has no younger sibling: dead-end drag left should spring back, no navigation ===');
   hints = await page.evaluate(() => ({
-    left: !document.getElementById('viewDotsSideLeft').hidden,
+    right: !document.getElementById('viewDotsSideRight').hidden,
   }));
-  console.log('left dot indicator for Younger Sib Doe (expect false, no younger sibling):', hints.left);
-  if (hints.left) throw new Error('Expected no left dot indicator for the youngest sibling');
+  console.log('right dot indicator for Younger Sib Doe (expect false, no younger sibling):', hints.right);
+  if (hints.right) throw new Error('Expected no right dot indicator for the youngest sibling');
 
   const zoneBox2 = await page.locator('#viewSwipeZone').boundingBox();
   const cx2 = zoneBox2.x + zoneBox2.width / 2;

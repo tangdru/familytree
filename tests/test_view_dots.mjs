@@ -39,17 +39,18 @@ try {
     rightHidden: document.getElementById('viewDotsSideRight').hidden,
   }));
 
-  console.log('=== Thomas: 2 parents, 1 child, 2 older siblings (right), 1 younger sibling (left) ===');
+  console.log('=== Thomas: 2 parents, 1 child, 2 older siblings (left), 1 younger sibling (right) ===');
   await page.click('.person-card[data-id="thomas"]');
   await page.waitForTimeout(300);
   const d = await dotState();
   console.log(JSON.stringify(d));
   if (d.parents !== 2 || d.parentsHidden) throw new Error(`Expected 2 visible parent dots, got ${JSON.stringify(d)}`);
   if (d.children !== 1 || d.childrenHidden) throw new Error(`Expected 1 visible child dot, got ${JSON.stringify(d)}`);
-  // Left = younger siblings (swipe-left direction, see canSwipeLeft), right = older (canSwipeRight).
-  if (d.left !== 1 || d.leftHidden) throw new Error(`Expected 1 younger-sibling dot on the left, got ${JSON.stringify(d)}`);
-  if (d.right !== 2 || d.rightHidden) throw new Error(`Expected 2 older-sibling dots on the right, got ${JSON.stringify(d)}`);
-  console.log('Confirmed: dot counts match parents/children/siblings, siblings split left(younger)/right(older) by birth order.');
+  // Left/right mirrors the tree's own left-to-right layout (oldest to
+  // youngest, see computeOrder) -- left = older, right = younger.
+  if (d.left !== 2 || d.leftHidden) throw new Error(`Expected 2 older-sibling dots on the left, got ${JSON.stringify(d)}`);
+  if (d.right !== 1 || d.rightHidden) throw new Error(`Expected 1 younger-sibling dot on the right, got ${JSON.stringify(d)}`);
+  console.log('Confirmed: dot counts match parents/children/siblings, siblings split left(older)/right(younger) by birth order.');
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
 
