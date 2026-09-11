@@ -28,7 +28,13 @@ try {
   await page.selectOption('#viewModeSelect', 'centric');
   await page.waitForTimeout(600);
 
-  const readLabels = () => page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text')).map(t => t.textContent));
+  // The grid keeps CENTRIC_MAX_RINGS (5) label elements alive at all times
+  // now (see ensureCentricGridElements in app.js) -- a ring beyond the
+  // current metric's count sits hidden (display:none), so it's filtered
+  // out here rather than counted as a real, currently-shown ring.
+  const readLabels = () => page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text'))
+    .filter(t => t.style.display !== 'none')
+    .map(t => t.textContent));
 
   console.log('=== Fixed ring set: all 4 age rings always drawn, even ones with no members ===');
   const labelsAtStart = await readLabels();
@@ -63,8 +69,14 @@ try {
   // CENTRIC_RING_STAGGER_MS), so the first sample needs to be timed past
   // its own stagger delay, not just after the transition starts overall.
   await page.click('[data-id="center"]');
+  // The grid keeps CENTRIC_MAX_RINGS (5) disc elements alive at all times
+  // now (see ensureCentricGridElements in app.js) -- a ring beyond the
+  // current metric's count sits hidden (display:none) at a parked radius
+  // rather than not existing, so it's filtered out here.
   const readMaxRadius = () => page.evaluate(() =>
-    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))))
+    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r'))))
   );
   await page.waitForTimeout(260); // past the 4th ring's own stagger delay (3 * 70ms), while it's still animating
   const r1 = await readMaxRadius();

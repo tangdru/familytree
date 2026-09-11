@@ -22,8 +22,13 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
+  // The grid keeps CENTRIC_MAX_RINGS (5) disc elements alive at all times
+  // now (see ensureCentricGridElements in app.js) -- a ring beyond the
+  // current metric's count sits hidden (display:none) at a parked radius
+  // rather than not existing, so it's filtered out of these reads.
   const readRadii = () => page.evaluate(() =>
-    Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]'))
+    Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
       .map(c => parseFloat(c.getAttribute('r')))
       .sort((a, b) => a - b)
   );
@@ -43,12 +48,14 @@ try {
   console.log('Confirmed: first entry still settles to the correct 4 rings (unaffected by the direction change).');
 
   // Location has 5 tiers (city/region/country/hemisphere/elsewhere) vs
-  // Age's 4, so switching between them genuinely adds/removes the 5th
-  // ring -- Age -> Location ADDS it (shrinks in immediately, no stagger
-  // delay), Location -> Age REMOVES it (grows out, waiting its turn like
+  // Age's 4, so switching between them shows/hides the 5th ring -- Age ->
+  // Location makes it appear (shrinks in immediately, no stagger delay),
+  // Location -> Age makes it disappear (grows out, waiting its turn like
   // any exiting ring, innermost-first).
   const readMaxRadius = () => page.evaluate(() =>
-    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))))
+    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r'))))
   );
 
   console.log('\n=== Age -> Location (adding a ring): the new ring 5 starts shrinking in IMMEDIATELY ===');
@@ -89,15 +96,23 @@ try {
   const findOverlay = () => page.evaluate(() => {
     const overlays = Array.from(document.querySelectorAll('#treeCanvas > svg.lines-svg'));
     // There should be TWO once leaving: the real #linesSvg (now serving
-    // Traditional view, empty/no dashed rings) and the temporary collapse
-    // overlay (has dashed rings).
-    const withRings = overlays.map(svg => Array.from(svg.querySelectorAll('circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))))
+    // Traditional view, no ring circles at all) and the temporary collapse
+    // overlay (has the visible rings). The overlay also gets the full set
+    // of CENTRIC_MAX_RINGS disc elements created (see
+    // ensureCentricGridElements), so any beyond the metric's own count
+    // (hidden, parked at r=0, never positioned) are filtered out here.
+    const withRings = overlays
+      .map(svg => Array.from(svg.querySelectorAll('circle[stroke="none"]'))
+        .filter(c => c.style.display !== 'none')
+        .map(c => parseFloat(c.getAttribute('r'))))
       .find(list => list.length > 0);
     return withRings || null;
   });
 
   const beforeLeaveRadii = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))).sort((a, b) => a - b)
+    Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r'))).sort((a, b) => a - b)
   );
   await page.selectOption('#viewModeSelect', 'traditional');
   await page.waitForTimeout(30); // just after switching

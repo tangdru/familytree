@@ -24,14 +24,22 @@ try {
   await page.selectOption('#viewModeSelect', 'centric');
   await page.waitForTimeout(600);
 
+  // The grid keeps CENTRIC_MAX_RINGS (5) disc elements alive at all times
+  // now (see ensureCentricGridElements in app.js) -- a ring beyond the
+  // current metric's count just sits hidden (display:none) at a parked
+  // radius rather than not existing, so every query here filters those
+  // out to count/measure only the rings actually on screen.
   const readBoundaryCircles = () => page.evaluate(() =>
-    Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => ({
-      r: parseFloat(c.getAttribute('r')),
-    }))
+    Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => ({
+        r: parseFloat(c.getAttribute('r')),
+      }))
   );
   const readDiscColors = () => page.evaluate(() => {
     const parseRgb = (s) => { const m = s.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/); return m ? { r: +m[1], g: +m[2], b: +m[3] } : null; };
     return Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
       .map(c => ({ r: parseFloat(c.getAttribute('r')), color: parseRgb(c.getAttribute('fill')) }))
       .sort((a, b) => a.r - b.r);
   });
@@ -62,15 +70,17 @@ try {
   if (boundariesAfterToLocation.length !== 5) throw new Error(`Expected exactly 5 settled boundary rings in Location metric, got ${boundariesAfterToLocation.length}`);
   console.log('Confirmed: all 5 rings present once settled in Location metric.');
 
-  // Location has MORE rings than Age, so going Age -> Location ADDS the
-  // 5th ring (shrinks in immediately, no stagger delay -- see
+  // Location has MORE rings than Age, so going Age -> Location makes the
+  // 5th ring appear (shrinks in immediately, no stagger delay -- see
   // animateCentricGrid's addingRingsToExisting), and Location -> Age
-  // REMOVES it (grows out, waiting its turn like every removal).
+  // makes it disappear (grows out, waiting its turn like every removal).
   console.log('\n=== Age -> Location (adding a ring): the new ring 5 starts shrinking in IMMEDIATELY ===');
   await page.click('.centric-metric-btn[data-metric="age"]'); // back to Age to reset
   await page.waitForTimeout(700);
   const readOuterBoundaryRadius = () => page.evaluate(() =>
-    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))))
+    Math.max(...Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r'))))
   );
   await page.click('.centric-metric-btn[data-metric="location"]');
   // The new ring 5 starts at a huge off-screen radius and shrinks toward
@@ -101,7 +111,9 @@ try {
   console.log('Confirmed: removing ring 5 waits its turn before leaving (innermost rings settle first).');
   await page.waitForTimeout(700);
   const settledBack = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('#linesSvg circle[stroke-dasharray]')).map(c => parseFloat(c.getAttribute('r'))).sort((a, b) => a - b)
+    Array.from(document.querySelectorAll('#linesSvg circle[stroke="none"]'))
+      .filter(c => c.style.display !== 'none')
+      .map(c => parseFloat(c.getAttribute('r'))).sort((a, b) => a - b)
   );
   if (settledBack.length !== 4) throw new Error(`Expected 4 rings settled back in Age metric, got ${settledBack.length}`);
   console.log('Confirmed: settles back to exactly 4 rings in Age metric.');

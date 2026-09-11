@@ -3883,7 +3883,7 @@
   const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
   const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
   // How far up the light-to-dark scale the OUTERMOST ring of any metric
-  // reaches (see drawCentricGrid) -- leaves room above it (up to t=1) for
+  // reaches (see updateCentricGrid) -- leaves room above it (up to t=1) for
   // the "beyond" background to read as one further, darker step past
   // whichever ring is actually last, for either metric.
   const CENTRIC_OUTER_RING_T = 0.85;
@@ -3893,7 +3893,7 @@
   const CENTRIC_RING_STAGGER_MS = 70;
   // Age has 4 tiers, Location has 5 -- see centricAgeRing/centricLocationRing
   // below. Ring color still steps relative to whichever count is current
-  // (see drawCentricGrid), so the outermost ring of either metric always
+  // (see updateCentricGrid), so the outermost ring of either metric always
   // reaches the same CENTRIC_OUTER_RING_T shade even though the two counts
   // differ; switching between the two metrics genuinely adds/removes a
   // ring (Location's 5th), which is exactly what animateCentricGrid's own
@@ -3901,6 +3901,12 @@
   function centricRingCount(metric) {
     return metric === 'location' ? 5 : 4;
   }
+  // The most rings any metric ever has -- Location's 5. The grid keeps
+  // exactly this many ring elements alive at all times (see
+  // ensureCentricGridElements) regardless of which metric is active, so
+  // switching metrics never creates or destroys a ring element, only
+  // moves one to/from its parked (off-screen) radius.
+  const CENTRIC_MAX_RINGS = Math.max(centricRingCount('age'), centricRingCount('location'));
 
   // Age-proximity ring: 0 is the center (handled separately, never passed
   // here), higher is further out. A missing birth year can't be compared
@@ -3954,7 +3960,7 @@
 
   // Reads a --centric-inner/--centric-outer custom property (a plain
   // #rgb/#rrggbb hex, as authored in style.css) as {r,g,b}, so
-  // drawCentricGrid can compute intermediate step colors in JS -- CSS
+  // updateCentricGrid can compute intermediate step colors in JS -- CSS
   // alone can't give us a dynamic number of discrete steps.
   function readHexColorVar(name) {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
@@ -3971,35 +3977,94 @@
   }
   function rgbCss({ r, g, b }) { return `rgb(${r}, ${g}, ${b})`; }
 
-  // One dashed circle plus an axis label per ring, centered on the person
-  // at (originX, originY), backed by DISTINCT flat colors per ring --
-  // deliberately not a smooth blend -- stepping from --centric-inner
-  // (lightest, the innermost ring) toward --centric-outer, one step per
-  // ring. The area beyond the outermost ring continues the exact same
-  // step sequence one step further (rather than reverting to the plain
-  // page background), so the darkening reads as continuing outward, not
-  // stopping abruptly at the last ring. Draws into #linesSvg by default
-  // (empty in this view otherwise -- see renderCentric's own note on why
-  // no connector lines are drawn), so it pans/zooms with the cards for
-  // free via the same parent transform; playCentricExitCollapse passes a
-  // temporary overlay svg instead, so the exit animation can keep playing
-  // after #linesSvg has already been claimed by whatever view comes next
-  // -- also passing skipBackground there, since that overlay sits on top
-  // of the destination view's own content, and the (otherwise opaque,
+  // Creates (once per svg -- cached on the element itself) the grid's
+  // persistent elements: one background rect plus exactly CENTRIC_MAX_RINGS
+  // discs and labels, reused for the life of that svg rather than torn
+  // down and recreated on every animation frame. A ring beyond the
+  // current metric's own count (e.g. ring 5 while on Age) just sits
+  // hidden at its parked radius instead of not existing -- see
+  // updateCentricGrid -- so switching metrics is purely an attribute
+  // update, never a DOM create/destroy.
+  //
+  // The cache is self-healing: leaving Centric view for another view mode
+  // clears #linesSvg's children (each view's own render function does
+  // this for its own connector lines) without knowing anything about this
+  // cache, which would otherwise go stale -- still set, but pointing at
+  // elements no longer attached to the document. The parentNode check
+  // below catches exactly that and rebuilds instead of reusing detached
+  // elements.
+  function ensureCentricGridElements(svg) {
+    if (svg._centricGrid && svg._centricGrid.background.parentNode === svg) return svg._centricGrid;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const background = document.createElementNS(svgNS, 'rect');
+    svg.appendChild(background);
+    // Discs and labels each live in their own group so labels always
+    // paint above every disc without needing their own per-frame sort --
+    // only the discs' relative order (see updateCentricGrid) ever needs
+    // to change, to keep a smaller ring's flat color painting over a
+    // larger one during a transition.
+    const discGroup = document.createElementNS(svgNS, 'g');
+    const labelGroup = document.createElementNS(svgNS, 'g');
+    svg.appendChild(discGroup);
+    svg.appendChild(labelGroup);
+    const discs = {}, labels = {};
+    for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
+      const disc = document.createElementNS(svgNS, 'circle');
+      disc.setAttribute('stroke', 'none');
+      discGroup.appendChild(disc);
+      discs[idx] = disc;
+      // Always along the same fixed axis (straight up), regardless of
+      // where that ring's own cards happen to start (see the per-ring
+      // stagger in renderCentric) -- reading top-to-bottom like a ruler
+      // is clearer than chasing each ring's staggered start angle.
+      const label = document.createElementNS(svgNS, 'text');
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', 'var(--ink-soft)');
+      label.setAttribute('font-size', '12');
+      label.setAttribute('font-weight', '600');
+      labelGroup.appendChild(label);
+      labels[idx] = label;
+    }
+    svg._centricGrid = { background, discs, labels };
+    return svg._centricGrid;
+  }
+
+  // Updates the grid's persistent elements (see ensureCentricGridElements)
+  // to a new state, rather than rebuilding the SVG from scratch. Discs
+  // backed by DISTINCT flat colors per ring -- deliberately not a smooth
+  // blend -- stepping from --centric-inner (lightest, the innermost ring)
+  // toward --centric-outer, one step per ring. The area beyond the
+  // outermost ring continues the exact same step sequence one step
+  // further (rather than reverting to the plain page background), so the
+  // darkening reads as continuing outward, not stopping abruptly at the
+  // last ring. Draws into #linesSvg by default (empty in this view
+  // otherwise -- see renderCentric's own note on why no connector lines
+  // are drawn), so it pans/zooms with the cards for free via the same
+  // parent transform; playCentricExitCollapse passes a temporary overlay
+  // svg instead, so the exit animation can keep playing after #linesSvg
+  // has already been claimed by whatever view comes next -- also passing
+  // skipBackground there, since that overlay sits on top of the
+  // destination view's own content, and the (otherwise opaque,
   // viewport-filling) background rect would hide it completely for as
   // long as the collapse takes to finish.
-  function drawCentricGrid(originX, originY, ringIndices, radiusByRing, svg = els.svg, { skipBackground = false } = {}) {
-    svg.innerHTML = '';
+  //
+  // radiusByRing must have an entry for every ring in visibleIndices (and
+  // may have entries beyond it too, e.g. a ring mid-transition toward
+  // becoming hidden); any ring with neither a radius nor visibility just
+  // keeps whatever state it last had, parked off-screen.
+  function updateCentricGrid(originX, originY, visibleIndices, radiusByRing, svg = els.svg, { skipBackground = false } = {}) {
+    const grid = ensureCentricGridElements(svg);
     svg.setAttribute('width', els.content.scrollWidth);
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
-    const svgNS = 'http://www.w3.org/2000/svg';
 
-    if (ringIndices.length) {
+    const visible = new Set(visibleIndices);
+    const showBackground = !skipBackground && visible.size > 0;
+    grid.background.style.display = showBackground ? '' : 'none';
+    if (showBackground) {
       const lightColor = readHexColorVar('--centric-inner');
       const darkColor = readHexColorVar('--centric-outer');
-
       // Beyond the outermost ring: covers the whole VIEWPORT, not just the
       // content's own (often smaller, or differently-shaped) bounding
       // box, so there's never a strip of plain page background visible
@@ -4009,73 +4074,60 @@
       // rather than tied to content-space dimensions that don't track the
       // actual viewport rectangle. Skipped entirely for the exit-collapse
       // overlay -- see skipBackground's own note above.
-      if (!skipBackground) {
-        const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
-        const background = document.createElementNS(svgNS, 'rect');
-        background.setAttribute('x', originX - overscan);
-        background.setAttribute('y', originY - overscan);
-        background.setAttribute('width', overscan * 2);
-        background.setAttribute('height', overscan * 2);
-        background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
-        svg.appendChild(background);
-      }
-
-      // Largest ring first, smallest last, so each smaller disc's flat
-      // color paints over the larger one (and the background) within its
-      // own radius -- a clean band per ring, not a blend of everything
-      // inside it. Sorted by actual (possibly mid-animation) radius,
-      // never by ring index -- during a transition an "exiting" ring's
-      // radius can temporarily exceed an "entering" one's, or vice versa.
-      const byRadiusDesc = [...ringIndices].sort((a, b) => radiusByRing[b] - radiusByRing[a]);
-      // Ring color is relative to the CURRENT metric's own ring count, not
-      // a fixed total -- so the outermost ring always reaches the same
-      // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
-      // ring or Location's 5th, and "beyond" (t=1, see the background
-      // rect above) always reads as one further, darker step past
-      // whichever ring is actually outermost for this metric. A ring
-      // that's mid-exit (its metric no longer includes it, e.g. Age's 4th
-      // ring animating out after switching to Location) can compute
-      // slightly past 1 here, so it's clamped -- it's on its way off-
-      // screen anyway, so it only needs to not render as an invalid color.
-      const totalRingsForMetric = centricRingCount(centricMetric);
-      for (const idx of byRadiusDesc) {
-        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
-        const disc = document.createElementNS(svgNS, 'circle');
-        disc.setAttribute('cx', originX);
-        disc.setAttribute('cy', originY);
-        disc.setAttribute('r', radiusByRing[idx]);
-        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, t)));
-        disc.setAttribute('stroke', 'none');
-        svg.appendChild(disc);
-      }
+      const overscan = Math.max(els.viewport.clientWidth, els.viewport.clientHeight, 2000) / MIN_ZOOM;
+      grid.background.setAttribute('x', originX - overscan);
+      grid.background.setAttribute('y', originY - overscan);
+      grid.background.setAttribute('width', overscan * 2);
+      grid.background.setAttribute('height', overscan * 2);
+      grid.background.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, 1)));
     }
 
-    for (const idx of ringIndices) {
+    const lightColor = readHexColorVar('--centric-inner');
+    const darkColor = readHexColorVar('--centric-outer');
+    // Ring color is relative to the CURRENT metric's own ring count, not
+    // a fixed total -- so the outermost ring always reaches the same
+    // CENTRIC_OUTER_RING_T shade regardless of whether that's Age's 4th
+    // ring or Location's 5th, and "beyond" (t=1, see the background rect
+    // above) always reads as one further, darker step past whichever
+    // ring is actually outermost for this metric. A ring that's mid-exit
+    // (its metric no longer includes it, e.g. Age's 4th ring animating
+    // out after switching to Location) can compute slightly past 1 here,
+    // so it's clamped -- it's on its way off-screen anyway, so it only
+    // needs to not render as an invalid color.
+    const totalRingsForMetric = centricRingCount(centricMetric);
+    for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
+      const disc = grid.discs[idx];
+      const label = grid.labels[idx];
       const radius = radiusByRing[idx];
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', originX);
-      circle.setAttribute('cy', originY);
-      circle.setAttribute('r', radius);
-      circle.setAttribute('fill', 'none');
-      circle.setAttribute('stroke', 'var(--card-border)');
-      circle.setAttribute('stroke-width', 1);
-      circle.setAttribute('stroke-dasharray', '4 6');
-      svg.appendChild(circle);
-
-      // Always along the same fixed axis (straight up), regardless of
-      // where that ring's own cards happen to start (see the per-ring
-      // stagger in renderCentric) -- reading top-to-bottom like a ruler
-      // is clearer than chasing each ring's staggered start angle.
-      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      const isVisible = visible.has(idx);
+      disc.style.display = isVisible ? '' : 'none';
+      label.style.display = isVisible ? '' : 'none';
+      if (radius == null) continue; // never positioned yet -- stays parked wherever it was
+      disc.setAttribute('cx', originX);
+      disc.setAttribute('cy', originY);
+      disc.setAttribute('r', radius);
       label.setAttribute('x', originX);
       label.setAttribute('y', originY - radius - 8);
-      label.setAttribute('text-anchor', 'middle');
-      label.setAttribute('fill', 'var(--ink-soft)');
-      label.setAttribute('font-size', '12');
-      label.setAttribute('font-weight', '600');
-      label.textContent = centricRingLabel(centricMetric, idx);
-      svg.appendChild(label);
+      if (isVisible) {
+        const t = Math.min(1, (idx / totalRingsForMetric) * CENTRIC_OUTER_RING_T);
+        disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, t)));
+        label.textContent = centricRingLabel(centricMetric, idx);
+      }
     }
+
+    // Largest ring first, smallest last, so each smaller disc's flat
+    // color paints over the larger one (and the background) within its
+    // own radius -- a clean band per ring, not a blend of everything
+    // inside it. Re-sorted every call by actual (possibly mid-animation)
+    // radius, never by ring index -- during a transition an "exiting"
+    // ring's radius can temporarily exceed an "entering" one's, or vice
+    // versa. Reordering existing elements (not recreating them) via
+    // appendChild, which moves a node already in the document instead of
+    // cloning it.
+    const byRadiusDesc = Array.from({ length: CENTRIC_MAX_RINGS }, (_, i) => i + 1)
+      .filter((idx) => radiusByRing[idx] != null)
+      .sort((a, b) => radiusByRing[b] - radiusByRing[a]);
+    for (const idx of byRadiusDesc) grid.discs[idx].parentNode.appendChild(grid.discs[idx]);
   }
 
   // Total time for a Centric transition (grid + pan/zoom together, see
@@ -4108,10 +4160,18 @@
   // - A ring that's disappearing (switching to a metric with fewer rings)
   //   grows out to that same huge offscreen radius rather than just
   //   vanishing.
-  // Colors come from drawCentricGrid's own metric-relative step, so a
+  // Colors come from updateCentricGrid's own metric-relative step, so a
   // ring that persists across the change barely (if at all) recolors --
   // mainly its presence (and radius) changes.
   function animateCentricGrid(from, to) {
+    // Always animates the full fixed set of CENTRIC_MAX_RINGS ring slots
+    // (see ensureCentricGridElements), not just whichever ring indices
+    // happen to be real for either metric -- a slot that isn't part of
+    // either side's ringIndices just eases between two parked (off-
+    // screen) radii, a no-op in practice. This is what lets the grid's
+    // elements stay persistent: there's never a slot to create or
+    // destroy, only ever one to move.
+    const allIndices = Array.from({ length: CENTRIC_MAX_RINGS }, (_, i) => i + 1);
     // First entry ever (from === null) always builds innermost-first,
     // outward -- the confirmed-correct "radar powering on" feel. Removing
     // rings (e.g. Age -> Location, ring 4 exiting) also stays
@@ -4125,45 +4185,61 @@
     // working inward -- outermost to innermost, the timeline of a removal
     // played backward.
     const addingRingsToExisting = from && to.ringIndices.length > from.ringIndices.length;
-    const allIndices = Array.from(new Set([...(from ? from.ringIndices : []), ...to.ringIndices]))
-      .sort((a, b) => addingRingsToExisting ? b - a : a - b);
+    const order = [...allIndices].sort((a, b) => addingRingsToExisting ? b - a : a - b);
     // Comfortably past the outermost real ring on either side of this
     // transition -- enough to read as "off the visible canvas" once
-    // Centric view's own always-fit reframes around the new layout.
-    // Deliberately NOT the viewport/MIN_ZOOM overscan used elsewhere
-    // (chrono gridlines, this grid's own backdrop rect): those are plain
-    // fills, cheap at any size, but this radius belongs to a DASHED
-    // stroke circle too -- a dash pattern's cost scales with
-    // circumference, and a circle tens of thousands of units across (what
-    // that overscan produces) forces the browser to compute tens of
-    // thousands of dash segments per frame, blocking the main thread for
-    // over a second. Scaling to the content's own size instead keeps it
-    // cheap while still being well outside the frame.
+    // Centric view's own always-fit reframes around the new layout. Plain
+    // fills are cheap at any size (no dashed stroke to worry about here),
+    // but this still doesn't need to be the viewport/MIN_ZOOM overscan
+    // used elsewhere (chrono gridlines, this grid's own backdrop rect) --
+    // scaling to the content's own size keeps a parked ring comfortably
+    // clear of the frame without ever being needlessly huge.
     const priorMax = from ? Math.max(0, ...Object.values(from.radiusByRing)) : 0;
     const nextMax = Math.max(0, ...Object.values(to.radiusByRing));
     const offscreenRadius = Math.max(priorMax, nextMax) * 2 + 1000;
     const startRadius = {}, endRadius = {};
     for (const idx of allIndices) {
-      startRadius[idx] = (from && from.radiusByRing[idx]) ?? offscreenRadius;
-      endRadius[idx] = to.radiusByRing[idx] ?? offscreenRadius;
+      const wasActive = from && from.ringIndices.includes(idx);
+      const willBeActive = to.ringIndices.includes(idx);
+      startRadius[idx] = wasActive ? from.radiusByRing[idx] : offscreenRadius;
+      endRadius[idx] = willBeActive ? to.radiusByRing[idx] : offscreenRadius;
     }
+    // Visible while animating: only rings actually in play on either side
+    // of this transition (e.g. just [1,2,3,4] for an Age-only recenter --
+    // ring 5 has no work to do at all, see the allDone check above, so it
+    // has no business appearing either). Deliberately NOT the same as the
+    // full allIndices used for easing above: that stays the fixed 5-slot
+    // universe purely so every ring always has a start/end radius to ease
+    // between, with no special-casing for slots that aren't really moving.
+    const visibleDuringTransition = allIndices.filter((idx) =>
+      (from && from.ringIndices.includes(idx)) || to.ringIndices.includes(idx));
     const startTime = performance.now();
     function step(now) {
       const elapsed = now - startTime;
       const radiusByRing = {};
       let allDone = true;
-      allIndices.forEach((idx, i) => {
+      order.forEach((idx, i) => {
         const ringElapsed = Math.max(0, elapsed - i * CENTRIC_RING_STAGGER_MS);
         const t = Math.min(1, ringElapsed / CARD_MOVE_MS);
-        if (t < 1) allDone = false;
+        // A ring with no actual work to do (parked before AND after --
+        // e.g. ring 5 throughout an Age-only recenter) never counts
+        // against allDone, even though it still occupies a stagger slot
+        // in `order` -- otherwise settling would wait on a ring that was
+        // never going to move, adding a whole extra stagger step to every
+        // transition that doesn't even touch the metric's own ring count.
+        if (t < 1 && startRadius[idx] !== endRadius[idx]) allDone = false;
         const eased = 1 - Math.pow(1 - t, 3);
         radiusByRing[idx] = startRadius[idx] + (endRadius[idx] - startRadius[idx]) * eased;
       });
-      drawCentricGrid(to.originX, to.originY, allIndices, radiusByRing);
+      // While animating, every ring truly in play on either side stays
+      // visible (even one on its way to becoming parked) so it can be
+      // seen shrinking/growing away rather than popping out of existence
+      // early. radiusByRing already equals endRadius exactly once
+      // allDone, so the final call needs no separate radius computation
+      // -- only visibility narrows to to.ringIndices, hiding whatever
+      // just finished leaving.
+      updateCentricGrid(to.originX, to.originY, allDone ? to.ringIndices : visibleDuringTransition, radiusByRing);
       if (!allDone) requestAnimationFrame(step);
-      // Exact final frame -- only the rings that actually still exist,
-      // at their precise target radii, no lingering exit-animation state.
-      else drawCentricGrid(to.originX, to.originY, to.ringIndices, to.radiusByRing);
     }
     requestAnimationFrame(step);
   }
@@ -4201,10 +4277,10 @@
 
     const descByIdx = [...grid.ringIndices].sort((a, b) => b - a); // outermost first, mirroring the entrance in reverse
     const startRadius = { ...grid.radiusByRing };
-    // Comfortably covers the viewport regardless of current zoom --
-    // same content-relative sizing (not the viewport/MIN_ZOOM overscan
-    // used for the plain background rect) that keeps the dashed
-    // boundary circles cheap to render even at this size.
+    // Comfortably covers the viewport regardless of current zoom -- plain
+    // content-relative sizing rather than the viewport/MIN_ZOOM overscan
+    // used for the plain background rect, just to keep it from being
+    // needlessly huge.
     const exitRadius = Math.max(0, ...Object.values(grid.radiusByRing)) * 3 + 1500;
     const startTime = performance.now();
     function step(now) {
@@ -4218,7 +4294,7 @@
         const eased = 1 - Math.pow(1 - t, 3);
         radiusByRing[idx] = startRadius[idx] + (exitRadius - startRadius[idx]) * eased;
       });
-      drawCentricGrid(grid.originX, grid.originY, grid.ringIndices, radiusByRing, overlay, { skipBackground: true });
+      updateCentricGrid(grid.originX, grid.originY, grid.ringIndices, radiusByRing, overlay, { skipBackground: true });
       if (!allDone) requestAnimationFrame(step);
       else overlay.remove();
     }
@@ -4289,8 +4365,15 @@
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
     els.content.innerHTML = '';
-    els.svg.innerHTML = '';
-    if (!hasPeople) return;
+    if (!hasPeople) {
+      // Only actually wiped here (nobody left to draw) -- while people
+      // exist, the grid's own elements persist across re-renders (see
+      // ensureCentricGridElements) instead of being torn down and rebuilt.
+      els.svg.innerHTML = '';
+      delete els.svg._centricGrid;
+      prevCentricGrid = null;
+      return;
+    }
 
     // Fall back to some deterministic person if there's no center yet (or
     // the previous one no longer exists, e.g. it was deleted).
