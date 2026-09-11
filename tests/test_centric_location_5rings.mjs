@@ -37,7 +37,7 @@ try {
   await page.waitForTimeout(700);
 
   console.log('=== Ring labels: 5 tiers, region restored ===');
-  const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#linesSvg text')).map(t => t.textContent));
+  const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('labels:', JSON.stringify(labels));
   for (const expected of ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got: ${JSON.stringify(labels)}`);

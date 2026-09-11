@@ -1189,6 +1189,14 @@
       // than trying to transition from this now-abandoned grid state.
       prevCentricGrid = null;
     }
+    if (previousViewMode === 'centric' && viewMode !== 'centric' && els.canvas._centricLabelsSvg) {
+      // The axis labels' own front layer (see ensureCentricLabelsSvg)
+      // isn't touched by any other view's render function -- it's not
+      // #linesSvg, so their usual `els.svg.innerHTML = ''` never reaches
+      // it. Left alone, its stale labels would keep floating above
+      // whatever view comes next.
+      els.canvas._centricLabelsSvg.innerHTML = '';
+    }
     renderTree();
     if (viewMode === 'zodiac') {
       // Fit the columns' width only -- see computeFitTransform's own note
@@ -3986,6 +3994,24 @@
   }
   function rgbCss({ r, g, b }) { return `rgb(${r}, ${g}, ${b})`; }
 
+  // Creates (once, appended after #treeContent -- see its own note) the
+  // SVG Centric's axis labels live in for the main grid. Self-healing via
+  // the same parentNode check as ensureCentricGridElements, for the same
+  // reason: leaving Centric view clears #linesSvg's children without
+  // knowing anything about this separate layer, which would otherwise go
+  // stale.
+  function ensureCentricLabelsSvg() {
+    if (els.canvas._centricLabelsSvg && els.canvas._centricLabelsSvg.parentNode === els.canvas) {
+      return els.canvas._centricLabelsSvg;
+    }
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('id', 'centricLabelsSvg');
+    svg.setAttribute('class', 'lines-svg'); // same position:absolute/pointer-events:none as #linesSvg
+    els.canvas.appendChild(svg); // appended LAST -- paints above every card
+    els.canvas._centricLabelsSvg = svg;
+    return svg;
+  }
+
   // Creates (once per svg -- cached on the element itself) the grid's
   // persistent elements: one background rect plus exactly CENTRIC_MAX_RINGS
   // discs and labels, reused for the life of that svg rather than torn
@@ -4007,15 +4033,20 @@
     const svgNS = 'http://www.w3.org/2000/svg';
     const background = document.createElementNS(svgNS, 'rect');
     svg.appendChild(background);
-    // Discs and labels each live in their own group so labels always
-    // paint above every disc without needing their own per-frame sort --
-    // only the discs' relative order (see updateCentricGrid) ever needs
-    // to change, to keep a smaller ring's flat color painting over a
-    // larger one during a transition.
     const discGroup = document.createElementNS(svgNS, 'g');
-    const labelGroup = document.createElementNS(svgNS, 'g');
     svg.appendChild(discGroup);
-    svg.appendChild(labelGroup);
+    // Labels paint in a SEPARATE svg stacked above every card (see
+    // ensureCentricLabelsSvg) for the main grid -- otherwise a card whose
+    // ring happens to place it near a label's fixed angle paints right
+    // over the label text, hiding it (#linesSvg itself sits BEHIND
+    // #treeContent, by design, so the rings pass behind the cards). The
+    // temporary exit-collapse overlay (see playCentricExitCollapse) keeps
+    // its own labels in the same svg as its rings instead: it's already
+    // deliberately behind the destination view's content, and doesn't
+    // need this for a one-shot exit animation.
+    const labelSvg = (svg === els.svg) ? ensureCentricLabelsSvg() : svg;
+    const labelGroup = document.createElementNS(svgNS, 'g');
+    labelSvg.appendChild(labelGroup);
     const discs = {}, labels = {};
     for (let idx = 1; idx <= CENTRIC_MAX_RINGS; idx++) {
       const disc = document.createElementNS(svgNS, 'circle');
@@ -4028,13 +4059,13 @@
       // is clearer than chasing each ring's staggered start angle.
       const label = document.createElementNS(svgNS, 'text');
       label.setAttribute('text-anchor', 'middle');
-      label.setAttribute('fill', 'var(--ink-soft)');
-      label.setAttribute('font-size', '12');
-      label.setAttribute('font-weight', '600');
+      label.setAttribute('fill', 'var(--ink)');
+      label.setAttribute('font-size', '16');
+      label.setAttribute('font-weight', '700');
       labelGroup.appendChild(label);
       labels[idx] = label;
     }
-    svg._centricGrid = { background, discs, labels };
+    svg._centricGrid = { background, discs, labels, labelSvg };
     return svg._centricGrid;
   }
 
@@ -4067,6 +4098,12 @@
     svg.setAttribute('height', els.content.scrollHeight);
     svg.style.width = els.content.scrollWidth + 'px';
     svg.style.height = els.content.scrollHeight + 'px';
+    if (grid.labelSvg !== svg) {
+      grid.labelSvg.setAttribute('width', els.content.scrollWidth);
+      grid.labelSvg.setAttribute('height', els.content.scrollHeight);
+      grid.labelSvg.style.width = els.content.scrollWidth + 'px';
+      grid.labelSvg.style.height = els.content.scrollHeight + 'px';
+    }
 
     const lightColor = readHexColorVar('--centric-inner');
     const darkColor = readHexColorVar('--centric-outer');
@@ -4383,6 +4420,7 @@
       // ensureCentricGridElements) instead of being torn down and rebuilt.
       els.svg.innerHTML = '';
       delete els.svg._centricGrid;
+      if (els.canvas._centricLabelsSvg) els.canvas._centricLabelsSvg.innerHTML = '';
       prevCentricGrid = null;
       return;
     }

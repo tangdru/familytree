@@ -154,7 +154,12 @@ try {
   await page.waitForTimeout(300); // let the collapse fully finish
   const afterCollapse = await page.evaluate(() => Array.from(document.querySelectorAll('#treeCanvas > svg.lines-svg')).length);
   console.log('number of svg.lines-svg elements once collapse should be done:', afterCollapse);
-  if (afterCollapse !== 1) throw new Error(`Expected the temporary overlay to be removed once its collapse finishes, found ${afterCollapse} svg.lines-svg elements`);
+  // Two persistent svgs now live here permanently (#linesSvg for the
+  // rings themselves, #centricLabelsSvg for their axis labels -- see
+  // ensureCentricLabelsSvg in app.js, which paints labels above every
+  // card instead of behind them) -- the temporary THIRD one (the
+  // collapse overlay itself) is what should be gone.
+  if (afterCollapse !== 2) throw new Error(`Expected only the two persistent svgs to remain once the temporary overlay finishes, found ${afterCollapse} svg.lines-svg elements`);
   console.log('Confirmed: the collapse overlay cleans itself up once finished.');
 
   // Traditional view itself should be entirely unaffected/undelayed by this.
