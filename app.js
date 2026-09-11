@@ -5015,9 +5015,16 @@
   // finishes asynchronously, after that reset. Reacting to the resize event
   // itself (rather than guessing a delay) catches that trailing scroll
   // whenever it actually settles, as long as no dialog is open.
+  //
+  // Also skipped while the search box is open: this same resize event
+  // fires just as often when the keyboard OPENS (not just closes), and
+  // that's exactly what happens when tapping the search field -- forcing
+  // scroll back to 0 right as the keyboard opens fights whatever the
+  // browser is doing to keep the focused input in view, and was pushing
+  // the search box itself out of view instead.
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
-      if (els.modal.hidden && els.cropModal.hidden) resetPageScroll();
+      if (els.modal.hidden && els.cropModal.hidden && !els.searchWrap.classList.contains('open')) resetPageScroll();
     });
   }
 
