@@ -59,24 +59,31 @@ try {
   await page.waitForTimeout(300);
   const dw = await dotState();
   console.log(JSON.stringify(dw));
-  if (dw.parents !== 0 || !dw.parentsHidden) throw new Error(`Expected no parent dots for Walter, got ${JSON.stringify(dw)}`);
+  // Parents/children strips stay in flow (never hidden) even at 0 dots --
+  // they sit above/below the photo in a plain flex column, and hiding one
+  // would collapse its slot and the surrounding gap, shifting the photo
+  // itself depending on whether this particular person has recorded
+  // parents/children. The side strips have no such effect (the photo's
+  // horizontal centering comes from .view-photo-row's own grid columns,
+  // not from these strips' content), so they still hide at 0.
+  if (dw.parents !== 0 || dw.parentsHidden) throw new Error(`Expected 0 parent dots, still in flow (not hidden), for Walter, got ${JSON.stringify(dw)}`);
   if (dw.children !== 4 || dw.childrenHidden) throw new Error(`Expected 4 child dots for Walter, got ${JSON.stringify(dw)}`);
   if (dw.left !== 0 || !dw.leftHidden || dw.right !== 0 || !dw.rightHidden) throw new Error(`Expected no sibling dots for Walter (no recorded parents), got ${JSON.stringify(dw)}`);
-  console.log('Confirmed: a person with no recorded parents shows no sibling dots at all.');
+  console.log('Confirmed: a person with no recorded parents shows no sibling dots, but the parents strip stays in flow rather than collapsing.');
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
 
-  console.log('\n=== Solo: no relations at all -- every dot strip hidden, relations divider hidden ===');
+  console.log('\n=== Solo: no relations at all -- side dot strips hidden, parents/children strips stay in flow empty, relations divider hidden ===');
   await page.click('.person-card[data-id="solo"]');
   await page.waitForTimeout(300);
   const ds = await dotState();
   const relDividerHidden = await page.evaluate(() => document.getElementById('viewRelationsDivider').hidden);
   console.log(JSON.stringify({ ...ds, relDividerHidden }));
-  if (!ds.parentsHidden || !ds.childrenHidden || !ds.leftHidden || !ds.rightHidden) {
-    throw new Error(`Expected every dot strip hidden for a person with no relations, got ${JSON.stringify(ds)}`);
+  if (ds.parents !== 0 || ds.parentsHidden || ds.children !== 0 || ds.childrenHidden || !ds.leftHidden || !ds.rightHidden) {
+    throw new Error(`Expected empty (not hidden) parents/children strips and hidden side strips for a person with no relations, got ${JSON.stringify(ds)}`);
   }
   if (!relDividerHidden) throw new Error('Expected the relations divider to stay hidden with no relation sections to introduce');
-  console.log('Confirmed: no relations means no dots and no orphan divider.');
+  console.log('Confirmed: no relations means no dots (parents/children strips stay in flow, empty) and no orphan divider.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);
