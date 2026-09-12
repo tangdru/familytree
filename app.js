@@ -2206,7 +2206,12 @@
     if (!person) return [];
     const raw = Array.isArray(person.locations) && person.locations.length ? person.locations
       : person.location ? [person.location] : [];
-    return raw.map(shortenLocationText);
+    // A location can still be saved as a {text, lat, lon} object left over
+    // from when the real-distance Centric feature was briefly live (see
+    // PR #105/#106) -- unwrap it back to plain text here so those records
+    // self-heal on next display, same as old full-address text already
+    // does via shortenLocationText, without needing a resave first.
+    return raw.map(entry => shortenLocationText(entry && typeof entry === 'object' ? (entry.text || '') : entry));
   }
 
   function currentLocationOf(person) {
