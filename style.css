@@ -617,8 +617,9 @@ body {
 .location-dates-btn.has-dates { color: var(--accent); }
 /* Start and End side by side (not stacked) -- both are just one label +
    one year <select>, short enough that a horizontal layout reads as one
-   line rather than needing two. width: max-content since (unlike the
-   older stacked version) nothing here needs a fixed column width. */
+   line rather than needing two. width: 100% (of .location-field, its
+   positioned ancestor) so the popover spans exactly as wide as the
+   location field above it, rather than an arbitrary content-based width. */
 .location-date-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -626,9 +627,9 @@ body {
   z-index: 50;
   display: flex;
   align-items: center;
-  gap: 14px;
-  width: max-content;
-  padding: 10px 12px;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
   background: var(--surface);
   border: 1px solid var(--card-border);
   border-radius: 8px;
@@ -638,8 +639,17 @@ body {
    elsewhere -- this rule's own explicit display:flex would otherwise beat
    the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
 .location-date-popover[hidden] { display: none; }
-.location-date-group { display: flex; align-items: center; gap: 6px; }
+/* flex: 1 so Start and End split the popover's now-full-field width evenly,
+   instead of each hugging its own content size. */
+.location-date-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+/* Fixed width (not just content-sized) so "Start" and "End" -- different
+   lengths -- don't leave their own .location-date-part with a different
+   amount of remaining space once the group's total is split flex: 1; a
+   size just for the longer of the two ("Start") keeps both selects the
+   same width as each other. */
 .location-date-label {
+  flex-shrink: 0;
+  width: 34px;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -650,10 +660,12 @@ body {
    beats .form-row select's (0,1,1) specificity -- this select DOES sit
    inside a .form-row, and without this its 16px font-size and 8px
    vertical padding silently won, clipping "yyyy" and making the box
-   taller than intended. */
+   taller than intended. flex: 1 (not a fixed width) so it fills whatever
+   room its now flex: 1 .location-date-group leaves after the label. */
 .location-date-group .location-date-part {
-  width: 72px;
-  padding: 4px 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 3px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
   background: var(--surface);
@@ -671,7 +683,7 @@ body {
   cursor: pointer;
   color: var(--ink-soft);
   font-size: 0.85rem;
-  padding: 4px 2px;
+  padding: 4px 0;
 }
 .location-date-close:hover { color: var(--danger); }
 .add-location-btn {
