@@ -23,16 +23,11 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== "Top is current" hint is present above the Location(s) list ===');
+  console.log('=== A fresh location row: calendar button starts outline (no dates) ===');
   await page.click('.person-card:has-text("Jane Doe")');
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
-  const hintText = await page.textContent('.locations-hint');
-  if (!/top one is current/i.test(hintText || '')) throw new Error(`Expected a "top is current" hint, got: "${hintText}"`);
-  console.log('Confirmed:', hintText);
-
-  console.log('\n=== A fresh location row: calendar button starts outline (no dates) ===');
   // Jane starts with zero locations, so the form already shows one empty
   // row (setLocationRows's own fallback) -- fill THAT as the current
   // location, then +Add a second row for the dated one, so it lands at

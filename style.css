@@ -588,7 +588,6 @@ body {
   padding: 4px 6px;
 }
 .location-row-remove:hover { color: var(--danger); }
-.locations-hint { margin: -4px 0 2px; }
 
 /* Calendar-icon date-range toggle -- sits inside the location field
    itself, at its trailing edge (see the field's own right-padding above),
