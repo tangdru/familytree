@@ -627,7 +627,12 @@ body {
   z-index: 50;
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* space-between, not a flex: 1 group each: the Start/End groups and the
+     close button all size to their own content, and whatever room is left
+     over (so the popover still spans the field's full width) becomes the
+     space between them instead of stretching either group -- see
+     .location-date-group below for why stretching them was the wrong fix. */
+  justify-content: space-between;
   width: 100%;
   padding: 5px 12px;
   background: var(--surface);
@@ -639,17 +644,14 @@ body {
    elsewhere -- this rule's own explicit display:flex would otherwise beat
    the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
 .location-date-popover[hidden] { display: none; }
-/* flex: 1 so Start and End split the popover's now-full-field width evenly,
-   instead of each hugging its own content size. */
-.location-date-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-/* Fixed width (not just content-sized) so "Start" and "End" -- different
-   lengths -- don't leave their own .location-date-part with a different
-   amount of remaining space once the group's total is split flex: 1; a
-   size just for the longer of the two ("Start") keeps both selects the
-   same width as each other. */
+/* Content-sized (not flex: 1) -- a stretched group with a fixed-width
+   label left "Start"/"End" sitting at different distances from their own
+   trailing edge (the shorter "End" text stranding blank space inside its
+   own label box before the gap even starts), which read as an
+   inconsistent label-to-select gap even though the flex `gap` itself was
+   identical. Hugging its own content keeps that gap visually uniform. */
+.location-date-group { display: flex; align-items: center; gap: 6px; }
 .location-date-label {
-  flex-shrink: 0;
-  width: 34px;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -660,8 +662,9 @@ body {
    beats .form-row select's (0,1,1) specificity -- this select DOES sit
    inside a .form-row, and without this its 16px font-size and 8px
    vertical padding silently won, clipping "yyyy" and making the box
-   taller than intended. flex: 1 (not a fixed width) so it fills whatever
-   room its now flex: 1 .location-date-group leaves after the label.
+   taller than intended. A fixed width (not flex: 1, now that its group no
+   longer stretches) so Start's and End's selects are still the same size
+   as each other regardless of their own label's text length.
    appearance: none + a drawn-in-CSS chevron, rather than the browser's own
    native arrow -- Chromium/Firefox both reserve a fixed ~20px of built-in
    space for their own arrow regardless of padding, which left a much
@@ -673,8 +676,7 @@ body {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  flex: 1;
-  min-width: 0;
+  width: 64px;
   padding: 4px 14px 4px 6px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
