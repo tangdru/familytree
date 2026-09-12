@@ -962,61 +962,28 @@
   // An ordered list of free-text locations -- index 0 is "current" (order
   // decides that, not dates -- dragging a row to the top is still the only
   // way to change which one is current, see refreshLocationCurrentTags).
-  // Each row can also carry a start/end date, of whatever precision the
-  // person actually knows (year alone, year+month, or a full date) --
-  // collecting SOME date beats forcing a full one nobody has, so this is a
-  // trio of plain day/month/year <select>s (each independently nullable
-  // via a leading "–" option) behind a calendar-icon toggle, not a native
-  // <input type=date> (which can't represent a partial date at all).
+  // Each row can also carry a start/end YEAR -- deliberately year-only,
+  // not a full date: family history rarely knows more precision than
+  // that, and it's also what makes this a genuinely different kind of
+  // field from Born/Died (which drives real computation elsewhere --
+  // age, sort order, the Chronological Tree, zodiac correction -- and so
+  // stays on a native, complete date input) rather than an arbitrary
+  // second UI for the same kind of value.
 
-  // Parses a location date string of whatever precision was saved --
-  // '1992', '1992-06', or '1992-06-15' -- into {year,month,day} parts
-  // (each '' if not given), for prefilling the day/month/year <select>
-  // trio. The inverse of composeLocationDate.
-  function parseLocationDate(value) {
-    const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value || '');
-    if (!m) return { year: '', month: '', day: '' };
-    return { year: m[1], month: m[2] || '', day: m[3] || '' };
-  }
-
-  // Composes whatever precision was actually filled in -- never padding a
-  // missing month/day onto a bare year. A day with no month is dropped
-  // (meaningless on its own); year is required for any result at all.
-  function composeLocationDate(year, month, day) {
-    if (!year) return null;
-    if (!month) return year;
-    if (!day) return `${year}-${month}`;
-    return `${year}-${month}-${day}`;
-  }
-
-  // Formats a parsed date string for display (Person View history, and
-  // the calendar button's own title) -- as fine-grained as what was
-  // actually saved, e.g. "1992", "Jun 1992", or "Jun 15, 1992".
-  function formatLocationDate(value) {
-    const { year, month, day } = parseLocationDate(value);
-    if (!year) return '';
-    if (!month) return year;
-    const monthName = new Date(2000, Number(month) - 1, 1).toLocaleString('en-US', { month: 'short' });
-    if (!day) return `${monthName} ${year}`;
-    return `${monthName} ${Number(day)}, ${year}`;
-  }
-
-  // One <select> of the day/month/year trio -- `options` is [value,label]
-  // pairs, always preceded by a labeled placeholder ("dd"/"mm"/"yyyy",
-  // empty value) meaning "unknown" -- naming which part is which before
-  // the user ever interacts with it, rather than a generic "–" for all
-  // three. Plain native selects (not a custom widget) so iOS renders its
-  // own spinning-wheel picker for free, same interaction as a native
-  // phone date picker, without any custom touch/scroll code to maintain.
-  function buildDatePartSelect(options, ariaLabel, placeholder) {
+  // One <select> -- `options` is [value,label] pairs, always preceded by
+  // a "yyyy" (empty value) placeholder meaning "unknown". A plain native
+  // select (not a custom widget) so iOS renders its own spinning-wheel
+  // picker for free, same interaction as a native phone date picker,
+  // without any custom touch/scroll code to maintain.
+  function buildYearSelect(ariaLabel) {
     const select = document.createElement('select');
     select.className = 'location-date-part';
     select.setAttribute('aria-label', ariaLabel);
     const blank = document.createElement('option');
     blank.value = '';
-    blank.textContent = placeholder;
+    blank.textContent = 'yyyy';
     select.appendChild(blank);
-    for (const [value, label] of options) {
+    for (const [value, label] of YEAR_OPTIONS) {
       const opt = document.createElement('option');
       opt.value = value;
       opt.textContent = label;
@@ -1025,44 +992,25 @@
     return select;
   }
 
-  const MONTH_OPTIONS = [
-    ['01', 'Jan'], ['02', 'Feb'], ['03', 'Mar'], ['04', 'Apr'], ['05', 'May'], ['06', 'Jun'],
-    ['07', 'Jul'], ['08', 'Aug'], ['09', 'Sep'], ['10', 'Oct'], ['11', 'Nov'], ['12', 'Dec'],
-  ];
-  const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => [d, String(Number(d))]);
   // Descending (most recent first) -- a birth/move year within a living
   // family's memory is far more likely near the top of the list than 1900.
   const CURRENT_YEAR = new Date().getFullYear();
   const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1899 }, (_, i) => String(CURRENT_YEAR - i)).map(y => [y, y]);
 
-  // Builds one Start/End date-part row: a label plus its own day/month/year
-  // trio, prefilled from `initialValue` (a composeLocationDate-shaped
-  // string or null). onChange fires with the recomposed string (or null)
-  // every time any of the three selects changes.
+  // Builds one Start/End year field: a label plus its own year <select>,
+  // prefilled from `initialValue` (a 4-digit year string, or null/'').
+  // onChange fires with the new year string (or null) on every change.
   function buildLocationDateGroup(labelText, initialValue, onChange) {
     const group = document.createElement('div');
     group.className = 'location-date-group';
     const label = document.createElement('span');
     label.className = 'location-date-label';
     label.textContent = labelText;
-    const triad = document.createElement('div');
-    triad.className = 'location-date-triad';
-    const parsed = parseLocationDate(initialValue);
-    const daySelect = buildDatePartSelect(DAY_OPTIONS, `${labelText} day`, 'dd');
-    const monthSelect = buildDatePartSelect(MONTH_OPTIONS, `${labelText} month`, 'mm');
-    const yearSelect = buildDatePartSelect(YEAR_OPTIONS, `${labelText} year`, 'yyyy');
-    daySelect.value = parsed.day;
-    monthSelect.value = parsed.month;
-    yearSelect.value = parsed.year;
-    const emit = () => onChange(composeLocationDate(yearSelect.value, monthSelect.value, daySelect.value));
-    daySelect.addEventListener('change', emit);
-    monthSelect.addEventListener('change', emit);
-    yearSelect.addEventListener('change', emit);
-    triad.appendChild(daySelect);
-    triad.appendChild(monthSelect);
-    triad.appendChild(yearSelect);
+    const yearSelect = buildYearSelect(`${labelText} year`);
+    yearSelect.value = initialValue || '';
+    yearSelect.addEventListener('change', () => onChange(yearSelect.value || null));
     group.appendChild(label);
-    group.appendChild(triad);
+    group.appendChild(yearSelect);
     return group;
   }
 
@@ -1137,9 +1085,7 @@
     function refreshDatesBtnState() {
       const hasDates = !!(row.dataset.startDate || row.dataset.endDate);
       datesBtn.classList.toggle('has-dates', hasDates);
-      const startLabel = formatLocationDate(row.dataset.startDate);
-      const endLabel = formatLocationDate(row.dataset.endDate);
-      datesBtn.title = hasDates ? `${startLabel || '?'} – ${endLabel || '?'}` : 'Set date range';
+      datesBtn.title = hasDates ? `${row.dataset.startDate || '?'} – ${row.dataset.endDate || '?'}` : 'Set date range';
     }
     popover.appendChild(buildLocationDateGroup('Start', initial.startDate, (next) => {
       row.dataset.startDate = next || '';
@@ -2329,11 +2275,9 @@
   // there", since that can't be told apart from "unknown" (see
   // locationEntriesOf's own note on not forcing completeness).
   function formatLocationDateRange(startDate, endDate) {
-    const start = formatLocationDate(startDate);
-    const end = formatLocationDate(endDate);
-    if (start && end) return `${start} – ${end}`;
-    if (start) return `From ${start}`;
-    if (end) return `Until ${end}`;
+    if (startDate && endDate) return `${startDate} – ${endDate}`;
+    if (startDate) return `From ${startDate}`;
+    if (endDate) return `Until ${endDate}`;
     return '';
   }
 

@@ -1,10 +1,12 @@
 import { chromium } from 'playwright-core';
 
-// The calendar-icon date-range picker on each location row: outline while
-// no date is set, filled once one is; a trio of native day/month/year
-// <select>s per Start/End (each independently nullable via "–"), since
-// the whole point is accepting whatever precision a person actually
-// knows (a bare year is fine) rather than forcing a full date.
+// The calendar-icon date-range picker on each location row: outline
+// (muted) while no date is set, filled (accent) once one is; a plain
+// year <select> per Start/End (each independently nullable via "yyyy"),
+// deliberately year-only -- family history rarely knows more precision
+// than that, and it's what makes this a genuinely different field from
+// Born/Died (a full, native date input) rather than an arbitrary second
+// UI for the same kind of value.
 const p1 = 'p1';
 const people = {
   [p1]: { id: p1, name: 'Jane Doe', birthDate: '1985-03-02', deathDate: '', photo: '', notes: '', locations: [], parents: [], spouses: [] },
@@ -48,25 +50,25 @@ try {
   if (hasDatesBefore) throw new Error('Expected the calendar button to start outline (no dates)');
   console.log('Confirmed: outline before any date is set.');
 
-  console.log('\n=== Opening the popover, setting only a start YEAR (no month/day) ===');
+  console.log('\n=== Opening the popover: exactly one year <select> per Start/End (no month/day) ===');
   await row.locator('.location-dates-btn').click();
   await page.waitForTimeout(100);
   const popover = row.locator('.location-date-popover');
   if (await popover.isHidden()) throw new Error('Expected the date popover to open on click');
   const groups = popover.locator('.location-date-group');
-  const startYearSelect = groups.nth(0).locator('.location-date-part').nth(2); // day, month, year
+  if (await groups.count() !== 2) throw new Error(`Expected exactly 2 groups (Start/End), got ${await groups.count()}`);
+  const startYearSelect = groups.nth(0).locator('.location-date-part');
+  if (await startYearSelect.count() !== 1) throw new Error(`Expected exactly one year select per group, got ${await startYearSelect.count()}`);
   await startYearSelect.selectOption('1992');
   await page.waitForTimeout(50);
 
   const hasDatesAfter = await row.locator('.location-dates-btn').evaluate(el => el.classList.contains('has-dates'));
   if (!hasDatesAfter) throw new Error('Expected the calendar button to become filled once a date is set');
-  console.log('Confirmed: filled once a (year-only) start date is set.');
+  console.log('Confirmed: exactly one year select per Start/End, filled once a start year is set.');
 
-  console.log('\n=== Setting an end date with year + month (no day) ===');
-  const endYearSelect = groups.nth(1).locator('.location-date-part').nth(2);
-  const endMonthSelect = groups.nth(1).locator('.location-date-part').nth(1);
+  console.log('\n=== Setting an end year ===');
+  const endYearSelect = groups.nth(1).locator('.location-date-part');
   await endYearSelect.selectOption('2005');
-  await endMonthSelect.selectOption('06');
   await page.waitForTimeout(50);
 
   console.log('\n=== Clicking outside closes the popover ===');
@@ -75,7 +77,7 @@ try {
   if (await popover.isVisible()) throw new Error('Expected clicking outside to close the date popover');
   console.log('Confirmed: outside click closes the popover.');
 
-  console.log('\n=== Save, then verify the saved precision-respecting date strings ===');
+  console.log('\n=== Save, then verify the saved year-only date strings ===');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -83,9 +85,9 @@ try {
   const loc = saved.locations.find(l => l.text === 'Testville, Testland');
   if (!loc) throw new Error('Expected the new location to be saved');
   if (loc.startDate !== '1992') throw new Error(`Expected a year-only start date "1992", got: ${JSON.stringify(loc.startDate)}`);
-  if (loc.endDate !== '2005-06') throw new Error(`Expected a year+month end date "2005-06", got: ${JSON.stringify(loc.endDate)}`);
+  if (loc.endDate !== '2005') throw new Error(`Expected a year-only end date "2005", got: ${JSON.stringify(loc.endDate)}`);
 
-  console.log('\n=== Re-edit: the popover preloads the same precision, calendar button still filled ===');
+  console.log('\n=== Re-edit: the popover preloads the same years, calendar button still filled ===');
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
   const reRow = page.locator('.location-row').filter({ hasText: 'Testville' });
@@ -94,17 +96,15 @@ try {
   await reRow.locator('.location-dates-btn').click();
   await page.waitForTimeout(100);
   const reGroups = reRow.locator('.location-date-popover .location-date-group');
-  const reStartYear = await reGroups.nth(0).locator('.location-date-part').nth(2).inputValue();
-  const reStartMonth = await reGroups.nth(0).locator('.location-date-part').nth(1).inputValue();
-  const reEndYear = await reGroups.nth(1).locator('.location-date-part').nth(2).inputValue();
-  const reEndMonth = await reGroups.nth(1).locator('.location-date-part').nth(1).inputValue();
-  console.log('reloaded parts:', JSON.stringify({ reStartYear, reStartMonth, reEndYear, reEndMonth }));
-  if (reStartYear !== '1992' || reStartMonth !== '') throw new Error('Expected start to reload as year-only (1992, blank month)');
-  if (reEndYear !== '2005' || reEndMonth !== '06') throw new Error('Expected end to reload as 2005-06');
+  const reStartYear = await reGroups.nth(0).locator('.location-date-part').inputValue();
+  const reEndYear = await reGroups.nth(1).locator('.location-date-part').inputValue();
+  console.log('reloaded years:', JSON.stringify({ reStartYear, reEndYear }));
+  if (reStartYear !== '1992') throw new Error(`Expected start to reload as 1992, got: ${reStartYear}`);
+  if (reEndYear !== '2005') throw new Error(`Expected end to reload as 2005, got: ${reEndYear}`);
   await page.click('#cancelBtn');
   await page.waitForTimeout(200);
 
-  console.log('\n=== Person View: Previous location(s) shows the date range next to the text ===');
+  console.log('\n=== Person View: Previous location(s) shows the year range next to the text ===');
   await page.click('.person-card:has-text("Jane Doe")');
   await page.waitForTimeout(200);
   const historyText = await page.evaluate(() => {
@@ -116,10 +116,10 @@ try {
   });
   console.log('history rows:', JSON.stringify(historyText));
   const testvilleRow = historyText.find(r => r.text === 'Testville, Testland');
-  if (!testvilleRow || testvilleRow.dates !== '1992 – Jun 2005') {
-    throw new Error(`Expected a "1992 – Jun 2005" date range shown, got: ${JSON.stringify(testvilleRow)}`);
+  if (!testvilleRow || testvilleRow.dates !== '1992 – 2005') {
+    throw new Error(`Expected a "1992 – 2005" year range shown, got: ${JSON.stringify(testvilleRow)}`);
   }
-  console.log('Confirmed: date range shown in Previous location(s).');
+  console.log('Confirmed: year range shown in Previous location(s).');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

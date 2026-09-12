@@ -623,8 +623,8 @@ body {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 220px;
+  gap: 8px;
+  width: 170px;
   padding: 10px;
   background: var(--surface);
   border: 1px solid var(--card-border);
@@ -635,7 +635,10 @@ body {
    elsewhere -- this rule's own explicit display:flex would otherwise beat
    the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
 .location-date-popover[hidden] { display: none; }
-.location-date-group { display: flex; flex-direction: column; gap: 4px; }
+/* Label and its year <select> side by side (just the one field now that
+   this is year-only, not a day/month/year trio) -- a plain vertical stack
+   would waste height for no reason. */
+.location-date-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .location-date-label {
   font-size: 0.7rem;
   font-weight: 700;
@@ -643,11 +646,14 @@ body {
   letter-spacing: 0.03em;
   color: var(--ink-soft);
 }
-.location-date-triad { display: flex; gap: 4px; }
-.location-date-part {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 2px;
+/* Doubly-qualified (not just .location-date-part alone) so this actually
+   beats .form-row select's (0,1,1) specificity -- this select DOES sit
+   inside a .form-row, and without this its 16px font-size and 8px
+   vertical padding silently won, clipping "yyyy" and making the box
+   taller than intended. */
+.location-date-group .location-date-part {
+  width: 72px;
+  padding: 4px 6px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
   background: var(--surface);

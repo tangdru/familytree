@@ -33,11 +33,14 @@ top of the Location(s) list on the Add/Edit form (grip handle,
 
 Each location entry (and `birthLocation`) is `{text, lat, lon, startDate,
 endDate}` -- lat/lon are only known once a Nominatim suggestion has been
-picked (see `setupLocationAutocomplete`'s `onPick`); startDate/endDate
-accept whatever precision is actually known (a bare year, year+month, or a
-full date -- see `parseLocationDate`/`composeLocationDate`), entered via
-the calendar-icon button's day/month/year `<select>` trio on each row
-(`buildLocationDateGroup`). `birthLocation`'s own date is always
+picked (see `setupLocationAutocomplete`'s `onPick`); startDate/endDate are
+plain 4-digit year strings (or null), entered via the calendar-icon
+button's year `<select>` per Start/End on each row (`buildLocationDateGroup`)
+-- deliberately year-only, not a full date: family history rarely knows
+more precision than that, and it keeps this a genuinely different kind of
+field from Born/Died (which drives real computation elsewhere -- age, sort
+order, the Chronological Tree, zodiac correction -- and so stays on a
+native, complete date input). `birthLocation`'s own date is always
 `birthDate`, not separately editable.
 
 Deliberately deferred, to be added as a follow-up: an actual map view that
