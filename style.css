@@ -590,6 +590,16 @@ body {
   padding: 2px 8px;
   white-space: nowrap;
 }
+/* Kept in flow (not the native [hidden]{display:none}) so every row's
+   .location-field is the SAME width whether or not it's the current one --
+   without this, the current row's field was narrower (this tag eating
+   flex space only there), so ITS date popover -- sized to match its own
+   field, see .location-date-popover -- ended up narrower than the row
+   below it and visually misaligned with it once opened. */
+.location-current-tag[hidden] {
+  display: inline-flex;
+  visibility: hidden;
+}
 .location-row-remove {
   flex-shrink: 0;
   border: none;

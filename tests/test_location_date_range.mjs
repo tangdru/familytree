@@ -149,6 +149,22 @@ try {
   const firstStartValue = await firstStartSelect.inputValue();
   console.log('Selected a year on the first (non-last) row\'s popover:', firstStartValue);
   if (firstStartValue !== '1970') throw new Error(`Expected to interact with the first row's popover, got: ${firstStartValue}`);
+
+  console.log('\n=== The current row\'s field is the same width as other rows\' (its "Current" tag reserves space even hidden) ===');
+  // Regression: the "Current" tag only shows (non-hidden) on row 0, and
+  // the native [hidden]{display:none} let it collapse to zero width on
+  // every OTHER row -- making the current row's own .location-field
+  // narrower than the rest, so its date popover (sized to match its own
+  // field, see .location-date-popover) ended up narrower than the row
+  // below it and visually misaligned once opened (see
+  // .location-current-tag[hidden] in style.css).
+  const currentFieldWidth = (await occlusionFirstRow.locator('.location-field').boundingBox()).width;
+  const otherFieldWidth = (await occlusionRows.nth(1).locator('.location-field').boundingBox()).width;
+  console.log('current row field width:', currentFieldWidth, 'vs other row:', otherFieldWidth);
+  if (Math.abs(currentFieldWidth - otherFieldWidth) > 1) {
+    throw new Error(`Expected every row's field to be the same width, got ${currentFieldWidth} vs ${otherFieldWidth}`);
+  }
+
   await page.click('#cancelBtn');
   await page.waitForTimeout(200);
 
