@@ -548,6 +548,10 @@ body {
   position: relative;
   flex: 1;
 }
+/* Room for the calendar icon (see .location-dates-btn) sitting inside the
+   field's own right edge -- same placement as the Documented birthday
+   field's calendar icon. */
+.location-field .location-row-input { padding-right: 30px; }
 .location-suggestions .combo-options { max-height: 220px; }
 
 .locations-list { display: flex; flex-direction: column; gap: 8px; }
@@ -584,6 +588,120 @@ body {
   padding: 4px 6px;
 }
 .location-row-remove:hover { color: var(--danger); }
+
+/* Calendar-icon date-range toggle -- sits inside the location field
+   itself, at its trailing edge (see the field's own right-padding above),
+   same placement as the Documented birthday field's calendar icon. Muted
+   while neither a start nor end date is set, accent-colored once either
+   is (see .has-dates, toggled in addLocationRow), so the row hints
+   whether a date range is recorded without opening the popover to check. */
+.location-dates-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.location-dates-btn svg { width: 15px; height: 15px; }
+.location-dates-btn:hover { background: #f1ead9; color: var(--accent-dark); }
+.location-dates-btn.has-dates { color: var(--accent); }
+/* Start and End side by side (not stacked) -- both are just one label +
+   one year <select>, short enough that a horizontal layout reads as one
+   line rather than needing two. width: 100% (of .location-field, its
+   positioned ancestor) so the popover spans exactly as wide as the
+   location field above it, rather than an arbitrary content-based width. */
+.location-date-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  /* space-between, not a flex: 1 group each: the Start/End groups and the
+     close button all size to their own content, and whatever room is left
+     over (so the popover still spans the field's full width) becomes the
+     space between them instead of stretching either group -- see
+     .location-date-group below for why stretching them was the wrong fix. */
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+/* Needs its own [hidden] override, same reason as .view-photo/.view-section
+   elsewhere -- this rule's own explicit display:flex would otherwise beat
+   the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
+.location-date-popover[hidden] { display: none; }
+/* Content-sized (not flex: 1) -- a stretched group with a fixed-width
+   label left "Start"/"End" sitting at different distances from their own
+   trailing edge (the shorter "End" text stranding blank space inside its
+   own label box before the gap even starts), which read as an
+   inconsistent label-to-select gap even though the flex `gap` itself was
+   identical. Hugging its own content keeps that gap visually uniform. */
+.location-date-group { display: flex; align-items: center; gap: 6px; }
+.location-date-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+}
+/* Doubly-qualified (not just .location-date-part alone) so this actually
+   beats .form-row select's (0,1,1) specificity -- this select DOES sit
+   inside a .form-row, and without this its 16px font-size and 8px
+   vertical padding silently won, clipping "yyyy" and making the box
+   taller than intended. A fixed width (not flex: 1, now that its group no
+   longer stretches) so Start's and End's selects are still the same size
+   as each other regardless of their own label's text length.
+   appearance: none + a drawn-in-CSS chevron, rather than the browser's own
+   native arrow -- Chromium/Firefox both reserve a fixed ~20px of built-in
+   space for their own arrow regardless of padding, which left a much
+   wider gap after "yyyy" than this cramped a field has room for. This
+   doesn't affect iOS's own spinning-wheel picker still opening on tap --
+   that's driven by the element being a <select> at all, not by how its
+   closed-state box is painted. */
+.location-date-group .location-date-part {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 64px;
+  padding: 4px 14px 4px 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6355' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 3px center;
+  background-size: 11px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+/* Explicit close, in addition to the existing outside-click-to-close --
+   the popover has no other visible affordance for "I'm done" now that
+   it's a compact inline row rather than a dropdown-shaped panel. */
+.location-date-close {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 4px 0;
+}
+.location-date-close:hover { color: var(--danger); }
 .add-location-btn {
   align-self: flex-start;
   margin-top: 8px;
@@ -1302,6 +1420,11 @@ body {
   font-size: 0.82rem;
 }
 .view-location-text { font-weight: 400; }
+.view-location-dates {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -1326,4 +1449,11 @@ body {
      well under WCAG AA's 4.5:1 floor for body text. */
   .view-relation-link { color: #e08a5c; }
   .view-photo-pair-member { background: #3a3324; color: #6f6650; }
+  /* Same chevron as the light-mode rule, just re-colored to dark mode's
+     own --ink-soft -- a background-image can't follow a CSS variable on
+     its own, so it needs its own literal-hex copy here (see
+     .location-date-group .location-date-part above). */
+  .location-date-group .location-date-part {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b3a892' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  }
 }
