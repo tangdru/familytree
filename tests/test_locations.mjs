@@ -60,7 +60,7 @@ try {
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.legacy);
   console.log('saved person:', JSON.stringify({ locations: saved.locations, location: saved.location, birthLocation: saved.birthLocation }));
-  if (!saved.locations || saved.locations.length !== 2 || saved.locations[0].text !== 'Old City, Oldland' || saved.locations[1].text !== 'Birth City, Birthland') {
+  if (!saved.locations || saved.locations.length !== 2 || saved.locations[0] !== 'Old City, Oldland' || saved.locations[1] !== 'Birth City, Birthland') {
     throw new Error('Expected two saved locations in order');
   }
   if (saved.location !== undefined) throw new Error('Expected the stale singular `location` field to be removed after save');
