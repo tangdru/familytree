@@ -40,8 +40,13 @@ button's year `<select>` per Start/End on each row (`buildLocationDateGroup`)
 more precision than that, and it keeps this a genuinely different kind of
 field from Born/Died (which drives real computation elsewhere -- age, sort
 order, the Chronological Tree, zodiac correction -- and so stays on a
-native, complete date input). `birthLocation`'s own date is always
-`birthDate`, not separately editable.
+native, complete date input). `birthLocation` gets the same calendar-icon
+popover as each Location(s) row (`setupBirthLocationDates`, since it's a
+single static field rather than part of the repeatable list) -- opening it
+for the first time on a person with a known Documented birthday assumes
+that year for Start, since a birth location's start is virtually always
+the birth year itself, though it's still just a starting point and can be
+changed.
 
 Deliberately deferred, to be added as a follow-up: an actual map view that
 animates a person's (or the whole family's) movement between locations

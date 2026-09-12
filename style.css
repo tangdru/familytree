@@ -550,8 +550,11 @@ body {
 }
 /* Room for the calendar icon (see .location-dates-btn) sitting inside the
    field's own right edge -- same placement as the Documented birthday
-   field's calendar icon. */
-.location-field .location-row-input { padding-right: 30px; }
+   field's calendar icon. Birth location gets the same treatment as each
+   Location(s) row now that it has its own date-range toggle too (see
+   setupBirthLocationDates in app.js). */
+.location-field .location-row-input,
+.location-field #birthLocationInput { padding-right: 30px; }
 .location-suggestions .combo-options { max-height: 220px; }
 
 .locations-list { display: flex; flex-direction: column; gap: 8px; }
@@ -618,8 +621,12 @@ body {
 /* Start and End side by side (not stacked) -- both are just one label +
    one year <select>, short enough that a horizontal layout reads as one
    line rather than needing two. width: 100% (of .location-field, its
-   positioned ancestor) so the popover spans exactly as wide as the
-   location field above it, rather than an arbitrary content-based width. */
+   positioned ancestor) so the popover matches a narrow field exactly, but
+   capped with max-width so a wide, mostly-empty field (long placeholder
+   text, no location typed yet) doesn't stretch it into an oddly thin,
+   overly spread-out bar -- it should never need to be wider than this to
+   comfortably fit Start/End/close. Anchored via right: 0 either way, so
+   it stays flush with the field's own right edge. */
 .location-date-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -629,11 +636,13 @@ body {
   align-items: center;
   /* space-between, not a flex: 1 group each: the Start/End groups and the
      close button all size to their own content, and whatever room is left
-     over (so the popover still spans the field's full width) becomes the
-     space between them instead of stretching either group -- see
-     .location-date-group below for why stretching them was the wrong fix. */
+     over (so the popover still spans the field's full width, up to its
+     own max-width) becomes the space between them instead of stretching
+     either group -- see .location-date-group below for why stretching
+     them was the wrong fix. */
   justify-content: space-between;
   width: 100%;
+  max-width: 280px;
   padding: 5px 12px;
   background: var(--surface);
   border: 1px solid var(--card-border);
