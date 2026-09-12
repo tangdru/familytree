@@ -345,6 +345,22 @@
     document.body.scrollTop = 0;
   }
 
+  // Separate from resetPageScroll on purpose: that one is deliberately
+  // skipped while a dialog is open (see its call site below), since
+  // forcing VERTICAL scroll back to 0 while the keyboard is opening fights
+  // the browser's own legitimate attempt to keep the focused field clear
+  // of it. But the on-screen keyboard only ever needs vertical room — html
+  // and body are `overflow: hidden` (see style.css), so there's never a
+  // real reason for the page to drift HORIZONTALLY, and correcting that
+  // can't fight anything the keyboard itself is doing. Guarded on an
+  // actual nonzero offset so it's a no-op (no scrollTo call at all) the
+  // vast majority of the time this fires.
+  function resetHorizontalScroll() {
+    if (window.scrollX) window.scrollTo(0, window.scrollY);
+    if (document.documentElement.scrollLeft) document.documentElement.scrollLeft = 0;
+    if (document.body.scrollLeft) document.body.scrollLeft = 0;
+  }
+
   // ---------- DOM refs ----------
 
   const els = {
@@ -5469,7 +5485,14 @@
     window.visualViewport.addEventListener('resize', () => {
       if (els.modal.hidden && els.cropModal.hidden && !els.searchWrap.classList.contains('open')) resetPageScroll();
     });
+    // Unconditional (no dialog-open check) -- unlike resetPageScroll above,
+    // this never fights the keyboard, so it's safe to run any time the
+    // keyboard's own open/close resize fires, including while a modal
+    // (e.g. focusing the Location field) is open. See resetHorizontalScroll.
+    window.visualViewport.addEventListener('resize', resetHorizontalScroll);
+    window.visualViewport.addEventListener('scroll', resetHorizontalScroll);
   }
+  window.addEventListener('scroll', resetHorizontalScroll, { passive: true });
 
   init();
 })();
