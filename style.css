@@ -661,14 +661,28 @@ body {
    inside a .form-row, and without this its 16px font-size and 8px
    vertical padding silently won, clipping "yyyy" and making the box
    taller than intended. flex: 1 (not a fixed width) so it fills whatever
-   room its now flex: 1 .location-date-group leaves after the label. */
+   room its now flex: 1 .location-date-group leaves after the label.
+   appearance: none + a drawn-in-CSS chevron, rather than the browser's own
+   native arrow -- Chromium/Firefox both reserve a fixed ~20px of built-in
+   space for their own arrow regardless of padding, which left a much
+   wider gap after "yyyy" than this cramped a field has room for. This
+   doesn't affect iOS's own spinning-wheel picker still opening on tap --
+   that's driven by the element being a <select> at all, not by how its
+   closed-state box is painted. */
 .location-date-group .location-date-part {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   flex: 1;
   min-width: 0;
-  padding: 4px 3px;
+  padding: 4px 14px 4px 6px;
   border: 1px solid var(--card-border);
   border-radius: 6px;
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6355' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 3px center;
+  background-size: 11px;
   color: var(--ink);
   font-size: 0.82rem;
   font-family: inherit;
@@ -1433,4 +1447,11 @@ body {
      well under WCAG AA's 4.5:1 floor for body text. */
   .view-relation-link { color: #e08a5c; }
   .view-photo-pair-member { background: #3a3324; color: #6f6650; }
+  /* Same chevron as the light-mode rule, just re-colored to dark mode's
+     own --ink-soft -- a background-image can't follow a CSS variable on
+     its own, so it needs its own literal-hex copy here (see
+     .location-date-group .location-date-part above). */
+  .location-date-group .location-date-part {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b3a892' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  }
 }
