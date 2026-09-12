@@ -67,7 +67,7 @@ try {
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations:', JSON.stringify(saved.locations));
-  if (saved.locations[0] !== 'Denver, CO') throw new Error('Expected the reordered list to persist on save');
+  if (saved.locations[0].text !== 'Denver, CO') throw new Error('Expected the reordered list to persist on save');
 
   console.log('\n=== Saving returns to the view card: meta row should now read Denver as current ===');
   const viewMeta = await page.textContent('#viewMeta');

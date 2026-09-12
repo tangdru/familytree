@@ -145,31 +145,19 @@
     return COUNTRY_NAME_TO_ISO[last] || null;
   }
 
-  // Best-effort country -> hemisphere (N/S), keyed by the same ISO codes as
-  // COUNTRY_NAME_TO_ISO -- used by Centric view's Location metric to group
-  // by "same hemisphere" (see centricLocationRing). For a country whose
-  // territory actually straddles the equator (Brazil, Indonesia, Kenya,
-  // Ecuador...), this picks whichever hemisphere its capital/majority
-  // population sits in -- good enough for grouping a family tree, not a
-  // GIS tool. Unmapped countries (or no country at all) just don't match
-  // anyone else's hemisphere.
-  const COUNTRY_HEMISPHERE = {
-    US: 'N', GB: 'N', CA: 'N', MX: 'N', FR: 'N', DE: 'N', IT: 'N', ES: 'N', PT: 'N',
-    NL: 'N', BE: 'N', CH: 'N', AT: 'N', IE: 'N', SE: 'N', NO: 'N', DK: 'N', FI: 'N', IS: 'N',
-    PL: 'N', CZ: 'N', HU: 'N', RO: 'N', BG: 'N', GR: 'N', HR: 'N', RS: 'N', UA: 'N', RU: 'N',
-    TR: 'N', IL: 'N', SA: 'N', AE: 'N', EG: 'N',
-    CN: 'N', JP: 'N', KR: 'N', KP: 'N', TW: 'N', HK: 'N', VN: 'N', TH: 'N', PH: 'N',
-    ID: 'S', MY: 'N', SG: 'N',
-    IN: 'N', PK: 'N', BD: 'N', LK: 'N', NP: 'N',
-    ZA: 'S', NG: 'N', KE: 'S', ET: 'N', GH: 'N', MA: 'N', DZ: 'N',
-    BR: 'S', AR: 'S', CL: 'S', CO: 'N', PE: 'S', VE: 'N', EC: 'S',
-    CU: 'N', DO: 'N', HT: 'N', JM: 'N', PR: 'N',
-    AU: 'S', NZ: 'S', LU: 'N',
-  };
+  // Real great-circle distance between two coordinates, for Centric view's
+  // Location metric (see centricLocationRing). Standard haversine formula.
+  const KM_PER_MILE = 1.609344;
+  const EARTH_RADIUS_KM = 6371;
 
-  function hemisphereForLocation(loc) {
-    const country = guessCountryFromLocationText(loc);
-    return country ? (COUNTRY_HEMISPHERE[country] || null) : null;
+  function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return EARTH_RADIUS_KM * c;
   }
 
   /** @type {{people: Object<string, Person>}} */
@@ -848,7 +836,13 @@
     return chip;
   }
 
-  function setupLocationAutocomplete(input, list) {
+  // onPick (optional) is called with a {text,lat,lon} entry when a
+  // suggestion is chosen, or with null as soon as the user types again --
+  // invalidating any coordinates picked for a previous, now-stale value.
+  // Only the repeatable location-history rows pass it (see addLocationRow);
+  // the birth-location field has no use for coordinates, so it's omitted
+  // there and this whole mechanism is a no-op for it.
+  function setupLocationAutocomplete(input, list, onPick) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
     let requestToken = 0;
@@ -867,15 +861,16 @@
       list.hidden = false;
     }
 
-    function renderSuggestions(names) {
-      if (!names.length) { showMessage('No matches'); return; }
+    function renderSuggestions(entries) {
+      if (!entries.length) { showMessage('No matches'); return; }
       optionsEl.innerHTML = '';
-      for (const name of names) {
+      for (const entry of entries) {
         const item = document.createElement('div');
         item.className = 'combo-option';
-        item.textContent = name;
+        item.textContent = entry.text;
         item.addEventListener('click', () => {
-          setEditableText(input, name);
+          setEditableText(input, entry.text);
+          if (onPick) onPick(entry);
           hideSuggestions();
         });
         optionsEl.appendChild(item);
@@ -893,8 +888,21 @@
         const results = await res.json();
         if (token !== requestToken) return; // superseded by a newer query
         // Different results (e.g. two zip codes in the same city) can format
-        // to the same short label -- dedupe while keeping relevance order.
-        renderSuggestions([...new Set(results.map(formatLocationSuggestion))]);
+        // to the same short label -- dedupe while keeping relevance order
+        // (and whichever coordinates arrived first for that label).
+        const byText = new Map();
+        for (const r of results) {
+          const text = formatLocationSuggestion(r);
+          if (byText.has(text)) continue;
+          const lat = Number.parseFloat(r.lat);
+          const lon = Number.parseFloat(r.lon);
+          byText.set(text, {
+            text,
+            lat: Number.isFinite(lat) ? lat : null,
+            lon: Number.isFinite(lon) ? lon : null,
+          });
+        }
+        renderSuggestions([...byText.values()]);
       } catch (e) {
         console.warn('Location lookup failed', e);
         if (token === requestToken) showMessage("Couldn't load suggestions — you can still type a location");
@@ -902,6 +910,7 @@
     }
 
     input.addEventListener('input', () => {
+      if (onPick) onPick(null);
       const q = getEditableText(input);
       clearTimeout(debounceTimer);
       if (q.length < 3) { hideSuggestions(); return; }
@@ -933,9 +942,17 @@
   // decides that, not dates; see locationsOf/currentLocationOf below and
   // BACKLOG.md for the still-deferred per-location date range).
 
+  // value is either a legacy plain string or a {text,lat,lon} entry (see
+  // locationsOf) -- either way, any coordinates known for the row are kept
+  // on its own dataset (not the person object) until save, and refreshed
+  // whenever a fresh suggestion is picked (see setupLocationAutocomplete's
+  // onPick) or invalidated the moment the text is hand-edited.
   function addLocationRow(value) {
+    const initial = (value && typeof value === 'object') ? value : { text: value || '', lat: null, lon: null };
     const row = document.createElement('div');
     row.className = 'location-row';
+    row.dataset.lat = Number.isFinite(initial.lat) ? String(initial.lat) : '';
+    row.dataset.lon = Number.isFinite(initial.lon) ? String(initial.lon) : '';
 
     const handle = document.createElement('span');
     handle.className = 'location-row-handle';
@@ -982,8 +999,11 @@
     els.locationsList.appendChild(row);
 
     setupEditableText(input);
-    setEditableText(input, value || '');
-    setupLocationAutocomplete(input, suggestions);
+    setEditableText(input, initial.text || '');
+    setupLocationAutocomplete(input, suggestions, (entry) => {
+      row.dataset.lat = entry && Number.isFinite(entry.lat) ? String(entry.lat) : '';
+      row.dataset.lon = entry && Number.isFinite(entry.lon) ? String(entry.lon) : '';
+    });
     refreshLocationCurrentTags();
     return row;
   }
@@ -1066,8 +1086,14 @@
   }
 
   function getLocationsFromForm() {
-    return Array.from(els.locationsList.querySelectorAll('.location-row-input'))
-      .map(getEditableText)
+    return Array.from(els.locationsList.querySelectorAll('.location-row'))
+      .map(row => {
+        const text = getEditableText(row.querySelector('.location-row-input'));
+        if (!text) return null;
+        const lat = Number.parseFloat(row.dataset.lat);
+        const lon = Number.parseFloat(row.dataset.lon);
+        return { text, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null };
+      })
       .filter(Boolean);
   }
 
@@ -2109,7 +2135,7 @@
     listEl.innerHTML = '';
     const previous = locations.slice(1);
     if (!previous.length) { sectionEl.hidden = true; return; }
-    previous.forEach(loc => listEl.appendChild(buildLocationRow(loc)));
+    previous.forEach(loc => listEl.appendChild(buildLocationRow(loc.text)));
     sectionEl.hidden = false;
   }
 
@@ -2199,18 +2225,36 @@
   // decides that, not dates; see BACKLOG.md for the still-deferred
   // per-location date range). Falls back to the old singular `location`
   // field for pre-existing data that hasn't been re-saved yet, and runs
-  // every entry through shortenLocationText so a record saved with the old
-  // full-address text (from before that shortening existed) self-heals
-  // wherever it's shown, without needing a resave first.
+  // every entry's text through shortenLocationText so a record saved with
+  // the old full-address text (from before that shortening existed)
+  // self-heals wherever it's shown, without needing a resave first.
+  //
+  // Each entry normalizes to {text, lat, lon} -- lat/lon are only ever
+  // known for a location picked from a Nominatim suggestion (see
+  // addLocationRow/setupLocationAutocomplete); a legacy plain-string entry,
+  // or one hand-typed without picking a suggestion, gets null coordinates
+  // and so can't participate in Centric view's real-distance ring (see
+  // centricLocationRing), only the text-based display everywhere else.
   function locationsOf(person) {
     if (!person) return [];
     const raw = Array.isArray(person.locations) && person.locations.length ? person.locations
       : person.location ? [person.location] : [];
-    return raw.map(shortenLocationText);
+    return raw.map(entry => {
+      const isObj = entry && typeof entry === 'object';
+      const text = shortenLocationText(isObj ? (entry.text || '') : (entry || ''));
+      const lat = isObj && Number.isFinite(entry.lat) ? entry.lat : null;
+      const lon = isObj && Number.isFinite(entry.lon) ? entry.lon : null;
+      return { text, lat, lon };
+    });
+  }
+
+  function currentLocationEntryOf(person) {
+    return locationsOf(person)[0] || null;
   }
 
   function currentLocationOf(person) {
-    return locationsOf(person)[0] || '';
+    const entry = currentLocationEntryOf(person);
+    return entry ? entry.text : '';
   }
 
   // A person's contact entries (phone/email, in whatever order they were
@@ -3929,39 +3973,34 @@
     return 4;
   }
 
-  // Location-proximity ring. There's no geocoding anywhere in this app --
-  // just free-text "City, State/Country" strings (see currentLocationOf)
-  // -- so "proximity" here is textual/best-effort, not a real distance:
-  // ring 1 is the exact same location string; ring 2 shares the same
-  // trailing comma-separated segment (a US state for "City, State", or
-  // just the country again for "City, Country" -- for that shape this
-  // tier and ring 3 naturally coincide); ring 3 shares the same guessed
-  // country (see guessCountryFromLocationText -- a real country match,
-  // not just matching text, so two different-state "City, State" US
-  // locations still land here even though ring 2 missed them); ring 4
-  // shares the same hemisphere (see hemisphereForLocation); ring 5 is
-  // everyone else, including anyone with no location set at all.
-  function centricLocationRing(centerLoc, personLoc) {
-    if (!centerLoc || !personLoc) return 5;
-    if (personLoc.toLowerCase() === centerLoc.toLowerCase()) return 1;
-    const centerRegion = centerLoc.split(',').pop().trim().toLowerCase();
-    const personRegion = personLoc.split(',').pop().trim().toLowerCase();
-    if (centerRegion && centerRegion === personRegion) return 2;
-    const centerCountry = guessCountryFromLocationText(centerLoc);
-    const personCountry = guessCountryFromLocationText(personLoc);
-    if (centerCountry && centerCountry === personCountry) return 3;
-    const centerHemi = hemisphereForLocation(centerLoc);
-    const personHemi = hemisphereForLocation(personLoc);
-    if (centerHemi && centerHemi === personHemi) return 4;
-    return 5;
+  // Location-proximity ring, by real great-circle distance (see
+  // haversineDistanceKm) between each person's current location's
+  // coordinates -- ring 1 is within 50mi/80km, ring 2 within 500mi/800km,
+  // ring 3 within 3,000mi/4,800km, ring 4 anyone farther. Ring 5 is
+  // "unknown distance": either person has no current location, or its
+  // coordinates aren't known (a legacy plain-text entry, or one hand-typed
+  // without picking a Nominatim suggestion -- see locationsOf).
+  function centricLocationRing(centerEntry, personEntry) {
+    const cLat = centerEntry && Number.isFinite(centerEntry.lat) ? centerEntry.lat : null;
+    const cLon = centerEntry && Number.isFinite(centerEntry.lon) ? centerEntry.lon : null;
+    const pLat = personEntry && Number.isFinite(personEntry.lat) ? personEntry.lat : null;
+    const pLon = personEntry && Number.isFinite(personEntry.lon) ? personEntry.lon : null;
+    if (cLat == null || cLon == null || pLat == null || pLon == null) return 5;
+    const miles = haversineDistanceKm(cLat, cLon, pLat, pLon) / KM_PER_MILE;
+    if (miles <= 50) return 1;
+    if (miles <= 500) return 2;
+    if (miles <= 3000) return 3;
+    return 4;
   }
 
   // What a ring actually means for the current metric, shown as an axis
   // label next to its gridline -- ring 0 (the center person) never gets a
-  // label since there's no gridline drawn at radius 0.
+  // label since there's no gridline drawn at radius 0. Location labels
+  // show both miles and km together, per the user's request, rather than
+  // making the unit a separate toggle.
   function centricRingLabel(metric, ringIndex) {
     const labels = metric === 'location'
-      ? ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']
+      ? ['0–50 mi (0–80 km)', '50–500 mi (80–800 km)', '500–3,000 mi (800–4,800 km)', '3,000+ mi (4,800+ km)', 'Unknown distance']
       : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
@@ -4442,7 +4481,7 @@
     }
     const center = data.people[centricCenterId];
     const centerYear = effectiveBirthYear(center);
-    const centerLoc = currentLocationOf(center);
+    const centerLoc = currentLocationEntryOf(center);
 
     // Every ring for the current metric always exists (1..4 for age, 1..5
     // for location), even ones nobody currently falls into -- so
@@ -4456,7 +4495,7 @@
       if (p.id === centricCenterId) continue;
       let ring;
       if (centricMetric === 'location') {
-        ring = centricLocationRing(centerLoc, currentLocationOf(p));
+        ring = centricLocationRing(centerLoc, currentLocationEntryOf(p));
       } else {
         ring = centricAgeRing(centerYear, effectiveBirthYear(p));
       }
