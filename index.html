@@ -145,6 +145,22 @@
             <div class="combo-dropdown location-suggestions" id="birthLocationSuggestions" hidden>
               <div class="combo-options"></div>
             </div>
+            <!-- Same calendar-icon date-range toggle as each Location(s) row
+                 (see .location-dates-btn in app.js) -- built once here since
+                 this field, unlike the repeatable list, is never rebuilt from
+                 scratch. Opening it for the first time on a person with a
+                 known Documented birthday assumes that same year for Start
+                 (see setupBirthLocationDates), since a birth location's own
+                 start date is virtually always the birth year itself. -->
+            <button type="button" class="location-dates-btn" id="birthLocationDatesBtn" aria-label="Set date range">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </button>
+            <div class="location-date-popover" id="birthLocationDatePopover" hidden></div>
           </div>
         </div>
 

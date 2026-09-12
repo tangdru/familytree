@@ -393,6 +393,8 @@
     deathDisplayText: document.querySelector('#deathDisplay .date-display-text'),
     birthLocationInput: document.getElementById('birthLocationInput'),
     birthLocationSuggestions: document.getElementById('birthLocationSuggestions'),
+    birthLocationDatesBtn: document.getElementById('birthLocationDatesBtn'),
+    birthLocationDatePopover: document.getElementById('birthLocationDatePopover'),
     locationsList: document.getElementById('locationsList'),
     addLocationBtn: document.getElementById('addLocationBtn'),
     zodiacInput: document.getElementById('zodiacInput'),
@@ -1036,6 +1038,88 @@
     if (e.target.closest('.location-dates-btn') || e.target.closest('.location-date-popover')) return;
     closeLocationDatePopovers();
   });
+
+  // 4-digit year out of a native date input's "YYYY-MM-DD" value, or ''
+  // if there isn't one yet -- used to default the birth location's Start
+  // year to the Documented birthday's year (see setupBirthLocationDates).
+  function birthYearOf(dateStr) {
+    return /^\d{4}/.test(dateStr || '') ? dateStr.slice(0, 4) : '';
+  }
+
+  // Same calendar-icon date-range toggle as each Location(s) row, but for
+  // the single, non-repeatable birth location field -- built once (not
+  // per-row) since this field is never rebuilt from scratch the way
+  // setLocationRows rebuilds the list. dates live on the input's own
+  // dataset (alongside lat/lon), reset/prefilled in openModalForAdd/
+  // openModalForEdit exactly like the coordinates already are.
+  let birthLocationStartSelect, birthLocationEndSelect;
+  function setupBirthLocationDates() {
+    const btn = els.birthLocationDatesBtn;
+    const popover = els.birthLocationDatePopover;
+    function refreshBtnState() {
+      const input = els.birthLocationInput;
+      const hasDates = !!(input.dataset.startDate || input.dataset.endDate);
+      btn.classList.toggle('has-dates', hasDates);
+      btn.title = hasDates ? `${input.dataset.startDate || '?'} – ${input.dataset.endDate || '?'}` : 'Set date range';
+    }
+    const startGroup = buildLocationDateGroup('Start', '', (next) => {
+      els.birthLocationInput.dataset.startDate = next || '';
+      refreshBtnState();
+    });
+    const endGroup = buildLocationDateGroup('End', '', (next) => {
+      els.birthLocationInput.dataset.endDate = next || '';
+      refreshBtnState();
+    });
+    birthLocationStartSelect = startGroup.querySelector('.location-date-part');
+    birthLocationEndSelect = endGroup.querySelector('.location-date-part');
+    popover.appendChild(startGroup);
+    popover.appendChild(endGroup);
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'location-date-close';
+    closeBtn.setAttribute('aria-label', 'Close date range');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      popover.hidden = true;
+    });
+    popover.appendChild(closeBtn);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = popover.hidden;
+      if (willOpen && !els.birthLocationInput.dataset.startDate) {
+        // First open with no Start set yet: assume the Documented
+        // birthday's own year, since a birth location's start is
+        // virtually always the birth year itself -- still just a
+        // starting point, not locked in, so a different year can
+        // simply be picked over it.
+        const assumedYear = birthYearOf(els.birthInput.value);
+        if (assumedYear) {
+          els.birthLocationInput.dataset.startDate = assumedYear;
+          birthLocationStartSelect.value = assumedYear;
+          refreshBtnState();
+        }
+      }
+      closeLocationDatePopovers(willOpen ? popover : null);
+      popover.hidden = !willOpen;
+    });
+    refreshBtnState();
+  }
+  setupBirthLocationDates();
+
+  // Resets the birth location's date range (dataset + selects + button
+  // state) to empty -- shared by openModalForAdd and openModalForEdit's
+  // own prefill so neither has to touch birthLocationStartSelect/
+  // birthLocationEndSelect directly.
+  function setBirthLocationDates(startDate, endDate) {
+    els.birthLocationInput.dataset.startDate = startDate || '';
+    els.birthLocationInput.dataset.endDate = endDate || '';
+    birthLocationStartSelect.value = startDate || '';
+    birthLocationEndSelect.value = endDate || '';
+    const hasDates = !!(startDate || endDate);
+    els.birthLocationDatesBtn.classList.toggle('has-dates', hasDates);
+    els.birthLocationDatesBtn.title = hasDates ? `${startDate || '?'} – ${endDate || '?'}` : 'Set date range';
+  }
 
   // value is either a legacy plain string or a {text,lat,lon,startDate,
   // endDate} entry (see locationEntriesOf) -- coordinates and dates known
@@ -2080,6 +2164,7 @@
     setEditableText(els.birthLocationInput, '');
     els.birthLocationInput.dataset.lat = '';
     els.birthLocationInput.dataset.lon = '';
+    setBirthLocationDates('', '');
     setLocationRows([]);
     setContactRows([]);
     pendingPhoto = null;
@@ -2111,6 +2196,7 @@
     setEditableText(els.birthLocationInput, shortenLocationText(blEntry.text || ''));
     els.birthLocationInput.dataset.lat = Number.isFinite(blEntry.lat) ? String(blEntry.lat) : '';
     els.birthLocationInput.dataset.lon = Number.isFinite(blEntry.lon) ? String(blEntry.lon) : '';
+    setBirthLocationDates(blEntry.startDate, blEntry.endDate);
     setLocationRows(locationEntriesOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
@@ -2158,6 +2244,8 @@
           text: getEditableText(els.birthLocationInput),
           lat: Number.isFinite(lat) ? lat : null,
           lon: Number.isFinite(lon) ? lon : null,
+          startDate: els.birthLocationInput.dataset.startDate || null,
+          endDate: els.birthLocationInput.dataset.endDate || null,
         };
       })(),
       locations: getLocationsFromForm(),
@@ -2185,6 +2273,7 @@
     setEditableText(els.birthLocationInput, snap.birthLocation.text);
     els.birthLocationInput.dataset.lat = Number.isFinite(snap.birthLocation.lat) ? String(snap.birthLocation.lat) : '';
     els.birthLocationInput.dataset.lon = Number.isFinite(snap.birthLocation.lon) ? String(snap.birthLocation.lon) : '';
+    setBirthLocationDates(snap.birthLocation.startDate, snap.birthLocation.endDate);
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
     zodiacManuallySet = snap.zodiacManuallySet;
@@ -2448,11 +2537,11 @@
   }
 
   // birthLocation is a single field (not a repeatable list), but it now
-  // carries coordinates too -- see openModalForEdit/save -- since a
-  // person's birth is a real point on the same migration timeline as
-  // their other locations, dated implicitly by birthDate rather than its
-  // own editable date. Unwraps to plain display text, same self-healing
-  // treatment as locationsOf.
+  // carries coordinates and its own start/end year range too -- see
+  // openModalForEdit/save and setupBirthLocationDates -- since a person's
+  // birth is a real point on the same migration timeline as their other
+  // locations. Unwraps to plain display text, same self-healing treatment
+  // as locationsOf.
   function birthLocationTextOf(person) {
     if (!person) return '';
     const bl = person.birthLocation;
@@ -3202,6 +3291,8 @@
           text: birthLocationText,
           lat: Number.isFinite(birthLat) ? birthLat : null,
           lon: Number.isFinite(birthLon) ? birthLon : null,
+          startDate: els.birthLocationInput.dataset.startDate || null,
+          endDate: els.birthLocationInput.dataset.endDate || null,
         };
       } else {
         person.birthLocation = '';

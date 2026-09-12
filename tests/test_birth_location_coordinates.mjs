@@ -1,10 +1,14 @@
 import { chromium } from 'playwright-core';
 
 // Birth location is now a real point on the same migration timeline as
-// the repeatable Location(s) list (its date is always birthDate, non-
-// editable) -- so picking a suggestion for it must capture coordinates
-// too, mirroring the Location(s) rows' own onPick treatment, while
-// staying its own separate field in the UI (see birthLocationTextOf).
+// the repeatable Location(s) list -- so picking a suggestion for it must
+// capture coordinates too, mirroring the Location(s) rows' own onPick
+// treatment, while staying its own separate field in the UI (see
+// birthLocationTextOf). It also gets the same calendar-icon Start/End
+// year popover as each Location(s) row (see setupBirthLocationDates),
+// with one difference: opening it the first time assumes the Documented
+// birthday's own year for Start, since a birth location's start is
+// virtually always the birth year itself.
 const p1 = 'p1';
 const people = {
   [p1]: { id: p1, name: 'Jane Doe', birthDate: '1985-03-02', deathDate: '', photo: '', notes: '', locations: [], parents: [], spouses: [] },
@@ -74,6 +78,35 @@ try {
   console.log('saved birthLocation after unrelated resave:', JSON.stringify(saved.birthLocation));
   if (saved.birthLocation.lat !== pickedLat) throw new Error(`Expected birth-location coordinates to survive an unrelated resave, got: ${JSON.stringify(saved.birthLocation)}`);
   console.log('Confirmed: birth-location coordinates survive a resave that never touches that field.');
+
+  console.log('\n=== Opening the birth location date popover assumes the Documented birthday\'s year for Start ===');
+  await page.click('#viewEditBtn');
+  await page.waitForTimeout(200);
+  const hasDatesBefore = await page.locator('#birthLocationDatesBtn').evaluate(el => el.classList.contains('has-dates'));
+  if (hasDatesBefore) throw new Error('Expected the calendar button to start outline (no dates assumed yet)');
+  await page.click('#birthLocationDatesBtn');
+  await page.waitForTimeout(150);
+  const assumedStart = await page.locator('#birthLocationDatePopover .location-date-group').nth(0).locator('.location-date-part').inputValue();
+  console.log('assumed start year (expect 1985, from birthDate 1985-03-02):', assumedStart);
+  if (assumedStart !== '1985') throw new Error(`Expected the assumed Start year to be 1985, got: ${assumedStart}`);
+
+  console.log('\n=== Save with the assumed Start (untouched) -- it persists as a real saved value ===');
+  await page.click('#personForm button[type="submit"]');
+  await page.waitForTimeout(300);
+  saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
+  console.log('saved birthLocation:', JSON.stringify(saved.birthLocation));
+  if (saved.birthLocation.startDate !== '1985') throw new Error(`Expected the assumed startDate to save as "1985", got: ${JSON.stringify(saved.birthLocation.startDate)}`);
+
+  console.log('\n=== Re-edit: the calendar button now shows filled, and the popover reloads 1985 ===');
+  await page.click('#viewEditBtn');
+  await page.waitForTimeout(200);
+  const hasDatesAfter = await page.locator('#birthLocationDatesBtn').evaluate(el => el.classList.contains('has-dates'));
+  if (!hasDatesAfter) throw new Error('Expected the calendar button to be filled after the assumed year saved');
+  await page.click('#birthLocationDatesBtn');
+  await page.waitForTimeout(150);
+  const reStart = await page.locator('#birthLocationDatePopover .location-date-group').nth(0).locator('.location-date-part').inputValue();
+  if (reStart !== '1985') throw new Error(`Expected the reloaded Start year to stay 1985, got: ${reStart}`);
+  console.log('Confirmed: assumed year persists and reloads correctly.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);
