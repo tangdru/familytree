@@ -560,6 +560,15 @@ body {
 .locations-list { display: flex; flex-direction: column; gap: 8px; }
 .location-row { display: flex; align-items: center; gap: 8px; position: relative; z-index: 1; }
 .location-row.dragging { z-index: 2; }
+/* Each row's own z-index: 1 makes it a stacking context of its own, which
+   traps its date popover's z-index: 50 inside that context -- painted as
+   one unit, the whole row (popover included) sits BEHIND any later
+   sibling row's stacking context, since two contexts at an equal z-index
+   paint in DOM order. Without this, only the very last row's popover
+   could ever show; every other row's was silently covered by the rows
+   below it. Bumped the same way .dragging already bumps a row while it's
+   being dragged. */
+.location-row.dates-open { z-index: 3; }
 .location-row-handle {
   flex-shrink: 0;
   display: flex;
