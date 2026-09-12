@@ -1100,6 +1100,16 @@
       row.dataset.endDate = next || '';
       refreshDatesBtnState();
     }));
+    const closeDatesBtn = document.createElement('button');
+    closeDatesBtn.type = 'button';
+    closeDatesBtn.className = 'location-date-close';
+    closeDatesBtn.setAttribute('aria-label', 'Close date range');
+    closeDatesBtn.textContent = '✕';
+    closeDatesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      popover.hidden = true;
+    });
+    popover.appendChild(closeDatesBtn);
     datesBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const willOpen = popover.hidden;

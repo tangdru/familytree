@@ -66,6 +66,15 @@ try {
   await endYearSelect.selectOption('2005');
   await page.waitForTimeout(50);
 
+  console.log('\n=== The close button explicitly closes the popover ===');
+  await row.locator('.location-date-close').click();
+  await page.waitForTimeout(100);
+  if (await popover.isVisible()) throw new Error('Expected the close button to close the date popover');
+  console.log('Confirmed: close button closes the popover.');
+  await row.locator('.location-dates-btn').click();
+  await page.waitForTimeout(100);
+  if (await popover.isHidden()) throw new Error('Expected the date popover to reopen on click');
+
   console.log('\n=== Clicking outside closes the popover ===');
   await page.click('#notesInput');
   await page.waitForTimeout(100);
