@@ -23,7 +23,7 @@
   // Same glyph as the Born/Died date fields' own calendar icon (see
   // index.html) -- reused on each location row's date-range button (see
   // addLocationRow). Outline vs. filled (has a date) is a CSS class, not a
-  // second glyph -- see .location-row-dates.has-dates in style.css.
+  // second glyph -- see .location-dates-btn.has-dates in style.css.
   const CALENDAR_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
 
   // Icons painted on the Person View / Couple View contact chips -- see
@@ -1002,17 +1002,19 @@
   }
 
   // One <select> of the day/month/year trio -- `options` is [value,label]
-  // pairs, always preceded by a "–" (empty value) placeholder meaning
-  // "unknown". Plain native selects (not a custom widget) so iOS renders
-  // its own spinning-wheel picker for free, same interaction as a native
+  // pairs, always preceded by a labeled placeholder ("dd"/"mm"/"yyyy",
+  // empty value) meaning "unknown" -- naming which part is which before
+  // the user ever interacts with it, rather than a generic "–" for all
+  // three. Plain native selects (not a custom widget) so iOS renders its
+  // own spinning-wheel picker for free, same interaction as a native
   // phone date picker, without any custom touch/scroll code to maintain.
-  function buildDatePartSelect(options, ariaLabel) {
+  function buildDatePartSelect(options, ariaLabel, placeholder) {
     const select = document.createElement('select');
     select.className = 'location-date-part';
     select.setAttribute('aria-label', ariaLabel);
     const blank = document.createElement('option');
     blank.value = '';
-    blank.textContent = '–';
+    blank.textContent = placeholder;
     select.appendChild(blank);
     for (const [value, label] of options) {
       const opt = document.createElement('option');
@@ -1046,9 +1048,9 @@
     const triad = document.createElement('div');
     triad.className = 'location-date-triad';
     const parsed = parseLocationDate(initialValue);
-    const daySelect = buildDatePartSelect(DAY_OPTIONS, `${labelText} day`);
-    const monthSelect = buildDatePartSelect(MONTH_OPTIONS, `${labelText} month`);
-    const yearSelect = buildDatePartSelect(YEAR_OPTIONS, `${labelText} year`);
+    const daySelect = buildDatePartSelect(DAY_OPTIONS, `${labelText} day`, 'dd');
+    const monthSelect = buildDatePartSelect(MONTH_OPTIONS, `${labelText} month`, 'mm');
+    const yearSelect = buildDatePartSelect(YEAR_OPTIONS, `${labelText} year`, 'yyyy');
     daySelect.value = parsed.day;
     monthSelect.value = parsed.month;
     yearSelect.value = parsed.year;
@@ -1078,7 +1080,7 @@
     });
   }
   document.addEventListener('click', (e) => {
-    if (e.target.closest('.location-row-dates')) return;
+    if (e.target.closest('.location-dates-btn') || e.target.closest('.location-date-popover')) return;
     closeLocationDatePopovers();
   });
 
@@ -1109,7 +1111,7 @@
     input.className = 'editable-text location-row-input';
     input.contentEditable = 'true';
     input.setAttribute('role', 'textbox');
-    input.setAttribute('data-placeholder', 'City, Country');
+    input.setAttribute('data-placeholder', 'City, State, Country');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('spellcheck', 'false');
     const suggestions = document.createElement('div');
@@ -1118,15 +1120,12 @@
     const optionsEl = document.createElement('div');
     optionsEl.className = 'combo-options';
     suggestions.appendChild(optionsEl);
-    field.appendChild(input);
-    field.appendChild(suggestions);
-
-    // Calendar-icon toggle + its date-range popover -- outline while
-    // neither date is set, filled (see .has-dates in style.css) once
-    // either one is, so the row itself hints whether dates are recorded
-    // without needing to open the popover to check.
-    const datesWrap = document.createElement('div');
-    datesWrap.className = 'location-row-dates';
+    // Calendar-icon toggle + its date-range popover -- lives INSIDE the
+    // field itself, at the input's trailing edge, same placement as the
+    // Documented birthday field's own calendar icon. Muted while neither
+    // date is set, accent-colored (see .has-dates in style.css) once
+    // either one is, so the row hints whether dates are recorded without
+    // opening the popover to check.
     const datesBtn = document.createElement('button');
     datesBtn.type = 'button';
     datesBtn.className = 'location-dates-btn';
@@ -1156,9 +1155,12 @@
       closeLocationDatePopovers(willOpen ? popover : null);
       popover.hidden = !willOpen;
     });
-    datesWrap.appendChild(datesBtn);
-    datesWrap.appendChild(popover);
     refreshDatesBtnState();
+
+    field.appendChild(input);
+    field.appendChild(suggestions);
+    field.appendChild(datesBtn);
+    field.appendChild(popover);
 
     const tag = document.createElement('span');
     tag.className = 'location-current-tag';
@@ -1176,7 +1178,6 @@
 
     row.appendChild(handle);
     row.appendChild(field);
-    row.appendChild(datesWrap);
     row.appendChild(tag);
     row.appendChild(removeBtn);
     els.locationsList.appendChild(row);

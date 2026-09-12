@@ -548,6 +548,10 @@ body {
   position: relative;
   flex: 1;
 }
+/* Room for the calendar icon (see .location-dates-btn) sitting inside the
+   field's own right edge -- same placement as the Documented birthday
+   field's calendar icon. */
+.location-field .location-row-input { padding-right: 30px; }
 .location-suggestions .combo-options { max-height: 220px; }
 
 .locations-list { display: flex; flex-direction: column; gap: 8px; }
@@ -586,31 +590,32 @@ body {
 .location-row-remove:hover { color: var(--danger); }
 .locations-hint { margin: -4px 0 2px; }
 
-/* Calendar-icon date-range toggle on each location row -- outline while
-   neither a start nor end date is set, filled solid once either is (see
-   .has-dates, toggled in addLocationRow), so the row itself hints whether
-   a date range is recorded without opening the popover to check. */
-.location-row-dates { position: relative; flex-shrink: 0; }
+/* Calendar-icon date-range toggle -- sits inside the location field
+   itself, at its trailing edge (see the field's own right-padding above),
+   same placement as the Documented birthday field's calendar icon. Muted
+   while neither a start nor end date is set, accent-colored once either
+   is (see .has-dates, toggled in addLocationRow), so the row hints
+   whether a date range is recorded without opening the popover to check. */
 .location-dates-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid var(--card-border);
-  border-radius: 50%;
+  border: none;
+  border-radius: 4px;
   background: none;
   color: var(--ink-soft);
   cursor: pointer;
 }
 .location-dates-btn svg { width: 15px; height: 15px; }
-.location-dates-btn:hover { border-color: var(--accent); color: var(--accent-dark); }
-.location-dates-btn.has-dates {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
+.location-dates-btn:hover { background: #f1ead9; color: var(--accent-dark); }
+.location-dates-btn.has-dates { color: var(--accent); }
 .location-date-popover {
   position: absolute;
   top: calc(100% + 6px);
