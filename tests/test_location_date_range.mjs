@@ -125,6 +125,49 @@ try {
   }
   console.log('Confirmed: year range shown in Previous location(s).');
 
+  console.log('\n=== A non-last row\'s popover is still visible and interactive (not painted underneath later rows) ===');
+  // Regression: each .location-row sets z-index: 1, making it its own
+  // stacking context -- without bumping that row above its siblings while
+  // its popover is open (see .location-row.dates-open in style.css), the
+  // popover was silently painted UNDER every row below it, so only the
+  // very last row's calendar button ever visibly worked.
+  await page.click('#viewEditBtn');
+  await page.waitForTimeout(200);
+  await page.click('#addLocationBtn');
+  await page.waitForTimeout(100);
+  const occlusionRows = page.locator('.location-row');
+  const rowCount = await occlusionRows.count();
+  if (rowCount < 3) throw new Error(`Expected at least 3 rows to test occlusion, got ${rowCount}`);
+  const occlusionFirstRow = occlusionRows.nth(0);
+  await occlusionFirstRow.locator('.location-dates-btn').click();
+  await page.waitForTimeout(150);
+  const firstPopover = occlusionFirstRow.locator('.location-date-popover');
+  if (await firstPopover.isHidden()) throw new Error('Expected the first row\'s popover to open');
+  const firstStartSelect = firstPopover.locator('.location-date-group').nth(0).locator('.location-date-part');
+  await firstStartSelect.selectOption('1970');
+  await page.waitForTimeout(100);
+  const firstStartValue = await firstStartSelect.inputValue();
+  console.log('Selected a year on the first (non-last) row\'s popover:', firstStartValue);
+  if (firstStartValue !== '1970') throw new Error(`Expected to interact with the first row's popover, got: ${firstStartValue}`);
+
+  console.log('\n=== The current row\'s field is the same width as other rows\' (its "Current" tag reserves space even hidden) ===');
+  // Regression: the "Current" tag only shows (non-hidden) on row 0, and
+  // the native [hidden]{display:none} let it collapse to zero width on
+  // every OTHER row -- making the current row's own .location-field
+  // narrower than the rest, so its date popover (sized to match its own
+  // field, see .location-date-popover) ended up narrower than the row
+  // below it and visually misaligned once opened (see
+  // .location-current-tag[hidden] in style.css).
+  const currentFieldWidth = (await occlusionFirstRow.locator('.location-field').boundingBox()).width;
+  const otherFieldWidth = (await occlusionRows.nth(1).locator('.location-field').boundingBox()).width;
+  console.log('current row field width:', currentFieldWidth, 'vs other row:', otherFieldWidth);
+  if (Math.abs(currentFieldWidth - otherFieldWidth) > 1) {
+    throw new Error(`Expected every row's field to be the same width, got ${currentFieldWidth} vs ${otherFieldWidth}`);
+  }
+
+  await page.click('#cancelBtn');
+  await page.waitForTimeout(200);
+
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);
   console.log('\nALL PASSED');

@@ -1031,7 +1031,12 @@
   // at a time) and from the document-level outside-click handler below.
   function closeLocationDatePopovers(except) {
     document.querySelectorAll('.location-date-popover:not([hidden])').forEach(popover => {
-      if (popover !== except) popover.hidden = true;
+      if (popover === except) return;
+      popover.hidden = true;
+      // Undo the z-index bump (see .location-row.dates-open in style.css)
+      // that let this row's popover paint above its later siblings.
+      const row = popover.closest('.location-row');
+      if (row) row.classList.remove('dates-open');
     });
   }
   document.addEventListener('click', (e) => {
@@ -1192,6 +1197,7 @@
     closeDatesBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       popover.hidden = true;
+      row.classList.remove('dates-open');
     });
     popover.appendChild(closeDatesBtn);
     datesBtn.addEventListener('click', (e) => {
@@ -1199,6 +1205,10 @@
       const willOpen = popover.hidden;
       closeLocationDatePopovers(willOpen ? popover : null);
       popover.hidden = !willOpen;
+      // See .location-row.dates-open in style.css: without this, every
+      // row but the last has its popover silently painted underneath the
+      // rows below it.
+      row.classList.toggle('dates-open', willOpen);
     });
     refreshDatesBtnState();
 
