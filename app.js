@@ -848,7 +848,18 @@
     return chip;
   }
 
-  function setupLocationAutocomplete(input, list) {
+  // onPick (optional) is called with a {text,lat,lon} entry when a
+  // suggestion is chosen, or with null as soon as the user types again --
+  // invalidating any coordinates picked for a previous, now-stale value.
+  // Only the repeatable location-history rows pass it (see addLocationRow);
+  // the birth-location field has no use for coordinates, so it's omitted
+  // there and this whole mechanism is a no-op for it.
+  //
+  // Coordinates captured here are used only for storage right now -- the
+  // Centric view's Location metric still runs on plain text (see
+  // centricLocationRing) until enough records have real coordinates to
+  // make the real-distance ring math worthwhile. See BACKLOG.md.
+  function setupLocationAutocomplete(input, list, onPick) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
     let requestToken = 0;
@@ -867,15 +878,16 @@
       list.hidden = false;
     }
 
-    function renderSuggestions(names) {
-      if (!names.length) { showMessage('No matches'); return; }
+    function renderSuggestions(entries) {
+      if (!entries.length) { showMessage('No matches'); return; }
       optionsEl.innerHTML = '';
-      for (const name of names) {
+      for (const entry of entries) {
         const item = document.createElement('div');
         item.className = 'combo-option';
-        item.textContent = name;
+        item.textContent = entry.text;
         item.addEventListener('click', () => {
-          setEditableText(input, name);
+          setEditableText(input, entry.text);
+          if (onPick) onPick(entry);
           hideSuggestions();
         });
         optionsEl.appendChild(item);
@@ -893,8 +905,21 @@
         const results = await res.json();
         if (token !== requestToken) return; // superseded by a newer query
         // Different results (e.g. two zip codes in the same city) can format
-        // to the same short label -- dedupe while keeping relevance order.
-        renderSuggestions([...new Set(results.map(formatLocationSuggestion))]);
+        // to the same short label -- dedupe while keeping relevance order
+        // (and whichever coordinates arrived first for that label).
+        const byText = new Map();
+        for (const r of results) {
+          const text = formatLocationSuggestion(r);
+          if (byText.has(text)) continue;
+          const lat = Number.parseFloat(r.lat);
+          const lon = Number.parseFloat(r.lon);
+          byText.set(text, {
+            text,
+            lat: Number.isFinite(lat) ? lat : null,
+            lon: Number.isFinite(lon) ? lon : null,
+          });
+        }
+        renderSuggestions([...byText.values()]);
       } catch (e) {
         console.warn('Location lookup failed', e);
         if (token === requestToken) showMessage("Couldn't load suggestions — you can still type a location");
@@ -902,6 +927,7 @@
     }
 
     input.addEventListener('input', () => {
+      if (onPick) onPick(null);
       const q = getEditableText(input);
       clearTimeout(debounceTimer);
       if (q.length < 3) { hideSuggestions(); return; }
@@ -933,9 +959,17 @@
   // decides that, not dates; see locationsOf/currentLocationOf below and
   // BACKLOG.md for the still-deferred per-location date range).
 
+  // value is either a legacy plain string or a {text,lat,lon} entry (see
+  // locationsOf) -- either way, any coordinates known for the row are kept
+  // on its own dataset (not the person object) until save, and refreshed
+  // whenever a fresh suggestion is picked (see setupLocationAutocomplete's
+  // onPick) or invalidated the moment the text is hand-edited.
   function addLocationRow(value) {
+    const initial = (value && typeof value === 'object') ? value : { text: value || '', lat: null, lon: null };
     const row = document.createElement('div');
     row.className = 'location-row';
+    row.dataset.lat = Number.isFinite(initial.lat) ? String(initial.lat) : '';
+    row.dataset.lon = Number.isFinite(initial.lon) ? String(initial.lon) : '';
 
     const handle = document.createElement('span');
     handle.className = 'location-row-handle';
@@ -982,8 +1016,11 @@
     els.locationsList.appendChild(row);
 
     setupEditableText(input);
-    setEditableText(input, value || '');
-    setupLocationAutocomplete(input, suggestions);
+    setEditableText(input, initial.text || '');
+    setupLocationAutocomplete(input, suggestions, (entry) => {
+      row.dataset.lat = entry && Number.isFinite(entry.lat) ? String(entry.lat) : '';
+      row.dataset.lon = entry && Number.isFinite(entry.lon) ? String(entry.lon) : '';
+    });
     refreshLocationCurrentTags();
     return row;
   }
@@ -1066,8 +1103,14 @@
   }
 
   function getLocationsFromForm() {
-    return Array.from(els.locationsList.querySelectorAll('.location-row-input'))
-      .map(getEditableText)
+    return Array.from(els.locationsList.querySelectorAll('.location-row'))
+      .map(row => {
+        const text = getEditableText(row.querySelector('.location-row-input'));
+        if (!text) return null;
+        const lat = Number.parseFloat(row.dataset.lat);
+        const lon = Number.parseFloat(row.dataset.lon);
+        return { text, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null };
+      })
       .filter(Boolean);
   }
 
@@ -1929,7 +1972,7 @@
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
     setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
-    setLocationRows(locationsOf(p));
+    setLocationRows(locationEntriesOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
     updateZodiacAdjustedHint();
@@ -2216,6 +2259,28 @@
 
   function currentLocationOf(person) {
     return locationsOf(person)[0] || '';
+  }
+
+  // Like locationsOf, but preserves each entry's real shape -- including
+  // any known lat/lon -- instead of flattening to display text. Used only
+  // to preload the edit form (see openModalForEdit): locationsOf's plain-
+  // string output is what everywhere else wants (the view card, the
+  // Centric ring text), but feeding that into the edit form would silently
+  // drop a previously-picked location's coordinates on every re-edit, even
+  // one that never touches the location fields. Every entry's text still
+  // runs through shortenLocationText, so old full-address text self-heals
+  // here too, without needing a resave first.
+  function locationEntriesOf(person) {
+    if (!person) return [];
+    const raw = Array.isArray(person.locations) && person.locations.length ? person.locations
+      : person.location ? [person.location] : [];
+    return raw.map(entry => {
+      const isObj = entry && typeof entry === 'object';
+      const text = shortenLocationText(isObj ? (entry.text || '') : (entry || ''));
+      const lat = isObj && Number.isFinite(entry.lat) ? entry.lat : null;
+      const lon = isObj && Number.isFinite(entry.lon) ? entry.lon : null;
+      return { text, lat, lon };
+    });
   }
 
   // A person's contact entries (phone/email, in whatever order they were

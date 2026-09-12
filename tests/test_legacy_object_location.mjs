@@ -63,20 +63,24 @@ try {
   await page.selectOption('#viewModeSelect', 'traditional');
   await page.waitForTimeout(300);
 
-  console.log('\n=== Edit form: the object location preloads as its plain text, editable and re-savable as a plain string ===');
+  console.log('\n=== Edit form: the object location preloads as its text (via locationEntriesOf), coordinates preserved on resave ===');
   await page.click('.person-card:has-text("Leftover Object")');
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
   const rowValues = await page.evaluate(() => Array.from(document.querySelectorAll('.location-row-input')).map(el => el.textContent));
   console.log('preloaded rows:', JSON.stringify(rowValues));
-  if (rowValues[0] !== 'Boston, Massachusetts') throw new Error(`Expected the object location to preload as plain text, got: ${JSON.stringify(rowValues)}`);
+  if (rowValues[0] !== 'Boston, Massachusetts') throw new Error(`Expected the object location to preload as its text, got: ${JSON.stringify(rowValues)}`);
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations after resave:', JSON.stringify(saved.locations));
-  if (typeof saved.locations[0] !== 'string' || saved.locations[0] !== 'Boston, Massachusetts') {
-    throw new Error(`Expected the resave to self-heal to a plain string, got: ${JSON.stringify(saved.locations)}`);
+  // The coordinate-capture plumbing preloads the edit form from the RAW
+  // entry (see locationEntriesOf), not locationsOf's flattened display
+  // text -- so a location that already had real coordinates keeps them
+  // across a resave, rather than losing them the moment it's re-edited.
+  if (saved.locations[0].text !== 'Boston, Massachusetts' || saved.locations[0].lat !== 42.3601 || saved.locations[0].lon !== -71.0589) {
+    throw new Error(`Expected the resave to preserve the existing coordinates, got: ${JSON.stringify(saved.locations)}`);
   }
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);

@@ -59,7 +59,8 @@ try {
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations:', JSON.stringify(saved.locations));
   console.log('saved birthLocation:', saved.birthLocation);
-  if (JSON.stringify(saved.locations) !== JSON.stringify(expectedHistory)) throw new Error('Expected the saved data to now be the shortened form');
+  const savedTexts = saved.locations.map(loc => loc.text);
+  if (JSON.stringify(savedTexts) !== JSON.stringify(expectedHistory)) throw new Error('Expected the saved data to now be the shortened form, got: ' + JSON.stringify(savedTexts));
   if (saved.birthLocation !== 'Melrose, Massachusetts') throw new Error('Expected saved birthLocation to be shortened');
 
   console.log('\nERRORS:', errors);
