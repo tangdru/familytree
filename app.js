@@ -675,7 +675,12 @@
     };
   }
 
-  const parentsCombo = createCombo(document.getElementById('parentsCombo'), { multiple: true, placeholder: 'Add parent…' });
+  const parentsCombo = createCombo(document.getElementById('parentsCombo'), {
+    multiple: true,
+    placeholder: 'Add parent…',
+    createLabel: '+ Add new parent',
+    onCreateNew: startAddParentFlow,
+  });
 
   // Per-open-form-session draft of each spouse chip's relationship status,
   // keyed by spouse id -- 'current' or 'former'. Populated when the form
@@ -2125,6 +2130,11 @@
   // tree yet.
   let pendingSpouseSnapshot = null;
 
+  // Same idea as pendingSpouseSnapshot, for "+ Add new parent" (see
+  // startAddParentFlow) -- no current/former confirm step needed here,
+  // since parents don't carry that status.
+  let pendingParentSnapshot = null;
+
   function snapshotPersonForm() {
     return {
       personId: els.personId.value,
@@ -2193,10 +2203,24 @@
     els.modalTitle.textContent = 'Add Spouse';
   }
 
+  // Triggered by "+ Add new parent" in the parents combo -- same
+  // stash-and-repurpose trick as startAddSpouseFlow.
+  function startAddParentFlow() {
+    pendingParentSnapshot = snapshotPersonForm();
+    openModalForAdd();
+    els.modalTitle.textContent = 'Add Parent';
+  }
+
   function closeModal() {
     if (pendingSpouseSnapshot) {
       const snap = pendingSpouseSnapshot;
       pendingSpouseSnapshot = null;
+      restorePersonForm(snap);
+      return;
+    }
+    if (pendingParentSnapshot) {
+      const snap = pendingParentSnapshot;
+      pendingParentSnapshot = null;
       restorePersonForm(snap);
       return;
     }
@@ -3236,6 +3260,18 @@
           spouseStatusDraft[id] = status;
           spousesCombo.setValues([...spousesCombo.getValues(), id]);
         });
+        return;
+      }
+
+      // Finishing the nested "+ Add new parent" step: same idea, but a
+      // parent chip has no status to confirm, so just pick up the original
+      // edit and add them straight away.
+      if (pendingParentSnapshot) {
+        const snap = pendingParentSnapshot;
+        pendingParentSnapshot = null;
+        renderTree();
+        restorePersonForm(snap);
+        parentsCombo.setValues([...parentsCombo.getValues(), id]);
         return;
       }
 
