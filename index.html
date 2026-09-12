@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609151">
+<link rel="stylesheet" href="style.css?v=202609152">
 </head>
 <body>
   <header class="toolbar">
@@ -179,6 +179,7 @@
 
         <div class="form-row">
           <label id="locationsLabel">Location(s)</label>
+          <p class="hint locations-hint">Drag to reorder — the top one is current. Tap the calendar icon to set when they lived there.</p>
           <div class="locations-list" id="locationsList"></div>
           <button type="button" class="add-location-btn" id="addLocationBtn">+ Add location</button>
         </div>
@@ -457,7 +458,7 @@
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
-  <script src="config.js?v=202609151"></script>
-  <script src="app.js?v=202609151"></script>
+  <script src="config.js?v=202609152"></script>
+  <script src="app.js?v=202609152"></script>
 </body>
 </html>

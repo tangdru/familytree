@@ -61,7 +61,7 @@ try {
   console.log('saved birthLocation:', saved.birthLocation);
   const savedTexts = saved.locations.map(loc => loc.text);
   if (JSON.stringify(savedTexts) !== JSON.stringify(expectedHistory)) throw new Error('Expected the saved data to now be the shortened form, got: ' + JSON.stringify(savedTexts));
-  if (saved.birthLocation !== 'Melrose, Massachusetts') throw new Error('Expected saved birthLocation to be shortened');
+  if (saved.birthLocation.text !== 'Melrose, Massachusetts') throw new Error('Expected saved birthLocation to be shortened, got: ' + JSON.stringify(saved.birthLocation));
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

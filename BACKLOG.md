@@ -22,18 +22,30 @@ at once (would need its own layout redesign), or if `partnerIdOf` should
 handle multiple simultaneous `current` spouses (e.g. picking among them)
 rather than just the first.
 
-## Location history: date ranges
+## Location history: date ranges (done) + migration map (still deferred)
 
-A person now has an ordered `locations` list (index 0 = "current") plus a
+A person has an ordered `locations` list (index 0 = "current") plus a
 separate `birthLocation`, replacing the old singular `location` field (see
-`locationsOf`/`currentLocationOf` in `app.js`). Order alone decides which
-location is "current" -- set by dragging a row to the top of the
-Location(s) list on the Add/Edit form (grip handle, `setupLocationRowDrag`
-in `app.js`).
+`locationsOf`/`currentLocationOf`/`birthLocationTextOf` in `app.js`). Order
+alone decides which location is "current" -- set by dragging a row to the
+top of the Location(s) list on the Add/Edit form (grip handle,
+`setupLocationRowDrag`).
 
-Deliberately deferred, to be added as a follow-up: a date range (with a
-calendar-icon picker) per location, shown alongside each row and in the
-Person View's Locations history section.
+Each location entry (and `birthLocation`) is `{text, lat, lon, startDate,
+endDate}` -- lat/lon are only known once a Nominatim suggestion has been
+picked (see `setupLocationAutocomplete`'s `onPick`); startDate/endDate
+accept whatever precision is actually known (a bare year, year+month, or a
+full date -- see `parseLocationDate`/`composeLocationDate`), entered via
+the calendar-icon button's day/month/year `<select>` trio on each row
+(`buildLocationDateGroup`). `birthLocation`'s own date is always
+`birthDate`, not separately editable.
+
+Deliberately deferred, to be added as a follow-up: an actual map view that
+animates a person's (or the whole family's) movement between locations
+over time, using these now-collected coordinates + dates. None of the
+existing views (Traditional/Chronological/Zodiac/Centric) are geographic,
+so this needs its own real-world map projection and a timeline
+scrubber/playback control -- a bigger, separate design pass.
 
 ## Contact field: phone formatting needs the CDN to load
 

@@ -20,6 +20,12 @@
   // A six-dot grip, for the location-row drag handle (see addLocationRow).
   const DRAG_HANDLE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>';
 
+  // Same glyph as the Born/Died date fields' own calendar icon (see
+  // index.html) -- reused on each location row's date-range button (see
+  // addLocationRow). Outline vs. filled (has a date) is a CSS class, not a
+  // second glyph -- see .location-row-dates.has-dates in style.css.
+  const CALENDAR_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+
   // Icons painted on the Person View / Couple View contact chips -- see
   // buildContactChip().
   const PHONE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.36 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.34 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
@@ -952,24 +958,144 @@
     });
   });
 
-  setupLocationAutocomplete(els.birthLocationInput, els.birthLocationSuggestions);
-
   // ---------- Location(s) list (repeatable, drag-to-reorder rows) ----------
   // An ordered list of free-text locations -- index 0 is "current" (order
-  // decides that, not dates; see locationsOf/currentLocationOf below and
-  // BACKLOG.md for the still-deferred per-location date range).
+  // decides that, not dates -- dragging a row to the top is still the only
+  // way to change which one is current, see refreshLocationCurrentTags).
+  // Each row can also carry a start/end date, of whatever precision the
+  // person actually knows (year alone, year+month, or a full date) --
+  // collecting SOME date beats forcing a full one nobody has, so this is a
+  // trio of plain day/month/year <select>s (each independently nullable
+  // via a leading "–" option) behind a calendar-icon toggle, not a native
+  // <input type=date> (which can't represent a partial date at all).
 
-  // value is either a legacy plain string or a {text,lat,lon} entry (see
-  // locationsOf) -- either way, any coordinates known for the row are kept
-  // on its own dataset (not the person object) until save, and refreshed
-  // whenever a fresh suggestion is picked (see setupLocationAutocomplete's
-  // onPick) or invalidated the moment the text is hand-edited.
+  // Parses a location date string of whatever precision was saved --
+  // '1992', '1992-06', or '1992-06-15' -- into {year,month,day} parts
+  // (each '' if not given), for prefilling the day/month/year <select>
+  // trio. The inverse of composeLocationDate.
+  function parseLocationDate(value) {
+    const m = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value || '');
+    if (!m) return { year: '', month: '', day: '' };
+    return { year: m[1], month: m[2] || '', day: m[3] || '' };
+  }
+
+  // Composes whatever precision was actually filled in -- never padding a
+  // missing month/day onto a bare year. A day with no month is dropped
+  // (meaningless on its own); year is required for any result at all.
+  function composeLocationDate(year, month, day) {
+    if (!year) return null;
+    if (!month) return year;
+    if (!day) return `${year}-${month}`;
+    return `${year}-${month}-${day}`;
+  }
+
+  // Formats a parsed date string for display (Person View history, and
+  // the calendar button's own title) -- as fine-grained as what was
+  // actually saved, e.g. "1992", "Jun 1992", or "Jun 15, 1992".
+  function formatLocationDate(value) {
+    const { year, month, day } = parseLocationDate(value);
+    if (!year) return '';
+    if (!month) return year;
+    const monthName = new Date(2000, Number(month) - 1, 1).toLocaleString('en-US', { month: 'short' });
+    if (!day) return `${monthName} ${year}`;
+    return `${monthName} ${Number(day)}, ${year}`;
+  }
+
+  // One <select> of the day/month/year trio -- `options` is [value,label]
+  // pairs, always preceded by a "–" (empty value) placeholder meaning
+  // "unknown". Plain native selects (not a custom widget) so iOS renders
+  // its own spinning-wheel picker for free, same interaction as a native
+  // phone date picker, without any custom touch/scroll code to maintain.
+  function buildDatePartSelect(options, ariaLabel) {
+    const select = document.createElement('select');
+    select.className = 'location-date-part';
+    select.setAttribute('aria-label', ariaLabel);
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '–';
+    select.appendChild(blank);
+    for (const [value, label] of options) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    }
+    return select;
+  }
+
+  const MONTH_OPTIONS = [
+    ['01', 'Jan'], ['02', 'Feb'], ['03', 'Mar'], ['04', 'Apr'], ['05', 'May'], ['06', 'Jun'],
+    ['07', 'Jul'], ['08', 'Aug'], ['09', 'Sep'], ['10', 'Oct'], ['11', 'Nov'], ['12', 'Dec'],
+  ];
+  const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => [d, String(Number(d))]);
+  // Descending (most recent first) -- a birth/move year within a living
+  // family's memory is far more likely near the top of the list than 1900.
+  const CURRENT_YEAR = new Date().getFullYear();
+  const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1899 }, (_, i) => String(CURRENT_YEAR - i)).map(y => [y, y]);
+
+  // Builds one Start/End date-part row: a label plus its own day/month/year
+  // trio, prefilled from `initialValue` (a composeLocationDate-shaped
+  // string or null). onChange fires with the recomposed string (or null)
+  // every time any of the three selects changes.
+  function buildLocationDateGroup(labelText, initialValue, onChange) {
+    const group = document.createElement('div');
+    group.className = 'location-date-group';
+    const label = document.createElement('span');
+    label.className = 'location-date-label';
+    label.textContent = labelText;
+    const triad = document.createElement('div');
+    triad.className = 'location-date-triad';
+    const parsed = parseLocationDate(initialValue);
+    const daySelect = buildDatePartSelect(DAY_OPTIONS, `${labelText} day`);
+    const monthSelect = buildDatePartSelect(MONTH_OPTIONS, `${labelText} month`);
+    const yearSelect = buildDatePartSelect(YEAR_OPTIONS, `${labelText} year`);
+    daySelect.value = parsed.day;
+    monthSelect.value = parsed.month;
+    yearSelect.value = parsed.year;
+    const emit = () => onChange(composeLocationDate(yearSelect.value, monthSelect.value, daySelect.value));
+    daySelect.addEventListener('change', emit);
+    monthSelect.addEventListener('change', emit);
+    yearSelect.addEventListener('change', emit);
+    triad.appendChild(daySelect);
+    triad.appendChild(monthSelect);
+    triad.appendChild(yearSelect);
+    group.appendChild(label);
+    group.appendChild(triad);
+    return group;
+  }
+
+  setupLocationAutocomplete(els.birthLocationInput, els.birthLocationSuggestions, (entry) => {
+    els.birthLocationInput.dataset.lat = entry && Number.isFinite(entry.lat) ? String(entry.lat) : '';
+    els.birthLocationInput.dataset.lon = entry && Number.isFinite(entry.lon) ? String(entry.lon) : '';
+  });
+
+  // Closes every open location-date popover except (optionally) one --
+  // called before opening a row's own popover (so only one is ever open
+  // at a time) and from the document-level outside-click handler below.
+  function closeLocationDatePopovers(except) {
+    document.querySelectorAll('.location-date-popover:not([hidden])').forEach(popover => {
+      if (popover !== except) popover.hidden = true;
+    });
+  }
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.location-row-dates')) return;
+    closeLocationDatePopovers();
+  });
+
+  // value is either a legacy plain string or a {text,lat,lon,startDate,
+  // endDate} entry (see locationEntriesOf) -- coordinates and dates known
+  // for the row are kept on its own dataset (not the person object) until
+  // save. Coordinates are refreshed whenever a fresh suggestion is picked
+  // (see setupLocationAutocomplete's onPick) or invalidated the moment the
+  // text is hand-edited; dates are refreshed from the calendar popover.
   function addLocationRow(value) {
     const initial = (value && typeof value === 'object') ? value : { text: value || '', lat: null, lon: null };
     const row = document.createElement('div');
     row.className = 'location-row';
     row.dataset.lat = Number.isFinite(initial.lat) ? String(initial.lat) : '';
     row.dataset.lon = Number.isFinite(initial.lon) ? String(initial.lon) : '';
+    row.dataset.startDate = initial.startDate || '';
+    row.dataset.endDate = initial.endDate || '';
 
     const handle = document.createElement('span');
     handle.className = 'location-row-handle';
@@ -995,6 +1121,45 @@
     field.appendChild(input);
     field.appendChild(suggestions);
 
+    // Calendar-icon toggle + its date-range popover -- outline while
+    // neither date is set, filled (see .has-dates in style.css) once
+    // either one is, so the row itself hints whether dates are recorded
+    // without needing to open the popover to check.
+    const datesWrap = document.createElement('div');
+    datesWrap.className = 'location-row-dates';
+    const datesBtn = document.createElement('button');
+    datesBtn.type = 'button';
+    datesBtn.className = 'location-dates-btn';
+    datesBtn.setAttribute('aria-label', 'Set date range');
+    datesBtn.innerHTML = CALENDAR_ICON_SVG;
+    const popover = document.createElement('div');
+    popover.className = 'location-date-popover';
+    popover.hidden = true;
+    function refreshDatesBtnState() {
+      const hasDates = !!(row.dataset.startDate || row.dataset.endDate);
+      datesBtn.classList.toggle('has-dates', hasDates);
+      const startLabel = formatLocationDate(row.dataset.startDate);
+      const endLabel = formatLocationDate(row.dataset.endDate);
+      datesBtn.title = hasDates ? `${startLabel || '?'} – ${endLabel || '?'}` : 'Set date range';
+    }
+    popover.appendChild(buildLocationDateGroup('Start', initial.startDate, (next) => {
+      row.dataset.startDate = next || '';
+      refreshDatesBtnState();
+    }));
+    popover.appendChild(buildLocationDateGroup('End', initial.endDate, (next) => {
+      row.dataset.endDate = next || '';
+      refreshDatesBtnState();
+    }));
+    datesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = popover.hidden;
+      closeLocationDatePopovers(willOpen ? popover : null);
+      popover.hidden = !willOpen;
+    });
+    datesWrap.appendChild(datesBtn);
+    datesWrap.appendChild(popover);
+    refreshDatesBtnState();
+
     const tag = document.createElement('span');
     tag.className = 'location-current-tag';
     tag.textContent = 'Current';
@@ -1011,6 +1176,7 @@
 
     row.appendChild(handle);
     row.appendChild(field);
+    row.appendChild(datesWrap);
     row.appendChild(tag);
     row.appendChild(removeBtn);
     els.locationsList.appendChild(row);
@@ -1109,7 +1275,13 @@
         if (!text) return null;
         const lat = Number.parseFloat(row.dataset.lat);
         const lon = Number.parseFloat(row.dataset.lon);
-        return { text, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null };
+        return {
+          text,
+          lat: Number.isFinite(lat) ? lat : null,
+          lon: Number.isFinite(lon) ? lon : null,
+          startDate: row.dataset.startDate || null,
+          endDate: row.dataset.endDate || null,
+        };
       })
       .filter(Boolean);
   }
@@ -1944,6 +2116,8 @@
     els.personId.value = '';
     setEditableText(els.nameInput, '');
     setEditableText(els.birthLocationInput, '');
+    els.birthLocationInput.dataset.lat = '';
+    els.birthLocationInput.dataset.lon = '';
     setLocationRows([]);
     setContactRows([]);
     pendingPhoto = null;
@@ -1971,7 +2145,10 @@
     els.deathInput.value = p.deathDate || '';
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    setEditableText(els.birthLocationInput, shortenLocationText(p.birthLocation || ''));
+    const blEntry = (p.birthLocation && typeof p.birthLocation === 'object') ? p.birthLocation : { text: p.birthLocation || '', lat: null, lon: null };
+    setEditableText(els.birthLocationInput, shortenLocationText(blEntry.text || ''));
+    els.birthLocationInput.dataset.lat = Number.isFinite(blEntry.lat) ? String(blEntry.lat) : '';
+    els.birthLocationInput.dataset.lon = Number.isFinite(blEntry.lon) ? String(blEntry.lon) : '';
     setLocationRows(locationEntriesOf(p));
     els.zodiacInput.value = p.zodiac || '';
     zodiacManuallySet = false;
@@ -2007,7 +2184,15 @@
       name: getEditableText(els.nameInput),
       birth: els.birthInput.value,
       death: els.deathInput.value,
-      birthLocation: getEditableText(els.birthLocationInput),
+      birthLocation: (() => {
+        const lat = Number.parseFloat(els.birthLocationInput.dataset.lat);
+        const lon = Number.parseFloat(els.birthLocationInput.dataset.lon);
+        return {
+          text: getEditableText(els.birthLocationInput),
+          lat: Number.isFinite(lat) ? lat : null,
+          lon: Number.isFinite(lon) ? lon : null,
+        };
+      })(),
       locations: getLocationsFromForm(),
       zodiac: els.zodiacInput.value,
       zodiacManuallySet,
@@ -2030,7 +2215,9 @@
     els.deathInput.value = snap.death;
     updateDateDisplay(els.birthInput, els.birthDisplayText);
     updateDateDisplay(els.deathInput, els.deathDisplayText);
-    setEditableText(els.birthLocationInput, snap.birthLocation);
+    setEditableText(els.birthLocationInput, snap.birthLocation.text);
+    els.birthLocationInput.dataset.lat = Number.isFinite(snap.birthLocation.lat) ? String(snap.birthLocation.lat) : '';
+    els.birthLocationInput.dataset.lon = Number.isFinite(snap.birthLocation.lon) ? String(snap.birthLocation.lon) : '';
     setLocationRows(snap.locations);
     els.zodiacInput.value = snap.zodiac;
     zodiacManuallySet = snap.zodiacManuallySet;
@@ -2136,23 +2323,43 @@
 
   // A location-history row: plain text (not a link, unlike relation rows --
   // a location isn't a tree person to navigate to).
-  function buildLocationRow(location) {
+  // "1992 – 2005" (both known), "From 1992" / "Until 2005" (only one
+  // known), or '' (neither) -- never assumes a blank end means "still
+  // there", since that can't be told apart from "unknown" (see
+  // locationEntriesOf's own note on not forcing completeness).
+  function formatLocationDateRange(startDate, endDate) {
+    const start = formatLocationDate(startDate);
+    const end = formatLocationDate(endDate);
+    if (start && end) return `${start} – ${end}`;
+    if (start) return `From ${start}`;
+    if (end) return `Until ${end}`;
+    return '';
+  }
+
+  function buildLocationRow(entry) {
     const li = document.createElement('li');
     const text = document.createElement('span');
     text.className = 'view-location-text';
-    text.textContent = location;
+    text.textContent = entry.text;
     li.appendChild(text);
+    const range = formatLocationDateRange(entry.startDate, entry.endDate);
+    if (range) {
+      const dates = document.createElement('span');
+      dates.className = 'view-location-dates';
+      dates.textContent = range;
+      li.appendChild(dates);
+    }
     return li;
   }
 
   // Index 0 (the "current" one, per currentLocationOf) already shows up top
   // of the card, so this section is just everywhere *else* the person has
   // lived -- skip it here rather than repeating it.
-  function fillLocationsSection(sectionEl, listEl, locations) {
+  function fillLocationsSection(sectionEl, listEl, entries) {
     listEl.innerHTML = '';
-    const previous = locations.slice(1);
+    const previous = entries.slice(1);
     if (!previous.length) { sectionEl.hidden = true; return; }
-    previous.forEach(loc => listEl.appendChild(buildLocationRow(loc)));
+    previous.forEach(entry => listEl.appendChild(buildLocationRow(entry)));
     sectionEl.hidden = false;
   }
 
@@ -2261,6 +2468,19 @@
     return locationsOf(person)[0] || '';
   }
 
+  // birthLocation is a single field (not a repeatable list), but it now
+  // carries coordinates too -- see openModalForEdit/save -- since a
+  // person's birth is a real point on the same migration timeline as
+  // their other locations, dated implicitly by birthDate rather than its
+  // own editable date. Unwraps to plain display text, same self-healing
+  // treatment as locationsOf.
+  function birthLocationTextOf(person) {
+    if (!person) return '';
+    const bl = person.birthLocation;
+    const text = bl && typeof bl === 'object' ? bl.text : bl;
+    return shortenLocationText(text || '');
+  }
+
   // Like locationsOf, but preserves each entry's real shape -- including
   // any known lat/lon -- instead of flattening to display text. Used only
   // to preload the edit form (see openModalForEdit): locationsOf's plain-
@@ -2279,7 +2499,9 @@
       const text = shortenLocationText(isObj ? (entry.text || '') : (entry || ''));
       const lat = isObj && Number.isFinite(entry.lat) ? entry.lat : null;
       const lon = isObj && Number.isFinite(entry.lon) ? entry.lon : null;
-      return { text, lat, lon };
+      const startDate = isObj && entry.startDate ? entry.startDate : null;
+      const endDate = isObj && entry.endDate ? entry.endDate : null;
+      return { text, lat, lon, startDate, endDate };
     });
   }
 
@@ -2304,7 +2526,7 @@
   // shows up in the meta row instead.
   function personViewDetailLines(p) {
     const lines = [];
-    const shortBirthLocation = shortenLocationText(p.birthLocation || '');
+    const shortBirthLocation = birthLocationTextOf(p);
     if (shortBirthLocation) lines.push(`Born in ${shortBirthLocation}`);
     const adjusted = zodiacAdjustedBirthDate(p);
     const documentedBorn = formatDateDisplay(p.birthDate);
@@ -2443,7 +2665,7 @@
     els.viewContact.innerHTML = '';
     const contacts = contactsOf(p);
     if (contacts.length) {
-      const countryHint = guessCountryFromLocationText(currentLocationOf(p) || p.birthLocation || '') || 'US';
+      const countryHint = guessCountryFromLocationText(currentLocationOf(p) || birthLocationTextOf(p) || '') || 'US';
       contacts.forEach(contact => els.viewContact.appendChild(buildContactChip(contact, countryHint)));
     }
     els.viewContact.hidden = !contacts.length;
@@ -2506,7 +2728,7 @@
     const childIds = Object.keys(data.people).filter(id => ids.some(pid => data.people[id].parents.includes(pid)));
     fillRelationSection(els.viewChildrenSection, els.viewChildrenList, childIds, undefined, true);
 
-    fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationsOf(p));
+    fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationEntriesOf(p));
 
     updateSectionDividers();
 
@@ -2993,7 +3215,18 @@
       person.deathDate = els.deathInput.value || '';
       person.locations = getLocationsFromForm();
       delete person.location; // superseded by locations -- see locationsOf()
-      person.birthLocation = getEditableText(els.birthLocationInput);
+      const birthLocationText = getEditableText(els.birthLocationInput);
+      if (birthLocationText) {
+        const birthLat = Number.parseFloat(els.birthLocationInput.dataset.lat);
+        const birthLon = Number.parseFloat(els.birthLocationInput.dataset.lon);
+        person.birthLocation = {
+          text: birthLocationText,
+          lat: Number.isFinite(birthLat) ? birthLat : null,
+          lon: Number.isFinite(birthLon) ? birthLon : null,
+        };
+      } else {
+        person.birthLocation = '';
+      }
       person.zodiac = els.zodiacInput.value;
       person.contacts = getContactsFromForm();
       delete person.contact; // superseded by contacts -- see contactsOf()

@@ -64,7 +64,7 @@ try {
     throw new Error('Expected two saved locations in order');
   }
   if (saved.location !== undefined) throw new Error('Expected the stale singular `location` field to be removed after save');
-  if (saved.birthLocation !== 'Home Town, Homeland') throw new Error('Expected birthLocation to be saved');
+  if (saved.birthLocation.text !== 'Home Town, Homeland') throw new Error('Expected birthLocation to be saved, got: ' + JSON.stringify(saved.birthLocation));
 
   console.log('\n=== Saving returns to the view card: current in the meta row, Previous location(s) lists only the rest, birth location line in the grouped details block ===');
   viewState = await page.evaluate(() => ({

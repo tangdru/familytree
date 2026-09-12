@@ -584,6 +584,72 @@ body {
   padding: 4px 6px;
 }
 .location-row-remove:hover { color: var(--danger); }
+.locations-hint { margin: -4px 0 2px; }
+
+/* Calendar-icon date-range toggle on each location row -- outline while
+   neither a start nor end date is set, filled solid once either is (see
+   .has-dates, toggled in addLocationRow), so the row itself hints whether
+   a date range is recorded without opening the popover to check. */
+.location-row-dates { position: relative; flex-shrink: 0; }
+.location-dates-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.location-dates-btn svg { width: 15px; height: 15px; }
+.location-dates-btn:hover { border-color: var(--accent); color: var(--accent-dark); }
+.location-dates-btn.has-dates {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.location-date-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 220px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+/* Needs its own [hidden] override, same reason as .view-photo/.view-section
+   elsewhere -- this rule's own explicit display:flex would otherwise beat
+   the UA stylesheet's [hidden]{display:none} regardless of the attribute. */
+.location-date-popover[hidden] { display: none; }
+.location-date-group { display: flex; flex-direction: column; gap: 4px; }
+.location-date-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+}
+.location-date-triad { display: flex; gap: 4px; }
+.location-date-part {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 2px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-family: inherit;
+}
 .add-location-btn {
   align-self: flex-start;
   margin-top: 8px;
@@ -1302,6 +1368,11 @@ body {
   font-size: 0.82rem;
 }
 .view-location-text { font-weight: 400; }
+.view-location-dates {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
 
 @media (prefers-color-scheme: dark) {
   :root {
