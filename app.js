@@ -3,6 +3,19 @@
 
   const STORAGE_KEY = 'familytree.data.v1';
   const TOUR_SEEN_KEY = 'familytree.tourSeen.v1';
+  const THEME_KEY = 'familytree.theme.v1';
+  // The default theme (auto light/dark by OS preference, see style.css)
+  // needs no attribute at all -- only this opt-in second theme does.
+  const ALT_THEME = 'midnight-magenta';
+
+  // Applied immediately (not deferred to init()) so the page never flashes
+  // the default theme before switching -- see #themeToggleBtn's wiring
+  // below for how this gets toggled and persisted.
+  function applyTheme(theme) {
+    if (theme === ALT_THEME) document.documentElement.setAttribute('data-theme', ALT_THEME);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  applyTheme(localStorage.getItem(THEME_KEY));
   const SUPABASE_ROW_ID = 'main';
   const PHOTO_BUCKET = 'photos'; // Supabase Storage bucket -- see supabase-schema.sql
   const MAX_EDIT_DIM = 1600; // cap the source image loaded into the crop editor
@@ -381,6 +394,7 @@
 
     addPersonBtn: document.getElementById('addPersonBtn'),
     exportBtn: document.getElementById('exportBtn'),
+    themeToggleBtn: document.getElementById('themeToggleBtn'),
 
     helpBtn: document.getElementById('helpBtn'),
     helpModal: document.getElementById('helpModal'),
@@ -5403,6 +5417,13 @@
 
   function openHelpModal() { els.helpModal.hidden = false; }
   function closeHelpModal() { els.helpModal.hidden = true; }
+
+  els.themeToggleBtn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === ALT_THEME ? '' : ALT_THEME;
+    if (next) localStorage.setItem(THEME_KEY, next);
+    else localStorage.removeItem(THEME_KEY);
+    applyTheme(next);
+  });
 
   els.helpBtn.addEventListener('click', openHelpModal);
   els.helpCloseBtn.addEventListener('click', closeHelpModal);
