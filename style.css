@@ -1529,12 +1529,23 @@ body {
 :root[data-theme="midnight-magenta"] .location-date-group .location-date-part {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cecece' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
-/* --accent-dark is pure white in this theme (unlike the other two themes,
-   where it's a mid-tone usable as text on a light chip) -- so anywhere it
-   becomes a *background* needs its paired text swapped too, or it's white
-   on white/near-white and unreadable. */
-:root[data-theme="midnight-magenta"] .btn-primary:hover,
-:root[data-theme="midnight-magenta"] .quick-action-primary:hover { color: var(--bg); }
+/* Solid buttons that would otherwise fill with --accent (magenta):
+   switched to white/black instead, per explicit design direction for this
+   theme -- --accent itself is untouched everywhere else (borders/rings,
+   e.g. Centric view's centered-photo ring, still read as magenta). One
+   rule covers both the resting and hovered state: none of these buttons'
+   own :hover rules touch `color`, only background/border, so black text
+   already carries through hover automatically without a separate fix. */
+:root[data-theme="midnight-magenta"] .quick-action-btn:hover,
+:root[data-theme="midnight-magenta"] .quick-action-primary,
+:root[data-theme="midnight-magenta"] .btn-primary {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+:root[data-theme="midnight-magenta"] .centric-metric-btn.active { background: #ffffff; color: #000000; }
+/* The couple card's selected-photo ring. */
+:root[data-theme="midnight-magenta"] .view-photo-pair-member.selected { border-color: #ffffff; }
 :root[data-theme="midnight-magenta"] .btn:hover,
 :root[data-theme="midnight-magenta"] .icon-btn:hover,
 :root[data-theme="midnight-magenta"] .centric-metric-btn:hover:not(.active),

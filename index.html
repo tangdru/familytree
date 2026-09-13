@@ -7,7 +7,7 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609157">
+<link rel="stylesheet" href="style.css?v=202609158">
 </head>
 <body>
   <header class="toolbar">
@@ -20,16 +20,6 @@
       <option value="centric">Centric View</option>
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
-    <!-- Cycles the page's data-theme attribute -- see applyTheme() in
-         app.js. A second, opt-in theme alongside the default (which already
-         auto-switches light/dark by OS preference); this one is a fixed
-         look regardless of OS setting, picked from the Figma theme tester. -->
-    <button id="themeToggleBtn" class="icon-btn" aria-label="Switch theme" title="Switch theme">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="4"></circle>
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-      </svg>
-    </button>
     <button id="exportBtn" class="btn" hidden>Export JSON</button>
   </header>
 
@@ -484,6 +474,6 @@
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609157"></script>
+  <script src="app.js?v=202609158"></script>
 </body>
 </html>

@@ -3,19 +3,13 @@
 
   const STORAGE_KEY = 'familytree.data.v1';
   const TOUR_SEEN_KEY = 'familytree.tourSeen.v1';
-  const THEME_KEY = 'familytree.theme.v1';
-  // The default theme (auto light/dark by OS preference, see style.css)
-  // needs no attribute at all -- only this opt-in second theme does.
+  // Midnight Magenta is the app's only active look right now -- the
+  // original theme's own CSS (style.css's plain :root block and its
+  // @media (prefers-color-scheme: dark) override) is left in place, just
+  // permanently outranked by this attribute rather than deleted, in case
+  // a real theme switcher comes back later.
   const ALT_THEME = 'midnight-magenta';
-
-  // Applied immediately (not deferred to init()) so the page never flashes
-  // the default theme before switching -- see #themeToggleBtn's wiring
-  // below for how this gets toggled and persisted.
-  function applyTheme(theme) {
-    if (theme === ALT_THEME) document.documentElement.setAttribute('data-theme', ALT_THEME);
-    else document.documentElement.removeAttribute('data-theme');
-  }
-  applyTheme(localStorage.getItem(THEME_KEY));
+  document.documentElement.setAttribute('data-theme', ALT_THEME);
   function isMidnightMagenta() {
     return document.documentElement.getAttribute('data-theme') === ALT_THEME;
   }
@@ -397,7 +391,6 @@
 
     addPersonBtn: document.getElementById('addPersonBtn'),
     exportBtn: document.getElementById('exportBtn'),
-    themeToggleBtn: document.getElementById('themeToggleBtn'),
 
     helpBtn: document.getElementById('helpBtn'),
     helpModal: document.getElementById('helpModal'),
@@ -5538,13 +5531,6 @@
 
   function openHelpModal() { els.helpModal.hidden = false; }
   function closeHelpModal() { els.helpModal.hidden = true; }
-
-  els.themeToggleBtn.addEventListener('click', () => {
-    const next = document.documentElement.getAttribute('data-theme') === ALT_THEME ? '' : ALT_THEME;
-    if (next) localStorage.setItem(THEME_KEY, next);
-    else localStorage.removeItem(THEME_KEY);
-    applyTheme(next);
-  });
 
   els.helpBtn.addEventListener('click', openHelpModal);
   els.helpCloseBtn.addEventListener('click', closeHelpModal);
