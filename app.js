@@ -5493,27 +5493,13 @@
     tt.style.left = `${left}px`;
   }
 
-  function showTourStep(index) {
-    const step = tourSteps[index];
-    els.tourTooltipText.textContent = step.text;
-    els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
-    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
-    positionTour(document.querySelector(step.selector));
-  }
-
-  function nextTourStep() {
-    if (tourIndex + 1 >= tourSteps.length) { endTour(); return; }
-    tourIndex += 1;
-    showTourStep(tourIndex);
-  }
-
   // Real Safari has a well-documented bug where a position:fixed element
-  // freshly shown from display:none can get correctly computed styles
+  // whose content/position just changed can get correctly computed styles
   // (confirmed via getComputedStyle) but a stale, un-composited paint,
   // until something else forces a new compositing pass -- confirmed
   // firsthand: panning the tree behind the tour (a totally unrelated
-  // repaint) fixed it instantly. .tour-overlay/.tour-tooltip now force
-  // their own GPU compositing layer via transform: translateZ(0) (see
+  // repaint) fixed it instantly. .tour-overlay/.tour-tooltip force their
+  // own GPU compositing layer via transform: translateZ(0) (see
   // style.css), which should prevent this outright -- this is a second,
   // belt-and-suspenders nudge in case that alone isn't enough: taking an
   // element out of the render tree and back in (a display toggle) is the
@@ -5524,6 +5510,25 @@
     el.style.display = 'none';
     void el.offsetHeight;
     el.style.display = prevDisplay;
+  }
+
+  function showTourStep(index) {
+    const step = tourSteps[index];
+    els.tourTooltipText.textContent = step.text;
+    els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
+    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
+    positionTour(document.querySelector(step.selector));
+    // Every step moves/relabels the same tooltip in place -- the repaint
+    // bug above isn't limited to the tour's very first reveal, so this
+    // has to run on every step, not just the initial one.
+    forceRepaint(els.tourTooltip);
+    requestAnimationFrame(() => forceRepaint(els.tourTooltip));
+  }
+
+  function nextTourStep() {
+    if (tourIndex + 1 >= tourSteps.length) { endTour(); return; }
+    tourIndex += 1;
+    showTourStep(tourIndex);
   }
 
   function startTour() {
@@ -5538,13 +5543,9 @@
     els.tourOverlay.hidden = false;
     void els.tourOverlay.offsetHeight; // force a synchronous layout flush
     showTourStep(tourIndex);
-    forceRepaint(els.tourTooltip);
-    requestAnimationFrame(() => {
-      forceRepaint(els.tourTooltip);
-      requestAnimationFrame(() => {
-        els.tourOverlay.classList.remove('tour-no-transition');
-      });
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      els.tourOverlay.classList.remove('tour-no-transition');
+    }));
   }
 
   function endTour() {
