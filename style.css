@@ -1092,6 +1092,10 @@ body {
   pointer-events: none;
 }
 .tour-overlay[hidden] { display: none; }
+/* See startTour() in app.js -- suppresses every transition (including
+   .btn's own background/border-color one) for the tour's first reveal,
+   so Safari never starts one that can get stuck mid-paint. */
+.tour-no-transition, .tour-no-transition * { transition: none !important; }
 /* The dimmed backdrop is a single oversized box-shadow around this box,
    not a separate full-screen scrim -- the box's own rect (sized/positioned
    in JS to match whatever control is being introduced, see positionTour()
