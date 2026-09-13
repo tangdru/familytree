@@ -11,6 +11,16 @@
   --ink-soft: #6b6355;
   --accent: #a8562f;
   --accent-dark: #7c3f21;
+  /* Solid-fill button colors as their own tokens rather than reusing
+     --accent/--accent-dark directly: Midnight Magenta needs its buttons
+     white-on-black while --accent itself stays magenta everywhere else
+     (borders/rings). Keeping this as a single themed variable, the same
+     pattern as every other color in this file, means .btn-primary etc.
+     never need a second, higher-specificity rule to win against a "wrong"
+     base value -- there is only ever one value to resolve. */
+  --btn-fill: var(--accent);
+  --btn-fill-hover: var(--accent-dark);
+  --btn-fill-ink: #ffffff;
   --line: #b79f7c;
   --card-border: #d8cdb8;
   --danger: #b23a3a;
@@ -135,16 +145,16 @@ body {
   transition: background .15s, border-color .15s, color .15s, transform .1s;
 }
 .quick-action-btn svg { width: 18px; height: 18px; }
-.quick-action-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quick-action-btn:hover { background: var(--btn-fill); border-color: var(--btn-fill); color: var(--btn-fill-ink); }
 .quick-action-btn:active { transform: scale(0.92); }
 
 .quick-action-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--btn-fill);
+  border-color: var(--btn-fill);
+  color: var(--btn-fill-ink);
   font-size: 1.4rem;
 }
-.quick-action-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.quick-action-primary:hover { background: var(--btn-fill-hover); border-color: var(--btn-fill-hover); }
 
 /* The search toggle is itself a .quick-action-btn (same circle, same
    spot in the stack); opening it slides a pill-shaped input out from
@@ -198,8 +208,8 @@ body {
 }
 .btn[hidden] { display: none; }
 .btn:hover { background: #f1ead9; border-color: var(--accent); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-primary { background: var(--btn-fill); border-color: var(--btn-fill); color: var(--btn-fill-ink); }
+.btn-primary:hover { background: var(--btn-fill-hover); border-color: var(--btn-fill-hover); }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: var(--danger); color: #fff; }
 .btn-subtle { background: transparent; border-color: transparent; color: var(--ink-soft); }
@@ -351,7 +361,7 @@ body {
   transition: background .15s, color .15s;
 }
 .centric-metric-btn:hover:not(.active) { background: #f1ead9; }
-.centric-metric-btn.active { background: var(--accent); color: #fff; }
+.centric-metric-btn.active { background: var(--btn-fill); color: var(--btn-fill-ink); }
 
 .centric-center-card .person-photo {
   border-color: var(--accent);
@@ -1080,48 +1090,65 @@ body {
 .help-list li { margin-bottom: 6px; }
 .help-list li:last-child { margin-bottom: 0; }
 
-/* ---------- First-time walkthrough ---------- */
-/* Full-viewport layer, but transparent to clicks itself -- only the
-   highlight ring and tooltip (each opted back in below) should ever
-   intercept a tap, so a step that happens to sit over real content never
-   traps the user's next click. */
-.tour-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  pointer-events: none;
-}
-.tour-overlay[hidden] { display: none; }
-/* See startTour() in app.js -- suppresses every transition (including
-   .btn's own background/border-color one) for the tour's first reveal,
-   so Safari never starts one that can get stuck mid-paint. */
-.tour-no-transition, .tour-no-transition * { transition: none !important; }
-/* The dimmed backdrop is a single oversized box-shadow around this box,
-   not a separate full-screen scrim -- the box's own rect (sized/positioned
-   in JS to match whatever control is being introduced, see positionTour()
-   in app.js) is left unpainted, so it reads as a cutout spotlight rather
-   than a highlight drawn on top of a dimmed page. */
-.tour-highlight {
-  position: fixed;
-  border-radius: 10px;
-  box-shadow: 0 0 0 4000px rgba(20, 16, 10, 0.68), 0 0 0 3px var(--accent);
-  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
-  pointer-events: none;
-}
-.tour-tooltip {
-  position: fixed;
-  width: min(280px, calc(100vw - 32px));
+/* ---------- First-time walkthrough (Driver.js) ---------- */
+/* Driver.js's own DOM/classes (see startTour() in app.js), restyled to
+   match the app's theme instead of its default light popover. */
+.driver-popover {
   background: var(--surface);
   color: var(--ink);
   border-radius: 10px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-  padding: 14px 16px;
-  pointer-events: auto;
-  transition: top .25s ease, left .25s ease;
+  padding: 16px;
+  font-family: inherit;
 }
-.tour-tooltip-text { margin: 0 0 12px; font-size: 0.88rem; line-height: 1.45; }
-.tour-tooltip-footer { display: flex; align-items: center; gap: 8px; }
-.tour-progress { font-size: 0.72rem; color: var(--ink-soft); margin-right: auto; }
+.driver-popover-description {
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 0;
+}
+.driver-popover-footer { margin-top: 12px; }
+.driver-popover-progress-text { color: var(--ink-soft); font-size: 0.72rem; }
+.driver-popover-footer-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 12px;
+  border: 1px solid var(--card-border);
+  background: var(--surface);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  transition: background .15s, border-color .15s;
+}
+.driver-popover-footer-btn:hover { background: #f1ead9; border-color: var(--accent); }
+.driver-popover-next-btn, .driver-popover-done-btn {
+  background: var(--btn-fill);
+  border-color: var(--btn-fill);
+  color: var(--btn-fill-ink);
+}
+.driver-popover-next-btn:hover, .driver-popover-done-btn:hover {
+  background: var(--btn-fill-hover);
+  border-color: var(--btn-fill-hover);
+}
+/* Relabeled "Skip" via onPopoverRender in app.js -- reset out of the
+   default unlabeled corner "x" icon's styling into a plain text link. */
+.driver-popover-close-btn {
+  all: unset;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 6px;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  transition: color .15s;
+}
+.driver-popover-close-btn:hover, .driver-popover-close-btn:focus { color: var(--ink); }
+/* The currently-highlighted control -- Driver.js cuts it out of the
+   dimmed backdrop itself, this just adds back the accent-colored ring
+   the old hand-rolled tour drew around it. */
+.driver-active-element { box-shadow: 0 0 0 3px var(--accent); }
 
 /* ---------- Person view (read-only detail) modal ---------- */
 /* Top-aligned rather than the .modal-overlay default of vertically
@@ -1537,6 +1564,15 @@ body {
   --shadow: 0 2px 8px rgba(0,0,0,0.4);
   --centric-inner: #6a6a6a;
   --centric-outer: #2c2c2c;
+  /* Solid buttons fill white/black instead of magenta in this theme --
+     --accent itself stays magenta above (still used for borders/rings,
+     e.g. Centric view's centered-photo ring). Defined here as the same
+     --btn-fill* tokens .btn-primary etc. already read from, so this is
+     the only place their color changes -- no separate, higher-specificity
+     button rule ever has to override a "wrong" base value. */
+  --btn-fill: #ffffff;
+  --btn-fill-hover: #ffffff;
+  --btn-fill-ink: #000000;
 }
 :root[data-theme="midnight-magenta"] .toolbar { box-shadow: 0 4px 16px 4px rgba(0, 0, 0, 0.5); }
 :root[data-theme="midnight-magenta"] .tree-viewport { background-image: radial-gradient(circle, #4a4a4a 1px, transparent 1px); }
@@ -1547,21 +1583,6 @@ body {
 :root[data-theme="midnight-magenta"] .location-date-group .location-date-part {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cecece' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
-/* Solid buttons that would otherwise fill with --accent (magenta):
-   switched to white/black instead, per explicit design direction for this
-   theme -- --accent itself is untouched everywhere else (borders/rings,
-   e.g. Centric view's centered-photo ring, still read as magenta). One
-   rule covers both the resting and hovered state: none of these buttons'
-   own :hover rules touch `color`, only background/border, so black text
-   already carries through hover automatically without a separate fix. */
-:root[data-theme="midnight-magenta"] .quick-action-btn:hover,
-:root[data-theme="midnight-magenta"] .quick-action-primary,
-:root[data-theme="midnight-magenta"] .btn-primary {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
-}
-:root[data-theme="midnight-magenta"] .centric-metric-btn.active { background: #ffffff; color: #000000; }
 /* The couple card's selected-photo ring. */
 :root[data-theme="midnight-magenta"] .view-photo-pair-member.selected { border-color: #ffffff; }
 :root[data-theme="midnight-magenta"] .btn:hover,

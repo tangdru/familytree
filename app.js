@@ -397,13 +397,6 @@
     helpCloseBtn: document.getElementById('helpCloseBtn'),
     helpDoneBtn: document.getElementById('helpDoneBtn'),
     replayTourBtn: document.getElementById('replayTourBtn'),
-    tourOverlay: document.getElementById('tourOverlay'),
-    tourHighlight: document.getElementById('tourHighlight'),
-    tourTooltip: document.getElementById('tourTooltip'),
-    tourTooltipText: document.getElementById('tourTooltipText'),
-    tourProgress: document.getElementById('tourProgress'),
-    tourSkipBtn: document.getElementById('tourSkipBtn'),
-    tourNextBtn: document.getElementById('tourNextBtn'),
 
     modal: document.getElementById('personModal'),
     modalTitle: document.getElementById('modalTitle'),
@@ -5451,97 +5444,45 @@
 
   // ---------- Help & first-time walkthrough ----------
 
-  // Selectors, not element refs: read at tour-start time so the same list
-  // works whether the tour runs on first load (right after seeding/loading
-  // data) or later as a manual replay, and so a step whose target doesn't
-  // currently exist can simply be filtered out instead of breaking the tour.
+  // Driver.js (loaded in index.html), not a hand-rolled overlay -- a
+  // hand-rolled version of this repeatedly hit a real-Safari-only bug
+  // where a position:fixed element whose geometry JS rewrote every step
+  // could compute the correct style but paint a stale one. Several
+  // targeted fixes (GPU-layer promotion, a display toggle, a fresh node
+  // per step, even a fixed tooltip position that stopped touching its own
+  // geometry entirely) all failed to hold up reliably on real devices.
+  // A small, dependency-free, widely-used library is far more likely to
+  // have already had this class of cross-browser rendering bug found and
+  // fixed than another homegrown attempt at it. `skipMissingElement`
+  // does what the old manual selector-filtering did: a step whose target
+  // doesn't currently exist is simply skipped rather than breaking the
+  // tour. Styling lives in style.css under ".driver-popover".
   const TOUR_STEPS = [
-    { selector: '#addPersonBtn', text: 'Tap here to add a new person to the family tree.' },
-    { selector: '#viewModeSelect', text: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.' },
-    { selector: '#searchToggleBtn', text: 'Search for anyone in the tree by name.' },
-    { selector: '.person-card', text: 'Tap anyone’s card to see their full profile, family connections, and contact info.' },
-    { selector: '#fitViewBtn', text: 'Lost? Tap here to fit everyone back into view.' },
-    { selector: '#helpBtn', text: 'Come back here any time to reread this guide or replay the walkthrough.' },
+    { element: '#addPersonBtn', popover: { description: 'Tap here to add a new person to the family tree.' } },
+    { element: '#viewModeSelect', popover: { description: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.' } },
+    { element: '#searchToggleBtn', popover: { description: 'Search for anyone in the tree by name.' } },
+    { element: '.person-card', popover: { description: 'Tap anyone’s card to see their full profile, family connections, and contact info.' } },
+    { element: '#fitViewBtn', popover: { description: 'Lost? Tap here to fit everyone back into view.' } },
+    // Nothing left to skip on this last step -- Done already ends the tour.
+    { element: '#helpBtn', popover: { description: 'Come back here any time to reread this guide or replay the walkthrough.', showButtons: ['next'] } },
   ];
 
-  let tourSteps = [];
-  let tourIndex = 0;
-
-  function positionTour(targetEl) {
-    const rect = targetEl.getBoundingClientRect();
-    const pad = 6;
-    els.tourHighlight.style.top = `${rect.top - pad}px`;
-    els.tourHighlight.style.left = `${rect.left - pad}px`;
-    els.tourHighlight.style.width = `${rect.width + pad * 2}px`;
-    els.tourHighlight.style.height = `${rect.height + pad * 2}px`;
-
-    // Measure the tooltip itself (off-screen first) so it can be flipped
-    // above the target and clamped within the viewport's edges, regardless
-    // of which corner of the screen the target happens to sit in.
-    const tt = els.tourTooltip;
-    tt.style.top = '-9999px';
-    tt.style.left = '-9999px';
-    const ttRect = tt.getBoundingClientRect();
-    const margin = 12;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= ttRect.height + margin + pad
-      ? rect.bottom + pad + margin
-      : Math.max(margin, rect.top - pad - margin - ttRect.height);
-    let left = rect.left + rect.width / 2 - ttRect.width / 2;
-    left = Math.min(Math.max(left, margin), window.innerWidth - ttRect.width - margin);
-    tt.style.top = `${top}px`;
-    tt.style.left = `${left}px`;
-  }
-
-  function showTourStep(index) {
-    const step = tourSteps[index];
-    els.tourTooltipText.textContent = step.text;
-    els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
-    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
-    positionTour(document.querySelector(step.selector));
-  }
-
-  function nextTourStep() {
-    if (tourIndex + 1 >= tourSteps.length) { endTour(); return; }
-    tourIndex += 1;
-    showTourStep(tourIndex);
-  }
-
   function startTour() {
-    tourSteps = TOUR_STEPS.filter((step) => document.querySelector(step.selector));
-    if (!tourSteps.length) return;
-    tourIndex = 0;
-    // Real Safari can leave a freshly-unhidden subtree's own color
-    // transitions (see .btn's transition: background/border-color) stuck
-    // mid-paint -- getComputedStyle already reports the correct final
-    // colors, but the actual painted frame doesn't catch up until some
-    // unrelated repaint elsewhere on the page nudges it (confirmed: panning
-    // the tree behind the tour fixed it). Suppressing transitions for this
-    // first reveal, plus a forced layout flush before positioning, avoids
-    // ever starting one that can get stuck. Removed two frames later so
-    // later steps (Next/Skip) keep their normal transitions.
-    els.tourOverlay.classList.add('tour-no-transition');
-    els.tourOverlay.hidden = false;
-    void els.tourOverlay.offsetHeight; // force a synchronous layout flush
-    showTourStep(tourIndex);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      els.tourOverlay.classList.remove('tour-no-transition');
-    }));
+    window.driver.js.driver({
+      showProgress: true,
+      overlayColor: '#14100a',
+      overlayOpacity: 0.68,
+      stagePadding: 6,
+      stageRadius: 8,
+      showButtons: ['next', 'close'],
+      skipMissingElement: true,
+      // The close ("x") button is otherwise unlabeled -- relabel it to
+      // match the old tour's explicit "Skip" button.
+      onPopoverRender: (popover) => { popover.closeButton.textContent = 'Skip'; },
+      onDestroyed: () => localStorage.setItem(TOUR_SEEN_KEY, '1'),
+      steps: TOUR_STEPS,
+    }).drive();
   }
-
-  function endTour() {
-    els.tourOverlay.hidden = true;
-    localStorage.setItem(TOUR_SEEN_KEY, '1');
-  }
-
-  els.tourNextBtn.addEventListener('click', nextTourStep);
-  els.tourSkipBtn.addEventListener('click', endTour);
-  window.addEventListener('resize', () => {
-    if (els.tourOverlay.hidden) return;
-    const step = tourSteps[tourIndex];
-    const targetEl = step && document.querySelector(step.selector);
-    if (targetEl) positionTour(targetEl);
-  });
 
   function openHelpModal() { els.helpModal.hidden = false; }
   function closeHelpModal() { els.helpModal.hidden = true; }
