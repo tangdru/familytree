@@ -20,47 +20,9 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609161">
+<link rel="stylesheet" href="style.css?v=202609162">
 </head>
 <body>
-  <!-- TEMPORARY diagnostic banner -- remove once the "buttons still look
-       like the old theme on a real device" report is root-caused. Shows
-       plain text so there's no color-perception ambiguity: whether
-       data-theme actually got set, and what --accent/--bg/--ink actually
-       resolve to on THIS device, in THIS browser, right now. -->
-  <div id="themeDebugBanner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font:11px monospace;padding:4px;white-space:pre-wrap;word-break:break-all;"></div>
-  <script>
-    (function () {
-      function report() {
-        var html = document.documentElement;
-        var cs = getComputedStyle(html);
-        var bodyCs = getComputedStyle(document.body);
-        var btn = document.getElementById('tourNextBtn');
-        var btnInfo = 'no #tourNextBtn';
-        if (btn) {
-          var bcs = getComputedStyle(btn);
-          btnInfo = 'class=' + JSON.stringify(btn.className) +
-            ' bg=' + bcs.backgroundColor +
-            ' border=' + bcs.borderColor +
-            ' color=' + bcs.color +
-            ' appearance=' + (bcs.appearance || bcs.webkitAppearance || 'n/a');
-        }
-        document.getElementById('themeDebugBanner').textContent =
-          'data-theme=' + JSON.stringify(html.getAttribute('data-theme')) +
-          ' | --bg=' + cs.getPropertyValue('--bg') +
-          ' | --accent=' + cs.getPropertyValue('--accent') +
-          ' | --ink=' + cs.getPropertyValue('--ink') +
-          ' | bodyBg=' + bodyCs.backgroundColor +
-          ' || tourNextBtn: ' + btnInfo +
-          ' | UA=' + navigator.userAgent;
-      }
-      report();
-      window.addEventListener('load', report);
-      setTimeout(report, 800);
-      setTimeout(report, 1500);
-      setTimeout(report, 2500);
-    })();
-  </script>
   <header class="toolbar">
     <h1 class="toolbar-title">Family Tree</h1>
     <div class="toolbar-spacer"></div>
@@ -525,6 +487,6 @@
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609158"></script>
+  <script src="app.js?v=202609159"></script>
 </body>
 </html>

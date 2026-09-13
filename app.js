@@ -5511,8 +5511,22 @@
     tourSteps = TOUR_STEPS.filter((step) => document.querySelector(step.selector));
     if (!tourSteps.length) return;
     tourIndex = 0;
+    // Real Safari can leave a freshly-unhidden subtree's own color
+    // transitions (see .btn's transition: background/border-color) stuck
+    // mid-paint -- getComputedStyle already reports the correct final
+    // colors, but the actual painted frame doesn't catch up until some
+    // unrelated repaint elsewhere on the page nudges it (confirmed: panning
+    // the tree behind the tour fixed it). Suppressing transitions for this
+    // first reveal, plus a forced layout flush before positioning, avoids
+    // ever starting one that can get stuck. Removed two frames later so
+    // later steps (Next/Skip) keep their normal transitions.
+    els.tourOverlay.classList.add('tour-no-transition');
     els.tourOverlay.hidden = false;
+    void els.tourOverlay.offsetHeight; // force a synchronous layout flush
     showTourStep(tourIndex);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      els.tourOverlay.classList.remove('tour-no-transition');
+    }));
   }
 
   function endTour() {
