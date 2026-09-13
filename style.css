@@ -228,6 +228,17 @@ body {
   pointer-events: none;
 }
 
+/* One-shot Midnight Magenta overlay (see playChronoDotAssemble in app.js)
+   -- viewport-fixed, not part of #treeCanvas's pannable/zoomable transform,
+   matching where the ambient dot-matrix background it stands in for
+   actually lives. */
+.chrono-dot-assemble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 .tree-content {
   position: relative;
 }
