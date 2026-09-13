@@ -1090,51 +1090,65 @@ body {
 .help-list li { margin-bottom: 6px; }
 .help-list li:last-child { margin-bottom: 0; }
 
-/* ---------- First-time walkthrough ---------- */
-/* Full-viewport layer, but transparent to clicks itself -- only the
-   highlight ring and tooltip (each opted back in below) should ever
-   intercept a tap, so a step that happens to sit over real content never
-   traps the user's next click. */
-.tour-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  pointer-events: none;
-}
-.tour-overlay[hidden] { display: none; }
-/* The dimmed backdrop is a single oversized box-shadow around this box,
-   not a separate full-screen scrim -- the box's own rect (sized/positioned
-   in JS to match whatever control is being introduced, see positionTour()
-   in app.js) is left unpainted, so it reads as a cutout spotlight rather
-   than a highlight drawn on top of a dimmed page. */
-.tour-highlight {
-  position: fixed;
-  border-radius: 10px;
-  box-shadow: 0 0 0 4000px rgba(20, 16, 10, 0.68), 0 0 0 3px var(--accent);
-  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
-  pointer-events: none;
-}
-/* Parked in one fixed spot for the whole tour, never repositioned by JS
-   -- see the comment on positionTour() in app.js for why: rewriting this
-   element's own top/left every step is what triggered a real-Safari-only
-   stale-paint bug on its Next/Done button. The 76px right margin clears
-   the quick-action button column so this doesn't sit on top of whichever
-   of those buttons the current step happens to be pointing at. */
-.tour-tooltip {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  width: min(280px, calc(100vw - 92px));
+/* ---------- First-time walkthrough (Driver.js) ---------- */
+/* Driver.js's own DOM/classes (see startTour() in app.js), restyled to
+   match the app's theme instead of its default light popover. */
+.driver-popover {
   background: var(--surface);
   color: var(--ink);
   border-radius: 10px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-  padding: 14px 16px;
-  pointer-events: auto;
+  padding: 16px;
+  font-family: inherit;
 }
-.tour-tooltip-text { margin: 0 0 12px; font-size: 0.88rem; line-height: 1.45; }
-.tour-tooltip-footer { display: flex; align-items: center; gap: 8px; }
-.tour-progress { font-size: 0.72rem; color: var(--ink-soft); margin-right: auto; }
+.driver-popover-description {
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 0;
+}
+.driver-popover-footer { margin-top: 12px; }
+.driver-popover-progress-text { color: var(--ink-soft); font-size: 0.72rem; }
+.driver-popover-footer-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 12px;
+  border: 1px solid var(--card-border);
+  background: var(--surface);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  transition: background .15s, border-color .15s;
+}
+.driver-popover-footer-btn:hover { background: #f1ead9; border-color: var(--accent); }
+.driver-popover-next-btn, .driver-popover-done-btn {
+  background: var(--btn-fill);
+  border-color: var(--btn-fill);
+  color: var(--btn-fill-ink);
+}
+.driver-popover-next-btn:hover, .driver-popover-done-btn:hover {
+  background: var(--btn-fill-hover);
+  border-color: var(--btn-fill-hover);
+}
+/* Relabeled "Skip" via onPopoverRender in app.js -- reset out of the
+   default unlabeled corner "x" icon's styling into a plain text link. */
+.driver-popover-close-btn {
+  all: unset;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 6px;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  transition: color .15s;
+}
+.driver-popover-close-btn:hover, .driver-popover-close-btn:focus { color: var(--ink); }
+/* The currently-highlighted control -- Driver.js cuts it out of the
+   dimmed backdrop itself, this just adds back the accent-colored ring
+   the old hand-rolled tour drew around it. */
+.driver-active-element { box-shadow: 0 0 0 3px var(--accent); }
 
 /* ---------- Person view (read-only detail) modal ---------- */
 /* Top-aligned rather than the .modal-overlay default of vertically

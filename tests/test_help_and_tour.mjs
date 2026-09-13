@@ -25,12 +25,29 @@ try {
   });
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
 
+  // The tour is Driver.js (see startTour() in app.js): it marks the tour
+  // active/inactive via a `driver-active` class on <body>, rather than a
+  // hidden attribute on an app-owned overlay element.
+  const isTourActive = () => page.evaluate(() => document.body.classList.contains('driver-active'));
+  const progressText = () => page.evaluate(() => document.querySelector('.driver-popover-progress-text')?.textContent || '');
+  // Driver.js's step transition (position/content update) lands ~150-200ms
+  // after the click resolves -- polling for actual change instead of a
+  // fixed sleep avoids flakiness right at that boundary.
+  async function clickNextAndWait(prevProgress) {
+    await page.click('.driver-popover-next-btn');
+    await page.waitForFunction(
+      (prev) => document.querySelector('.driver-popover-progress-text')?.textContent !== prev
+        || !document.body.classList.contains('driver-active'),
+      prevProgress,
+      { timeout: 5000 },
+    );
+  }
+
   console.log('=== First visit: tour auto-starts ===');
   await page.waitForTimeout(900);
-  const overlayHiddenAfterLoad = await page.evaluate(() => document.getElementById('tourOverlay').hidden);
-  if (overlayHiddenAfterLoad) throw new Error('Expected the tour overlay to auto-show on first visit');
-  const firstStepText = await page.evaluate(() => document.getElementById('tourTooltipText').textContent);
-  if (!firstStepText.includes('Add Person') && !firstStepText.toLowerCase().includes('add')) {
+  if (!(await isTourActive())) throw new Error('Expected the tour to auto-show on first visit');
+  const firstStepText = await page.evaluate(() => document.querySelector('.driver-popover-description')?.textContent || '');
+  if (!firstStepText.toLowerCase().includes('add')) {
     throw new Error(`Expected first tour step to mention adding a person, got: "${firstStepText}"`);
   }
   console.log('Confirmed: tour auto-shows on first visit, step 1 =', JSON.stringify(firstStepText));
@@ -38,16 +55,14 @@ try {
   console.log('\n=== Stepping through the whole tour via Next ===');
   let steps = 1;
   while (true) {
-    const progress = await page.evaluate(() => document.getElementById('tourProgress').textContent);
+    const progress = await progressText();
     const [cur, , total] = progress.split(' ');
-    await page.click('#tourNextBtn');
-    await page.waitForTimeout(150);
+    await clickNextAndWait(progress);
     steps++;
     if (cur === total) break;
     if (steps > 20) throw new Error('Tour did not terminate after 20 Next clicks');
   }
-  const overlayHiddenAfterDone = await page.evaluate(() => document.getElementById('tourOverlay').hidden);
-  if (!overlayHiddenAfterDone) throw new Error('Expected the tour overlay to hide after clicking through to Done');
+  if (await isTourActive()) throw new Error('Expected the tour to end after clicking through to Done');
   const seenFlag = await page.evaluate(() => localStorage.getItem('familytree.tourSeen.v1'));
   if (seenFlag !== '1') throw new Error('Expected the tour-seen flag to be set after completing the tour');
   console.log('Confirmed: tour completes via repeated Next clicks and sets the seen flag.');
@@ -55,8 +70,7 @@ try {
   console.log('\n=== Reload: tour does NOT auto-show again ===');
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
-  const overlayHiddenOnReload = await page.evaluate(() => document.getElementById('tourOverlay').hidden);
-  if (!overlayHiddenOnReload) throw new Error('Expected the tour NOT to auto-show again after being marked seen');
+  if (await isTourActive()) throw new Error('Expected the tour NOT to auto-show again after being marked seen');
   console.log('Confirmed: tour stays hidden on subsequent visits.');
 
   console.log('\n=== Help modal opens from the toolbar "?" button ===');
@@ -72,37 +86,46 @@ try {
   await page.click('#replayTourBtn');
   await page.waitForTimeout(150);
   const helpHiddenAfterReplay = await page.evaluate(() => document.getElementById('helpModal').hidden);
-  const tourHiddenAfterReplay = await page.evaluate(() => document.getElementById('tourOverlay').hidden);
   if (!helpHiddenAfterReplay) throw new Error('Expected Help modal to close when replaying the walkthrough');
-  if (tourHiddenAfterReplay) throw new Error('Expected the tour to reopen after clicking Replay walkthrough');
+  if (!(await isTourActive())) throw new Error('Expected the tour to reopen after clicking Replay walkthrough');
   console.log('Confirmed: Replay walkthrough closes Help and reopens the tour.');
 
-  console.log('\n=== Skip button ends the tour immediately ===');
-  await page.click('#tourSkipBtn');
+  console.log('\n=== Skip (relabeled close button) ends the tour immediately ===');
+  const skipLabel = await page.evaluate(() => document.querySelector('.driver-popover-close-btn')?.textContent || '');
+  if (skipLabel !== 'Skip') throw new Error(`Expected the close button to read "Skip", got "${skipLabel}"`);
+  await page.click('.driver-popover-close-btn');
   await page.waitForTimeout(150);
-  const tourHiddenAfterSkip = await page.evaluate(() => document.getElementById('tourOverlay').hidden);
-  if (!tourHiddenAfterSkip) throw new Error('Expected Skip to hide the tour overlay');
-  console.log('Confirmed: Skip ends the tour.');
+  if (await isTourActive()) throw new Error('Expected Skip to end the tour');
+  console.log('Confirmed: Skip is labeled and ends the tour.');
 
   console.log('\n=== Highlight tracks the target element (add person button) ===');
   await page.click('#helpBtn');
   await page.click('#replayTourBtn');
   await page.waitForTimeout(200);
-  const addBtnRect = await page.evaluate(() => document.getElementById('addPersonBtn').getBoundingClientRect());
-  const highlightRect = await page.evaluate(() => document.getElementById('tourHighlight').getBoundingClientRect());
-  const centerDx = Math.abs((addBtnRect.left + addBtnRect.width / 2) - (highlightRect.left + highlightRect.width / 2));
-  const centerDy = Math.abs((addBtnRect.top + addBtnRect.height / 2) - (highlightRect.top + highlightRect.height / 2));
-  if (centerDx > 4 || centerDy > 4) {
-    throw new Error(`Expected highlight to be centered on #addPersonBtn, dx=${centerDx} dy=${centerDy}`);
-  }
-  console.log('Confirmed: highlight box is centered on the current step\'s target element.');
+  const isActiveElement = await page.evaluate(() => document.getElementById('addPersonBtn').classList.contains('driver-active-element'));
+  if (!isActiveElement) throw new Error('Expected #addPersonBtn to be marked as the current step\'s active element');
+  console.log('Confirmed: highlight tracks the current step\'s target element.');
 
-  console.log('\n=== Tooltip stays fully within the viewport ===');
-  const tooltipRect = await page.evaluate(() => document.getElementById('tourTooltip').getBoundingClientRect());
-  if (tooltipRect.left < 0 || tooltipRect.top < 0 || tooltipRect.right > 900 || tooltipRect.bottom > 700) {
-    throw new Error(`Tooltip out of viewport bounds: ${JSON.stringify(tooltipRect)}`);
+  console.log('\n=== Popover stays fully within the viewport ===');
+  const popoverRect = await page.evaluate(() => document.querySelector('.driver-popover').getBoundingClientRect());
+  if (popoverRect.left < 0 || popoverRect.top < 0 || popoverRect.right > 900 || popoverRect.bottom > 700) {
+    throw new Error(`Popover out of viewport bounds: ${JSON.stringify(popoverRect)}`);
   }
-  console.log('Confirmed: tooltip stays within viewport bounds.');
+  console.log('Confirmed: popover stays within viewport bounds.');
+
+  console.log('\n=== Skip is hidden on the last step ===');
+  while (true) {
+    const progress = await progressText();
+    const [cur, , total] = progress.split(' ');
+    if (cur === total) break;
+    await clickNextAndWait(progress);
+  }
+  const closeBtnVisibleOnLast = await page.evaluate(() => {
+    const btn = document.querySelector('.driver-popover-close-btn');
+    return !!btn && getComputedStyle(btn).display !== 'none';
+  });
+  if (closeBtnVisibleOnLast) throw new Error('Expected Skip (close) to be hidden on the last tour step');
+  console.log('Confirmed: Skip hidden on the last step.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

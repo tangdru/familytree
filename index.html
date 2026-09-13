@@ -20,7 +20,11 @@
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609165">
+<!-- Vendored locally (not loaded from a CDN) so the first-time walkthrough
+     never depends on a third party being reachable -- see driver.iife.js's
+     own comment in the body for why Driver.js replaced a hand-rolled tour. -->
+<link rel="stylesheet" href="driver.css?v=1">
+<link rel="stylesheet" href="style.css?v=202609166">
 </head>
 <body>
   <header class="toolbar">
@@ -466,27 +470,25 @@
     </div>
   </div>
 
-  <!-- First-time walkthrough: a short sequence of coach-mark tooltips
-       pointing at real toolbar controls, shown once automatically (see
-       TOUR_SEEN_KEY in app.js) and replayable from the Help guide above. -->
-  <div id="tourOverlay" class="tour-overlay" hidden>
-    <div class="tour-highlight" id="tourHighlight"></div>
-    <div class="tour-tooltip" id="tourTooltip">
-      <p class="tour-tooltip-text" id="tourTooltipText"></p>
-      <div class="tour-tooltip-footer">
-        <span class="tour-progress" id="tourProgress"></span>
-        <button type="button" class="btn btn-subtle" id="tourSkipBtn">Skip</button>
-        <button type="button" class="btn btn-primary" id="tourNextBtn">Next</button>
-      </div>
-    </div>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Proper per-country phone formatting for the Contact field -- see
        formatPhoneLive() in app.js, which falls back to simple digit
        grouping if this fails to load. -->
   <script src="https://cdn.jsdelivr.net/npm/libphonenumber-js@1/bundle/libphonenumber-js.min.js"></script>
+  <!-- First-time walkthrough: a short sequence of coach-mark popovers
+       pointing at real toolbar controls, shown once automatically (see
+       TOUR_SEEN_KEY in app.js) and replayable from the Help guide above.
+       Driver.js, not a hand-rolled overlay -- a hand-rolled version of
+       this repeatedly hit a real-Safari-only bug where a position:fixed
+       element whose geometry JS rewrote every step could compute the
+       correct style but paint a stale one; a small, dependency-free,
+       widely-used library is far more likely to have already had that
+       class of cross-browser rendering bug found and fixed than another
+       homegrown attempt at it. Styled to match the app's theme in
+       style.css (search for .driver-popover). Vendored (driver.iife.js)
+       rather than loaded from a CDN, same as every other local file here. -->
+  <script src="driver.iife.js?v=1"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609165"></script>
+  <script src="app.js?v=202609166"></script>
 </body>
 </html>
