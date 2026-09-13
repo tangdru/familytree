@@ -1,5 +1,25 @@
 # Backlog
 
+## Lesson learned: assess before patching a cross-browser rendering bug
+
+The tour walkthrough's Next/Done button hit a real-Safari-only bug (correct
+`getComputedStyle`, stale paint) that took five rounds of point-fixes to
+actually resolve: appearance reset, removing a competing CSS declaration,
+GPU-layer promotion, a forced repaint via display toggle, a fresh DOM node
+per step, and a full redesign to a non-repositioned tooltip -- each one a
+plausible-looking guess at the root cause, shipped, and then reported still
+broken (or, once, actively worse). Only after all of that did the tour get
+rebuilt on Driver.js, a small existing library for exactly this
+highlight+popover pattern -- and that rebuild took a fraction of the time
+the whole patching cycle did, because a widely-used library had already
+had this exact class of cross-browser bug found and fixed by someone else.
+
+Takeaway for next time a fix doesn't land on the first confident attempt:
+stop and assess before shipping another variant of the same patch. Root-
+cause it properly, check whether an existing battle-tested library/pattern
+already solves this class of problem, and weigh rebuild-vs-patch explicitly
+-- rather than defaulting to "try another plausible tweak."
+
 ## Parent couple card: more than 2 parents / more than 1 spouse
 
 The Person View's parent couple card (see the "vertical navigation" comment
