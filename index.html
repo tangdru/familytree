@@ -35,17 +35,30 @@
         var html = document.documentElement;
         var cs = getComputedStyle(html);
         var bodyCs = getComputedStyle(document.body);
+        var btn = document.getElementById('tourNextBtn');
+        var btnInfo = 'no #tourNextBtn';
+        if (btn) {
+          var bcs = getComputedStyle(btn);
+          btnInfo = 'class=' + JSON.stringify(btn.className) +
+            ' bg=' + bcs.backgroundColor +
+            ' border=' + bcs.borderColor +
+            ' color=' + bcs.color +
+            ' appearance=' + (bcs.appearance || bcs.webkitAppearance || 'n/a');
+        }
         document.getElementById('themeDebugBanner').textContent =
           'data-theme=' + JSON.stringify(html.getAttribute('data-theme')) +
           ' | --bg=' + cs.getPropertyValue('--bg') +
           ' | --accent=' + cs.getPropertyValue('--accent') +
           ' | --ink=' + cs.getPropertyValue('--ink') +
           ' | bodyBg=' + bodyCs.backgroundColor +
+          ' || tourNextBtn: ' + btnInfo +
           ' | UA=' + navigator.userAgent;
       }
       report();
       window.addEventListener('load', report);
+      setTimeout(report, 800);
       setTimeout(report, 1500);
+      setTimeout(report, 2500);
     })();
   </script>
   <header class="toolbar">
