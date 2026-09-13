@@ -5507,26 +5507,44 @@
     showTourStep(tourIndex);
   }
 
+  // Real Safari has a well-documented bug where a position:fixed element
+  // freshly shown from display:none can get correctly computed styles
+  // (confirmed via getComputedStyle) but a stale, un-composited paint,
+  // until something else forces a new compositing pass -- confirmed
+  // firsthand: panning the tree behind the tour (a totally unrelated
+  // repaint) fixed it instantly. .tour-overlay/.tour-tooltip now force
+  // their own GPU compositing layer via transform: translateZ(0) (see
+  // style.css), which should prevent this outright -- this is a second,
+  // belt-and-suspenders nudge in case that alone isn't enough: taking an
+  // element out of the render tree and back in (a display toggle) is the
+  // other standard fix for this exact class of Safari bug, forcing a
+  // fresh paint of its current (already-correct) computed style.
+  function forceRepaint(el) {
+    const prevDisplay = el.style.display;
+    el.style.display = 'none';
+    void el.offsetHeight;
+    el.style.display = prevDisplay;
+  }
+
   function startTour() {
     tourSteps = TOUR_STEPS.filter((step) => document.querySelector(step.selector));
     if (!tourSteps.length) return;
     tourIndex = 0;
-    // Real Safari can leave a freshly-unhidden subtree's own color
-    // transitions (see .btn's transition: background/border-color) stuck
-    // mid-paint -- getComputedStyle already reports the correct final
-    // colors, but the actual painted frame doesn't catch up until some
-    // unrelated repaint elsewhere on the page nudges it (confirmed: panning
-    // the tree behind the tour fixed it). Suppressing transitions for this
-    // first reveal, plus a forced layout flush before positioning, avoids
-    // ever starting one that can get stuck. Removed two frames later so
-    // later steps (Next/Skip) keep their normal transitions.
+    // Also suppresses every transition (including .btn's own background/
+    // border-color one) for this first reveal, so nothing can be caught
+    // mid-transition either. Removed two frames later so later steps
+    // (Next/Skip) keep their normal transitions.
     els.tourOverlay.classList.add('tour-no-transition');
     els.tourOverlay.hidden = false;
     void els.tourOverlay.offsetHeight; // force a synchronous layout flush
     showTourStep(tourIndex);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      els.tourOverlay.classList.remove('tour-no-transition');
-    }));
+    forceRepaint(els.tourTooltip);
+    requestAnimationFrame(() => {
+      forceRepaint(els.tourTooltip);
+      requestAnimationFrame(() => {
+        els.tourOverlay.classList.remove('tour-no-transition');
+      });
+    });
   }
 
   function endTour() {

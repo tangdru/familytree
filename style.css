@@ -1090,6 +1090,16 @@ body {
   inset: 0;
   z-index: 200;
   pointer-events: none;
+  /* A well-documented real Safari bug: a position:fixed element that goes
+     from display:none to visible can get correctly computed styles (see
+     getComputedStyle) but a stale, un-composited paint, until something
+     else forces a new compositing pass -- confirmed by panning the tree
+     behind it fixing it instantly. Forcing this onto its own GPU
+     compositing layer up front is the standard fix -- Safari then keeps
+     it correctly repainted from the first frame, rather than needing an
+     unrelated repaint to nudge it. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 .tour-overlay[hidden] { display: none; }
 /* See startTour() in app.js -- suppresses every transition (including
@@ -1118,6 +1128,10 @@ body {
   padding: 14px 16px;
   pointer-events: auto;
   transition: top .25s ease, left .25s ease;
+  /* Own GPU compositing layer -- see .tour-overlay's own comment. This is
+     the element whose child buttons actually showed the stale paint. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 .tour-tooltip-text { margin: 0 0 12px; font-size: 0.88rem; line-height: 1.45; }
 .tour-tooltip-footer { display: flex; align-items: center; gap: 8px; }
