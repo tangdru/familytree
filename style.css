@@ -1485,3 +1485,46 @@ body {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b3a892' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   }
 }
+
+/* ---------- "Midnight Magenta" theme ---------- */
+/* A second, opt-in theme (toggled via #themeToggleBtn -- see applyTheme()
+   in app.js), separate from the default theme's own automatic light/dark
+   switch above. Values pulled straight from the Figma theme tester
+   (https://www.figma.com/design/ugCiusgV5SqfpsBs8iPr9L) -- a flat
+   charcoal ground with a magenta accent, rather than the default theme's
+   warm beige/rust. Doesn't touch a single existing variable's default or
+   dark-mode value; this only ever applies under the [data-theme] attribute,
+   so the original two themes are unaffected regardless of OS preference. */
+:root[data-theme="midnight-magenta"] {
+  --bg: #363636;
+  --surface: #363636;
+  --ink: #ffffff;
+  --ink-soft: #cecece;
+  --accent: #dc14d2;
+  --accent-dark: #ffffff;
+  --line: #ffffff;
+  --card-border: #5d5d5d;
+  --danger: #ff1818;
+  --shadow: 0 2px 8px rgba(0,0,0,0.4);
+  --centric-inner: #6a6a6a;
+  --centric-outer: #2c2c2c;
+}
+:root[data-theme="midnight-magenta"] .tree-viewport { background-image: radial-gradient(circle, #4a4a4a 1px, transparent 1px); }
+:root[data-theme="midnight-magenta"] .person-photo,
+:root[data-theme="midnight-magenta"] .view-photo,
+:root[data-theme="midnight-magenta"] .view-spouse-avatar,
+:root[data-theme="midnight-magenta"] .view-photo-pair-member { background: #4a4a4a; color: #8a8a8a; }
+:root[data-theme="midnight-magenta"] .location-date-group .location-date-part {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cecece' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+/* --accent-dark is pure white in this theme (unlike the other two themes,
+   where it's a mid-tone usable as text on a light chip) -- so anywhere it
+   becomes a *background* needs its paired text swapped too, or it's white
+   on white/near-white and unreadable. */
+:root[data-theme="midnight-magenta"] .btn-primary:hover,
+:root[data-theme="midnight-magenta"] .quick-action-primary:hover { color: var(--bg); }
+:root[data-theme="midnight-magenta"] .btn:hover,
+:root[data-theme="midnight-magenta"] .icon-btn:hover,
+:root[data-theme="midnight-magenta"] .centric-metric-btn:hover:not(.active),
+:root[data-theme="midnight-magenta"] .location-dates-btn:hover,
+:root[data-theme="midnight-magenta"] .combo-option:hover { background: #4a4a4a; }
