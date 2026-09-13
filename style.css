@@ -115,6 +115,8 @@ body {
 }
 
 .quick-action-btn {
+  appearance: none;
+  -webkit-appearance: none;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -175,6 +177,13 @@ body {
 }
 
 .btn {
+  /* Real Safari draws native button chrome (a subtle system gradient/
+     shadow) on top of author colors unless appearance is reset -- on a
+     light custom background (e.g. Midnight Magenta's white buttons) that
+     overlay visibly dulls/grays it, which Chromium doesn't reproduce the
+     same way. Same reason .location-date-part resets appearance below. */
+  appearance: none;
+  -webkit-appearance: none;
   padding: 7px 12px;
   border: 1px solid var(--card-border);
   background: var(--surface);
@@ -195,6 +204,8 @@ body {
 .btn-danger:hover { background: var(--danger); color: #fff; }
 .btn-subtle { background: transparent; border-color: transparent; color: var(--ink-soft); }
 .icon-btn {
+  appearance: none;
+  -webkit-appearance: none;
   background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--ink-soft);
   padding: 4px 8px; border-radius: 6px;
 }
@@ -327,6 +338,8 @@ body {
 }
 .centric-metric-toggle.visible { opacity: 1; pointer-events: auto; }
 .centric-metric-btn {
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
   background: none;
   padding: 6px 14px;
