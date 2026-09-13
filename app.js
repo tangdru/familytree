@@ -5493,27 +5493,36 @@
     tt.style.left = `${left}px`;
   }
 
+  // The one thing empirically proven, firsthand, to fix this real-Safari
+  // paint bug every single time: panning the tree -- a totally unrelated
+  // element -- forces the browser to redo its whole compositing pass,
+  // catching up the tour's stale paint along with it. This reproduces
+  // that same nudge in code instead of waiting for a real gesture: an
+  // imperceptible (0.02px) change to the tree's own pan transform, and
+  // back, across two real frames. Earlier fixes (GPU-layer promotion, a
+  // display toggle, a fresh DOM node) all targeted the tour's own
+  // elements directly and none held up reliably on real devices --
+  // this instead reproduces the exact external trigger that's actually
+  // been shown to work, rather than guessing at another local one.
+  function kickCompositor() {
+    const prevX = view.x;
+    view.x += 0.02;
+    applyTransform();
+    requestAnimationFrame(() => {
+      view.x = prevX;
+      applyTransform();
+    });
+  }
+
   function showTourStep(index) {
     const step = tourSteps[index];
     els.tourTooltipText.textContent = step.text;
     els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
     // Nothing left to skip on the final step -- Done already ends the tour.
     els.tourSkipBtn.hidden = index === tourSteps.length - 1;
-    // A brand-new node, instead of relabeling the existing button in
-    // place, sidesteps a real-Safari-only bug where this button can
-    // compute the correct style (confirmed via getComputedStyle) but
-    // paint a stale one, until something unrelated -- panning the tree
-    // behind the tour -- forces a new compositing pass and fixes it
-    // instantly. Earlier fixes forced a repaint of the existing node
-    // (GPU-layer promotion, a display toggle) and neither held up on
-    // real devices; a freshly created element has no prior paint to go
-    // stale in the first place.
-    const freshNext = els.tourNextBtn.cloneNode(true);
-    freshNext.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
-    els.tourNextBtn.replaceWith(freshNext);
-    els.tourNextBtn = freshNext;
-    els.tourNextBtn.addEventListener('click', nextTourStep);
+    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
     positionTour(document.querySelector(step.selector));
+    kickCompositor();
   }
 
   function nextTourStep() {
