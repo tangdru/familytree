@@ -3,11 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- GitHub Pages serves this file with no cache-control headers of its
+     own, and there's no way to add real ones without a custom server --
+     these meta tags are the only lever available, telling the browser not
+     to reuse a cached copy of THIS document. Without this, iOS Safari in
+     particular can keep serving an old index.html indefinitely (even past
+     a manual reload), which means it never even sees a bumped ?v= below --
+     that only protects style.css/app.js themselves, not the page that
+     references them. Not a 100% guarantee (bfcache and some CDNs can still
+     ignore it), but it's the best available fix for what was otherwise a
+     recurring "the live site looks unchanged after a merge" report. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Family Tree</title>
 <!-- Bump the ?v= query string on style.css/config.js/app.js below whenever
      they change, so iOS Safari's aggressive caching can't serve a stale
      script/stylesheet alongside a freshly-fetched index.html. -->
-<link rel="stylesheet" href="style.css?v=202609158">
+<link rel="stylesheet" href="style.css?v=202609159">
 </head>
 <body>
   <header class="toolbar">
