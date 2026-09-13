@@ -5467,6 +5467,19 @@
   let tourSteps = [];
   let tourIndex = 0;
 
+  // Only the highlight ring tracks the current target -- the tooltip
+  // itself stays parked in one fixed spot (see .tour-tooltip in
+  // style.css) for the whole tour, on purpose: repeatedly rewriting a
+  // position:fixed element's own top/left in JS turned out to trigger a
+  // real-Safari-only bug where its child button could compute the
+  // correct style but paint a stale one (confirmed: getComputedStyle
+  // always showed the right value even when the pixels didn't, and an
+  // unrelated repaint elsewhere fixed it instantly). Several attempts to
+  // force a correct repaint of that reused, moving node -- GPU-layer
+  // promotion, a display toggle, a fresh clone every step, replaying the
+  // exact external trigger that fixed it by hand -- all failed to hold
+  // up reliably on real devices. A tooltip whose position JS never
+  // touches can't suffer that bug in the first place.
   function positionTour(targetEl) {
     const rect = targetEl.getBoundingClientRect();
     const pad = 6;
@@ -5474,44 +5487,6 @@
     els.tourHighlight.style.left = `${rect.left - pad}px`;
     els.tourHighlight.style.width = `${rect.width + pad * 2}px`;
     els.tourHighlight.style.height = `${rect.height + pad * 2}px`;
-
-    // Measure the tooltip itself (off-screen first) so it can be flipped
-    // above the target and clamped within the viewport's edges, regardless
-    // of which corner of the screen the target happens to sit in.
-    const tt = els.tourTooltip;
-    tt.style.top = '-9999px';
-    tt.style.left = '-9999px';
-    const ttRect = tt.getBoundingClientRect();
-    const margin = 12;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= ttRect.height + margin + pad
-      ? rect.bottom + pad + margin
-      : Math.max(margin, rect.top - pad - margin - ttRect.height);
-    let left = rect.left + rect.width / 2 - ttRect.width / 2;
-    left = Math.min(Math.max(left, margin), window.innerWidth - ttRect.width - margin);
-    tt.style.top = `${top}px`;
-    tt.style.left = `${left}px`;
-  }
-
-  // The one thing empirically proven, firsthand, to fix this real-Safari
-  // paint bug every single time: panning the tree -- a totally unrelated
-  // element -- forces the browser to redo its whole compositing pass,
-  // catching up the tour's stale paint along with it. This reproduces
-  // that same nudge in code instead of waiting for a real gesture: an
-  // imperceptible (0.02px) change to the tree's own pan transform, and
-  // back, across two real frames. Earlier fixes (GPU-layer promotion, a
-  // display toggle, a fresh DOM node) all targeted the tour's own
-  // elements directly and none held up reliably on real devices --
-  // this instead reproduces the exact external trigger that's actually
-  // been shown to work, rather than guessing at another local one.
-  function kickCompositor() {
-    const prevX = view.x;
-    view.x += 0.02;
-    applyTransform();
-    requestAnimationFrame(() => {
-      view.x = prevX;
-      applyTransform();
-    });
   }
 
   function showTourStep(index) {
@@ -5522,7 +5497,6 @@
     els.tourSkipBtn.hidden = index === tourSteps.length - 1;
     els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
     positionTour(document.querySelector(step.selector));
-    kickCompositor();
   }
 
   function nextTourStep() {
@@ -5535,17 +5509,8 @@
     tourSteps = TOUR_STEPS.filter((step) => document.querySelector(step.selector));
     if (!tourSteps.length) return;
     tourIndex = 0;
-    // Also suppresses every transition (including .btn's own background/
-    // border-color one) for this first reveal, so nothing can be caught
-    // mid-transition either. Removed two frames later so later steps
-    // (Next/Skip) keep their normal transitions.
-    els.tourOverlay.classList.add('tour-no-transition');
     els.tourOverlay.hidden = false;
-    void els.tourOverlay.offsetHeight; // force a synchronous layout flush
     showTourStep(tourIndex);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      els.tourOverlay.classList.remove('tour-no-transition');
-    }));
   }
 
   function endTour() {
