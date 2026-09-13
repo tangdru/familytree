@@ -1509,6 +1509,7 @@ body {
   --centric-inner: #6a6a6a;
   --centric-outer: #2c2c2c;
 }
+:root[data-theme="midnight-magenta"] .toolbar { box-shadow: 0 4px 16px 4px rgba(0, 0, 0, 0.5); }
 :root[data-theme="midnight-magenta"] .tree-viewport { background-image: radial-gradient(circle, #4a4a4a 1px, transparent 1px); }
 :root[data-theme="midnight-magenta"] .person-photo,
 :root[data-theme="midnight-magenta"] .view-photo,
