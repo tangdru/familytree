@@ -11,6 +11,16 @@
   --ink-soft: #6b6355;
   --accent: #a8562f;
   --accent-dark: #7c3f21;
+  /* Solid-fill button colors as their own tokens rather than reusing
+     --accent/--accent-dark directly: Midnight Magenta needs its buttons
+     white-on-black while --accent itself stays magenta everywhere else
+     (borders/rings). Keeping this as a single themed variable, the same
+     pattern as every other color in this file, means .btn-primary etc.
+     never need a second, higher-specificity rule to win against a "wrong"
+     base value -- there is only ever one value to resolve. */
+  --btn-fill: var(--accent);
+  --btn-fill-hover: var(--accent-dark);
+  --btn-fill-ink: #ffffff;
   --line: #b79f7c;
   --card-border: #d8cdb8;
   --danger: #b23a3a;
@@ -135,16 +145,16 @@ body {
   transition: background .15s, border-color .15s, color .15s, transform .1s;
 }
 .quick-action-btn svg { width: 18px; height: 18px; }
-.quick-action-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quick-action-btn:hover { background: var(--btn-fill); border-color: var(--btn-fill); color: var(--btn-fill-ink); }
 .quick-action-btn:active { transform: scale(0.92); }
 
 .quick-action-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--btn-fill);
+  border-color: var(--btn-fill);
+  color: var(--btn-fill-ink);
   font-size: 1.4rem;
 }
-.quick-action-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.quick-action-primary:hover { background: var(--btn-fill-hover); border-color: var(--btn-fill-hover); }
 
 /* The search toggle is itself a .quick-action-btn (same circle, same
    spot in the stack); opening it slides a pill-shaped input out from
@@ -198,8 +208,8 @@ body {
 }
 .btn[hidden] { display: none; }
 .btn:hover { background: #f1ead9; border-color: var(--accent); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-primary { background: var(--btn-fill); border-color: var(--btn-fill); color: var(--btn-fill-ink); }
+.btn-primary:hover { background: var(--btn-fill-hover); border-color: var(--btn-fill-hover); }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: var(--danger); color: #fff; }
 .btn-subtle { background: transparent; border-color: transparent; color: var(--ink-soft); }
@@ -351,7 +361,7 @@ body {
   transition: background .15s, color .15s;
 }
 .centric-metric-btn:hover:not(.active) { background: #f1ead9; }
-.centric-metric-btn.active { background: var(--accent); color: #fff; }
+.centric-metric-btn.active { background: var(--btn-fill); color: var(--btn-fill-ink); }
 
 .centric-center-card .person-photo {
   border-color: var(--accent);
@@ -1551,6 +1561,15 @@ body {
   --shadow: 0 2px 8px rgba(0,0,0,0.4);
   --centric-inner: #6a6a6a;
   --centric-outer: #2c2c2c;
+  /* Solid buttons fill white/black instead of magenta in this theme --
+     --accent itself stays magenta above (still used for borders/rings,
+     e.g. Centric view's centered-photo ring). Defined here as the same
+     --btn-fill* tokens .btn-primary etc. already read from, so this is
+     the only place their color changes -- no separate, higher-specificity
+     button rule ever has to override a "wrong" base value. */
+  --btn-fill: #ffffff;
+  --btn-fill-hover: #ffffff;
+  --btn-fill-ink: #000000;
 }
 :root[data-theme="midnight-magenta"] .toolbar { box-shadow: 0 4px 16px 4px rgba(0, 0, 0, 0.5); }
 :root[data-theme="midnight-magenta"] .tree-viewport { background-image: radial-gradient(circle, #4a4a4a 1px, transparent 1px); }
@@ -1561,21 +1580,6 @@ body {
 :root[data-theme="midnight-magenta"] .location-date-group .location-date-part {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cecece' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
-/* Solid buttons that would otherwise fill with --accent (magenta):
-   switched to white/black instead, per explicit design direction for this
-   theme -- --accent itself is untouched everywhere else (borders/rings,
-   e.g. Centric view's centered-photo ring, still read as magenta). One
-   rule covers both the resting and hovered state: none of these buttons'
-   own :hover rules touch `color`, only background/border, so black text
-   already carries through hover automatically without a separate fix. */
-:root[data-theme="midnight-magenta"] .quick-action-btn:hover,
-:root[data-theme="midnight-magenta"] .quick-action-primary,
-:root[data-theme="midnight-magenta"] .btn-primary {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
-}
-:root[data-theme="midnight-magenta"] .centric-metric-btn.active { background: #ffffff; color: #000000; }
 /* The couple card's selected-photo ring. */
 :root[data-theme="midnight-magenta"] .view-photo-pair-member.selected { border-color: #ffffff; }
 :root[data-theme="midnight-magenta"] .btn:hover,
