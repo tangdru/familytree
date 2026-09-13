@@ -5497,6 +5497,8 @@
     const step = tourSteps[index];
     els.tourTooltipText.textContent = step.text;
     els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
+    // Nothing left to skip on the final step -- Done already ends the tour.
+    els.tourSkipBtn.hidden = index === tourSteps.length - 1;
     // A brand-new node, instead of relabeling the existing button in
     // place, sidesteps a real-Safari-only bug where this button can
     // compute the correct style (confirmed via getComputedStyle) but
