@@ -1498,9 +1498,10 @@ body {
 }
 
 /* ---------- "Midnight Magenta" theme ---------- */
-/* A second, opt-in theme (toggled via #themeToggleBtn -- see applyTheme()
-   in app.js), separate from the default theme's own automatic light/dark
-   switch above. Values pulled straight from the Figma theme tester
+/* The app's permanent default now (see the unconditional data-theme
+   attribute set in app.js) -- always applied regardless of the default
+   theme's own automatic light/dark switch above, which is left in place
+   but permanently outranked. Values pulled straight from the Figma theme tester
    (https://www.figma.com/design/ugCiusgV5SqfpsBs8iPr9L) -- a flat
    charcoal ground with a magenta accent, rather than the default theme's
    warm beige/rust. Doesn't touch a single existing variable's default or
