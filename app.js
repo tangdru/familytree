@@ -5493,36 +5493,25 @@
     tt.style.left = `${left}px`;
   }
 
-  // Real Safari has a well-documented bug where a position:fixed element
-  // whose content/position just changed can get correctly computed styles
-  // (confirmed via getComputedStyle) but a stale, un-composited paint,
-  // until something else forces a new compositing pass -- confirmed
-  // firsthand: panning the tree behind the tour (a totally unrelated
-  // repaint) fixed it instantly. .tour-overlay/.tour-tooltip force their
-  // own GPU compositing layer via transform: translateZ(0) (see
-  // style.css), which should prevent this outright -- this is a second,
-  // belt-and-suspenders nudge in case that alone isn't enough: taking an
-  // element out of the render tree and back in (a display toggle) is the
-  // other standard fix for this exact class of Safari bug, forcing a
-  // fresh paint of its current (already-correct) computed style.
-  function forceRepaint(el) {
-    const prevDisplay = el.style.display;
-    el.style.display = 'none';
-    void el.offsetHeight;
-    el.style.display = prevDisplay;
-  }
-
   function showTourStep(index) {
     const step = tourSteps[index];
     els.tourTooltipText.textContent = step.text;
     els.tourProgress.textContent = `${index + 1} of ${tourSteps.length}`;
-    els.tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
+    // A brand-new node, instead of relabeling the existing button in
+    // place, sidesteps a real-Safari-only bug where this button can
+    // compute the correct style (confirmed via getComputedStyle) but
+    // paint a stale one, until something unrelated -- panning the tree
+    // behind the tour -- forces a new compositing pass and fixes it
+    // instantly. Earlier fixes forced a repaint of the existing node
+    // (GPU-layer promotion, a display toggle) and neither held up on
+    // real devices; a freshly created element has no prior paint to go
+    // stale in the first place.
+    const freshNext = els.tourNextBtn.cloneNode(true);
+    freshNext.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
+    els.tourNextBtn.replaceWith(freshNext);
+    els.tourNextBtn = freshNext;
+    els.tourNextBtn.addEventListener('click', nextTourStep);
     positionTour(document.querySelector(step.selector));
-    // Every step moves/relabels the same tooltip in place -- the repaint
-    // bug above isn't limited to the tour's very first reveal, so this
-    // has to run on every step, not just the initial one.
-    forceRepaint(els.tourTooltip);
-    requestAnimationFrame(() => forceRepaint(els.tourTooltip));
   }
 
   function nextTourStep() {
