@@ -130,9 +130,14 @@ try {
     if (diff < 5) throw new Error(`Expected a clearly distinct step between ring colors, got a luminance difference of only ${diff.toFixed(1)}`);
   }
   // The outermost ring should not be near-black (the earlier gradient's
-  // "too dark" problem) -- keep it at least moderately light.
+  // "too dark" problem) -- distinctness from its neighbor is already
+  // checked above; this just guards against the whole staircase collapsing
+  // toward zero. Not a fixed "moderately light" floor -- the app's own
+  // default theme (Midnight Magenta) is deliberately dark, so this only
+  // checks for comfortably above true black, not brightness in absolute
+  // terms.
   const outermostLuminance = luminance(stepInfo.discs[stepInfo.discs.length - 1].color);
-  if (outermostLuminance < 80) throw new Error(`Expected the outermost ring to stay moderately light (luminance >= 80), got ${outermostLuminance.toFixed(1)}`);
+  if (outermostLuminance < 20) throw new Error(`Expected the outermost ring to stay comfortably above near-black (luminance >= 20), got ${outermostLuminance.toFixed(1)}`);
   console.log('Confirmed: distinct, strictly-darkening flat color steps from center through the background, outermost ring not too dark.');
 
   console.log('\n=== Switching to Location metric updates the axis labels ===');

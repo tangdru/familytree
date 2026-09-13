@@ -3,19 +3,16 @@
 
   const STORAGE_KEY = 'familytree.data.v1';
   const TOUR_SEEN_KEY = 'familytree.tourSeen.v1';
-  const THEME_KEY = 'familytree.theme.v1';
-  // The default theme (auto light/dark by OS preference, see style.css)
-  // needs no attribute at all -- only this opt-in second theme does.
+  // Midnight Magenta is the app's only active look right now -- the
+  // original theme's own CSS (style.css's plain :root block and its
+  // @media (prefers-color-scheme: dark) override) is left in place, just
+  // permanently outranked by this attribute rather than deleted, in case
+  // a real theme switcher comes back later.
   const ALT_THEME = 'midnight-magenta';
-
-  // Applied immediately (not deferred to init()) so the page never flashes
-  // the default theme before switching -- see #themeToggleBtn's wiring
-  // below for how this gets toggled and persisted.
-  function applyTheme(theme) {
-    if (theme === ALT_THEME) document.documentElement.setAttribute('data-theme', ALT_THEME);
-    else document.documentElement.removeAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', ALT_THEME);
+  function isMidnightMagenta() {
+    return document.documentElement.getAttribute('data-theme') === ALT_THEME;
   }
-  applyTheme(localStorage.getItem(THEME_KEY));
   const SUPABASE_ROW_ID = 'main';
   const PHOTO_BUCKET = 'photos'; // Supabase Storage bucket -- see supabase-schema.sql
   const MAX_EDIT_DIM = 1600; // cap the source image loaded into the crop editor
@@ -394,7 +391,6 @@
 
     addPersonBtn: document.getElementById('addPersonBtn'),
     exportBtn: document.getElementById('exportBtn'),
-    themeToggleBtn: document.getElementById('themeToggleBtn'),
 
     helpBtn: document.getElementById('helpBtn'),
     helpModal: document.getElementById('helpModal'),
@@ -1502,7 +1498,21 @@
       // whatever view comes next.
       els.canvas._centricLabelsSvg.innerHTML = '';
     }
+    // Spawned BEFORE renderTree() wipes the real (already-dashed, already
+    // year-aligned) chrono gridlines it's standing in for -- reads
+    // chronoMinYear/chronoRulerLabels from the chrono render that's about
+    // to be torn down. Scoped to leaving straight back to Traditional (not
+    // Zodiac/Centric), matching the one background this flourish is built
+    // to hand off to -- see playChronoDotAssemble.
+    if (previousViewMode === 'chronological' && viewMode === 'traditional') {
+      playChronoDotAssemble(false);
+    }
     renderTree();
+    // Spawned AFTER renderTree() so chronoMinYear/chronoRulerLabels already
+    // reflect the freshly-rendered chrono layout it's assembling onto.
+    if (previousViewMode === 'traditional' && viewMode === 'chronological') {
+      playChronoDotAssemble(true);
+    }
     if (viewMode === 'zodiac') {
       // Fit the columns' width only -- see computeFitTransform's own note
       // on why height is deliberately left out here.
@@ -5158,10 +5168,114 @@
     const overscan = Math.max(els.viewport.clientWidth, 2000) / MIN_ZOOM;
     const x1 = -overscan;
     const x2 = contentWidth + overscan;
+    // Midnight Magenta only: dashed, echoing the ambient dot-matrix
+    // background (see .tree-viewport's background-image in style.css) that
+    // these lines visually "gather from" -- see playChronoDotAssemble.
+    // Approximate px, not a real pt conversion ("looks like" is fine).
+    const dash = isMidnightMagenta() ? '1,6' : null;
     for (let y = minYear; y <= maxYear; y += 10) {
       const py = chronoYToPixel(y, minYear);
-      svg.insertBefore(svgLine(x1, py, x2, py, 'var(--card-border)', 1), svg.firstChild);
+      svg.insertBefore(svgLine(x1, py, x2, py, 'var(--card-border)', 1, dash), svg.firstChild);
     }
+  }
+
+  // ---------- Midnight Magenta: chrono dot-matrix assemble animation ----------
+  // Only for this theme's Traditional <-> Chronological transition: the
+  // viewport's ambient dot-matrix background (a CSS background-image on
+  // .tree-viewport, viewport-fixed -- it doesn't pan/zoom with the tree)
+  // visually gathers into the real dashed year gridlines drawChronoGridlines
+  // just drew, instead of the dots and the gridlines being two unrelated
+  // things that happen to share the view. A one-shot overlay in VIEWPORT
+  // space (not #treeCanvas's pannable world space, matching where the real
+  // ambient dots themselves live) -- removed the instant its tween finishes,
+  // handing off to the real (already correct, already pannable) gridlines
+  // underneath. Reversed leaving Chronological back to Traditional. Same
+  // "temporary overlay, tween, remove" idiom as playCentricExitCollapse.
+  const CHRONO_DOT_SIZE = 3;    // px diameter at rest, matching the ambient background's own dot size
+  const CHRONO_DOT_SPACING = 22; // must match .tree-viewport's background-size in style.css
+  const CHRONO_DASH_LEN = 1;     // px -- "looks like" 1pt
+  const CHRONO_DASH_GAP = 6;     // px -- "looks like" 6pt
+
+  function playChronoDotAssemble(entering) {
+    if (!isMidnightMagenta()) return;
+    const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
+    if (!vw || !vh || !chronoRulerLabels.length) return;
+    // World -> screen Y, using whatever pan/zoom is CURRENTLY in effect --
+    // unaffected by this transition, since Traditional <-> Chronological
+    // deliberately keeps the camera still (see the view-mode change
+    // handler's own stayingWithinTradAndChrono branch).
+    const rowsScreenY = chronoRulerLabels
+      .map(({ year }) => chronoYToPixel(year, chronoMinYear) * view.scale + view.y)
+      .filter(y => y > -40 && y < vh + 40);
+    if (!rowsScreenY.length) return;
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const overlay = document.createElementNS(svgNS, 'svg');
+    overlay.setAttribute('class', 'chrono-dot-assemble');
+    overlay.setAttribute('width', vw);
+    overlay.setAttribute('height', vh);
+    // Inserted first (not appended), so it paints BEHIND the tree canvas --
+    // the same depth the ambient dot background itself always sits at.
+    els.viewport.insertBefore(overlay, els.viewport.firstChild);
+
+    // A full viewport's worth of dots, at the same spacing/phase as the
+    // ambient CSS background they're standing in for.
+    const cols = Math.ceil(vw / CHRONO_DOT_SPACING) + 1;
+    const rows = Math.ceil(vh / CHRONO_DOT_SPACING) + 1;
+    const dots = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const startX = c * CHRONO_DOT_SPACING;
+        const startY = r * CHRONO_DOT_SPACING;
+        const targetRowY = rowsScreenY.reduce((closest, y) =>
+          Math.abs(y - startY) < Math.abs(closest - startY) ? y : closest, rowsScreenY[0]);
+        dots.push({ startX, startY, targetRowY });
+      }
+    }
+    // Each row's dots get an evenly-spaced dash-rhythm X slot, in the same
+    // left-to-right order they already sit in -- keeps each dot's own
+    // motion mostly vertical (drop/rise onto its row) rather than a
+    // scramble, while still resolving into an evenly dashed line.
+    const byRow = new Map();
+    for (const d of dots) {
+      if (!byRow.has(d.targetRowY)) byRow.set(d.targetRowY, []);
+      byRow.get(d.targetRowY).push(d);
+    }
+    const slot = CHRONO_DASH_LEN + CHRONO_DASH_GAP;
+    for (const rowDots of byRow.values()) {
+      rowDots.sort((a, b) => a.startX - b.startX);
+      rowDots.forEach((d, i) => { d.targetX = i * slot + CHRONO_DASH_LEN / 2; });
+    }
+
+    const rects = dots.map(d => {
+      const rect = document.createElementNS(svgNS, 'rect');
+      rect.setAttribute('fill', 'var(--card-border)');
+      overlay.appendChild(rect);
+      return { rect, d };
+    });
+
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / CARD_MOVE_MS);
+      const eased = 1 - Math.pow(1 - t, 3);
+      // entering: dot -> dash (p 0->1); leaving: dash -> dot (p 1->0),
+      // the same tween played with start/end swapped.
+      const p = entering ? eased : 1 - eased;
+      rects.forEach(({ rect, d }) => {
+        const x = d.startX + (d.targetX - d.startX) * p;
+        const y = d.startY + (d.targetRowY - d.startY) * p;
+        const w = CHRONO_DOT_SIZE + (CHRONO_DASH_LEN - CHRONO_DOT_SIZE) * p;
+        const h = CHRONO_DOT_SIZE; // stays dot-thin -- only width stretches into a dash
+        rect.setAttribute('x', x - w / 2);
+        rect.setAttribute('y', y - h / 2);
+        rect.setAttribute('width', Math.max(0, w));
+        rect.setAttribute('height', h);
+        rect.setAttribute('rx', h / 2);
+      });
+      if (t < 1) requestAnimationFrame(step);
+      else overlay.remove();
+    }
+    requestAnimationFrame(step);
   }
 
   function renderChronoRuler(minYear, maxYear, contentHeight) {
@@ -5417,13 +5531,6 @@
 
   function openHelpModal() { els.helpModal.hidden = false; }
   function closeHelpModal() { els.helpModal.hidden = true; }
-
-  els.themeToggleBtn.addEventListener('click', () => {
-    const next = document.documentElement.getAttribute('data-theme') === ALT_THEME ? '' : ALT_THEME;
-    if (next) localStorage.setItem(THEME_KEY, next);
-    else localStorage.removeItem(THEME_KEY);
-    applyTheme(next);
-  });
 
   els.helpBtn.addEventListener('click', openHelpModal);
   els.helpCloseBtn.addEventListener('click', closeHelpModal);
