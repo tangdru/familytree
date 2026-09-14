@@ -1262,6 +1262,11 @@ body {
 #viewDotsSideRight { grid-column: 3; }
 .view-dots { display: flex; align-items: center; gap: 5px; min-height: 6px; }
 .view-dots[hidden] { display: none; }
+/* Only when there's actually a dot to click -- parents/children reserve
+   this space even with nothing to show (see renderDots' reserveSpace),
+   and a hand cursor over an empty reserved strip would suggest a click
+   does something there when it wouldn't. */
+.view-dots:not(:empty) { cursor: pointer; }
 .view-dot {
   width: 6px;
   height: 6px;
