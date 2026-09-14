@@ -4309,6 +4309,13 @@
   const CENTRIC_RING_GAP = 200; // minimum radial gap between successive rings
   const CENTRIC_MIN_ARC_GAP = 24; // minimum gap between neighboring cards around a ring
   const CENTRIC_PAD = MARGIN + CARD_WIDTH / 2 + 40; // clears a card's own half-width/height at the outer edge
+  // Roughly a typical card's own height (photo + name + subtitle) plus
+  // half the axis label's single line of text plus a small margin -- see
+  // the card-placement wedge around each ring's own label in
+  // renderCentric. An approximation (real card height varies slightly
+  // with name wrapping) is fine here since this only needs to be in the
+  // right ballpark, not exact.
+  const CENTRIC_LABEL_CLEARANCE = 90;
   // Stagger between each successive ring's build-in/out start, so rings
   // animate in sequence (innermost first) rather than all at once -- see
   // animateCentricGrid and centricTransitionDuration.
@@ -4472,12 +4479,19 @@
       disc.setAttribute('stroke', 'none');
       discGroup.appendChild(disc);
       discs[idx] = disc;
-      // Always along the same fixed axis (straight up), regardless of
-      // where that ring's own cards happen to start (see the per-ring
-      // stagger in renderCentric) -- reading top-to-bottom like a ruler
-      // is clearer than chasing each ring's staggered start angle.
+      // Always along the same fixed axis (straight right from the
+      // center), regardless of where that ring's own cards happen to
+      // start (see the per-ring stagger in renderCentric) -- reading
+      // outward left-to-right like a ruler is clearer than chasing each
+      // ring's staggered start angle, and (see renderCentric) needs a
+      // much smaller card-exclusion wedge than a label pointing straight
+      // up ever did, since a card only has to clear its own height
+      // (small, and the same for every ring) rather than its width plus
+      // that ring's own label text width (which varies a lot, and could
+      // be nearly as wide as a card itself for the longer labels).
       const label = document.createElementNS(svgNS, 'text');
-      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('text-anchor', 'start');
+      label.setAttribute('dominant-baseline', 'middle');
       label.setAttribute('fill', 'var(--ink)');
       label.setAttribute('font-size', '16');
       label.setAttribute('font-weight', '700');
@@ -4572,8 +4586,8 @@
       disc.setAttribute('cx', originX);
       disc.setAttribute('cy', originY);
       disc.setAttribute('r', radius);
-      label.setAttribute('x', originX);
-      label.setAttribute('y', originY - radius - 8);
+      label.setAttribute('x', originX + radius + 10);
+      label.setAttribute('y', originY);
       if (isVisible) {
         // Absolute step by ring index -- see centricColorT -- not
         // relative to this metric's own ring count, so ring 4 is the
@@ -4949,15 +4963,26 @@
     for (const idx of ringIndices) {
       const members = rings[idx];
       const radius = radiusByRing[idx];
-      // Every ring starts its own first member at a slightly different
-      // angle (a 30° stagger per ring) rather than all pointing straight
-      // up -- with only one or two members in a ring (common for an inner
-      // ring), starting them all at the same angle would otherwise line
-      // every ring's first card up into one vertical spoke, reading as a
-      // stack rather than actual concentric circles.
-      const ringStartAngle = -Math.PI / 2 + idx * (Math.PI / 6);
+      const n = members.length;
+      // Every ring's own axis label always sits straight right, just
+      // outside its circumference (see updateCentricGrid) -- reserve a
+      // wedge around that same angle wide enough to clear a card's own
+      // height (CENTRIC_LABEL_CLEARANCE already folds in the label's own
+      // line height and a margin), then spread this ring's members
+      // evenly across the rest of the circle instead of the full 360°,
+      // so no card can ever land on it.
+      const halfGap = Math.asin(Math.min(1, CENTRIC_LABEL_CLEARANCE / radius));
+      const usableArc = Math.PI * 2 - halfGap * 2;
+      // A per-ring stagger still rotates where in that remaining arc the
+      // first member starts, for the same reason as before: with only
+      // one or two members (common for a small inner ring), always
+      // starting right at the wedge's edge would otherwise line every
+      // ring's first card up in the same spot, reading as a stack rather
+      // than actual concentric circles.
+      const ringPhase = (idx * (Math.PI / 6)) % usableArc;
       members.forEach((p, i) => {
-        const angle = ringStartAngle + (i / members.length) * Math.PI * 2;
+        const v = (ringPhase + (i / n) * usableArc) % usableArc;
+        const angle = halfGap + v;
         const card = buildCard(p, { subtitle: centricSubtitle(p) });
         card.style.left = `${originX + radius * Math.cos(angle) - CARD_WIDTH / 2}px`;
         els.content.appendChild(card);

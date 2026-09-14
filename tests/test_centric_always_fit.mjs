@@ -64,8 +64,13 @@ try {
   console.log('Confirmed: entering Centric view reframes to fit.');
 
   console.log("\n=== Once inside, recentering does NOT re-fit -- the user's own pan/zoom is preserved ===");
-  // Zoom in hard and pan off-target first, so a genuine re-fit would be obvious.
-  await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
+  // Zoom in hard, so a genuine re-fit would be obvious. Anchored on
+  // lonepeak's own current position (the wheel handler zooms toward the
+  // cursor, see setZoom in app.js) rather than the viewport center, so
+  // this stays clickable however exactly the ring layout places a lone
+  // outer-ring member -- not tied to today's specific angle formula.
+  const lonepeakRect = await page.locator('[data-id="lonepeak"]').boundingBox();
+  await page.mouse.move(lonepeakRect.x + lonepeakRect.width / 2, lonepeakRect.y + lonepeakRect.height / 2);
   await page.mouse.wheel(0, -600);
   await page.waitForTimeout(150);
   const beforeRecenterScale = (await readTransform()).scale;
