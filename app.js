@@ -3017,7 +3017,7 @@
 
   const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes
   const SWIPE_DEADZONE = 10;    // px moved before this counts as dragging at all
-  const SWIPE_SETTLE_MS = 220;  // must match .swipe-settling's transition duration in style.css
+  const SWIPE_SETTLE_MS = 400;  // must match .swipe-settling's transition duration in style.css
   const SWIPE_RESISTANCE = 0.35;    // how far a dead-end drag (no neighbor) travels, relative to the finger
   const SWIPE_RESISTANCE_MAX = 46;  // px cap on a dead-end drag's visual travel
   let swipeStart = null;
