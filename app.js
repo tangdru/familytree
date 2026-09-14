@@ -5477,8 +5477,14 @@
       showButtons: ['next', 'close'],
       skipMissingElement: true,
       // The close ("x") button is otherwise unlabeled -- relabel it to
-      // match the old tour's explicit "Skip" button.
-      onPopoverRender: (popover) => { popover.closeButton.textContent = 'Skip'; },
+      // match the old tour's explicit "Skip" button, and move it (it's a
+      // separate, absolutely-positioned corner element by default) into
+      // the footer row next to Next, where it collides with the arrow/
+      // description far less across the popover's different flip sides.
+      onPopoverRender: (popover) => {
+        popover.closeButton.textContent = 'Skip';
+        popover.footerButtons.insertBefore(popover.closeButton, popover.nextButton);
+      },
       onDestroyed: () => localStorage.setItem(TOUR_SEEN_KEY, '1'),
       steps: TOUR_STEPS,
     }).drive();
