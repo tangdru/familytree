@@ -1130,18 +1130,19 @@ body {
   background: var(--btn-fill-hover);
   border-color: var(--btn-fill-hover);
 }
-/* Relabeled "Skip" via onPopoverRender in app.js -- reset out of the
-   default unlabeled corner "x" icon's styling into a plain text link. */
+/* Relabeled "Skip" and moved into the footer row next to Next via
+   onPopoverRender in app.js -- reset out of the default unlabeled
+   corner "x" icon's absolute positioning (which collided with the
+   arrow/description once moved) into a plain footer button. */
 .driver-popover-close-btn {
   all: unset;
+  box-sizing: border-box;
   cursor: pointer;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.9rem;
   color: var(--ink-soft);
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 4px 6px;
-  position: absolute;
-  top: 14px;
-  right: 14px;
   transition: color .15s;
 }
 .driver-popover-close-btn:hover, .driver-popover-close-btn:focus { color: var(--ink); }
