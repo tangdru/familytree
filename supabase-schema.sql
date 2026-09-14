@@ -63,3 +63,26 @@ create policy "Allow public photo update" on storage.objects
 drop policy if exists "Allow public photo delete" on storage.objects;
 create policy "Allow public photo delete" on storage.objects
   for delete using (bucket_id = 'photos');
+
+-- Voice recordings for Stories: same public, open-write access model as
+-- the photos bucket above -- a story's recording is uploaded here and only
+-- the resulting public URL is stored in family_tree.data.
+insert into storage.buckets (id, name, public)
+values ('voice-recordings', 'voice-recordings', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Allow public voice recording read" on storage.objects;
+create policy "Allow public voice recording read" on storage.objects
+  for select using (bucket_id = 'voice-recordings');
+
+drop policy if exists "Allow public voice recording insert" on storage.objects;
+create policy "Allow public voice recording insert" on storage.objects
+  for insert with check (bucket_id = 'voice-recordings');
+
+drop policy if exists "Allow public voice recording update" on storage.objects;
+create policy "Allow public voice recording update" on storage.objects
+  for update using (bucket_id = 'voice-recordings') with check (bucket_id = 'voice-recordings');
+
+drop policy if exists "Allow public voice recording delete" on storage.objects;
+create policy "Allow public voice recording delete" on storage.objects
+  for delete using (bucket_id = 'voice-recordings');

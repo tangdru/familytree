@@ -76,7 +76,7 @@ try {
   if (await popover.isHidden()) throw new Error('Expected the date popover to reopen on click');
 
   console.log('\n=== Clicking outside closes the popover ===');
-  await page.click('#notesInput');
+  await page.click('#modalTitle');
   await page.waitForTimeout(100);
   if (await popover.isVisible()) throw new Error('Expected clicking outside to close the date popover');
   console.log('Confirmed: outside click closes the popover.');

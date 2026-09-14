@@ -19,14 +19,14 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== Edit Jane, change her notes (unsaved), then add a brand-new parent ===');
+  console.log('=== Edit Jane, change her contact info (unsaved), then add a brand-new parent ===');
   await page.click('.person-card:has-text("Jane Doe")');
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
 
   // Make an in-progress, unsaved edit that must survive the nested add.
-  await page.fill('#notesInput', 'Grew up in Boston.');
+  await page.fill('#contactsList .contact-row-input', 'Grew up in Boston.');
 
   await page.click('#parentsCombo .combo-trigger');
   await page.waitForTimeout(150);
@@ -51,14 +51,14 @@ try {
   const afterState = await page.evaluate(() => ({
     modalTitle: document.getElementById('modalTitle').textContent,
     modalHidden: document.getElementById('personModal').hidden,
-    notes: document.getElementById('notesInput').value,
+    contact: document.querySelector('#contactsList .contact-row-input').textContent,
     chips: Array.from(document.querySelectorAll('#parentsChips .chip')).map(c => c.textContent.replace('✕', '').trim()),
     personId: document.getElementById('personId').value,
   }));
   console.log('after nested save, back in outer form:', JSON.stringify(afterState));
   if (afterState.modalHidden) throw new Error('Expected the modal to still be open (back in the outer edit)');
   if (afterState.modalTitle !== 'Edit Person') throw new Error('Expected to be back in "Edit Person" for Jane');
-  if (afterState.notes !== 'Grew up in Boston.') throw new Error('Expected the unsaved notes edit to survive the nested add');
+  if (afterState.contact !== 'Grew up in Boston.') throw new Error('Expected the unsaved contact edit to survive the nested add');
   if (!afterState.chips.some(c => c.includes('Susan Hart'))) throw new Error('Expected Susan Hart to appear as a parent chip');
 
   console.log('\n=== Save Jane for real, confirm the parent link persisted ===');
@@ -70,8 +70,8 @@ try {
   const susan = Object.values(dataAfterSave).find(p => p.name === 'Susan Hart');
   console.log('jane.parents includes susan:', jane.parents.includes(susan.id));
   if (!jane.parents.includes(susan.id)) throw new Error('Expected Susan to be recorded as one of Jane\'s parents');
-  console.log('jane.notes persisted:', jane.notes);
-  if (jane.notes !== 'Grew up in Boston.') throw new Error('Expected Jane\'s notes edit to have actually saved');
+  console.log('jane.contacts persisted:', jane.contacts);
+  if (!(jane.contacts || []).includes('Grew up in Boston.')) throw new Error('Expected Jane\'s contact edit to have actually saved');
 
   console.log('\n=== Cancel out of a nested add-parent: should return to the outer edit, not close everything ===');
   await page.click('#viewCloseBtn');

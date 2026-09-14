@@ -985,6 +985,16 @@ body {
   align-items: center;
   gap: 8px;
   padding-top: 6px;
+  /* Keeps Save/Cancel/Delete clickable even when a combo dropdown right
+     above it (parents/spouses) is open and tall enough to visually reach
+     down this far -- more likely now that the form is shorter without a
+     Notes field below the last combo to push this footer further away.
+     Needs its own stacking context (position + z-index above the combo
+     dropdown's 50) and an opaque background, or the dropdown would paint
+     on top and swallow clicks meant for these buttons. */
+  position: relative;
+  z-index: 60;
+  background: var(--surface);
 }
 .modal-footer .spacer { flex: 1; }
 
@@ -1456,11 +1466,128 @@ body {
   width: 100%;
   margin-top: 10px;
 }
-.view-notes {
+.view-stories-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.view-stories-header h4 { margin: 0; }
+.btn-small { padding: 4px 9px; font-size: 0.78rem; }
+.view-stories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.story-empty-hint { margin: 0; }
+
+.story-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.story-text {
   margin: 0;
   font-size: 0.88rem;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+.story-mention {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-dark);
+  cursor: pointer;
+}
+.story-mention:hover { text-decoration: underline; }
+.story-audio { width: 100%; height: 32px; }
+.story-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.story-date { font-size: 0.76rem; color: var(--ink-soft); }
+.story-actions { display: flex; gap: 4px; }
+.story-actions .icon-btn { width: 26px; height: 26px; }
+.story-actions .icon-btn svg { width: 14px; height: 14px; }
+.story-mention-snippet {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.story-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.story-editor-input-wrap { position: relative; }
+.story-editor-textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 16px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.story-mention-dropdown .combo-options { max-height: 160px; }
+.story-editor-audio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Needs its own [hidden] override, same reason as .view-section above --
+   this rule's own explicit display:flex would otherwise beat the UA
+   stylesheet's [hidden]{display:none} regardless of the attribute. */
+.story-editor-audio[hidden] { display: none; }
+.story-editor-audio audio { flex: 1; height: 32px; }
+.story-editor-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.story-record-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.story-record-btn:hover { border-color: var(--accent); }
+.story-record-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.story-record-btn.is-recording {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.story-record-btn.is-recording svg { animation: story-record-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .story-record-btn.is-recording svg { animation: none; }
+}
+@keyframes story-record-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .view-section {

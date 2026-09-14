@@ -70,7 +70,7 @@ try {
   await page.waitForTimeout(200);
   const preloaded = await page.evaluate(() => document.getElementById('birthLocationInput').textContent);
   if (preloaded !== 'Chicago, Illinois') throw new Error(`Expected birth location to preload as its picked text, got: "${preloaded}"`);
-  await page.fill('#notesInput', 'Unrelated edit');
+  await page.fill('#contactsList .contact-row-input', 'Unrelated edit');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(300);
 
