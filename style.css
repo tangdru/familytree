@@ -90,7 +90,7 @@ body {
   border: 1px solid var(--card-border);
   border-radius: 6px;
   padding: 5px 6px;
-  max-width: 118px;
+  max-width: 150px;
   flex-shrink: 1;
   min-width: 0;
 }
