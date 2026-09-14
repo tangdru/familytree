@@ -3254,6 +3254,24 @@
     e.preventDefault();
   }, true);
 
+  // A plain tap on one of the four dot indicators navigates the same
+  // direction it's already hinting at -- a click-based equivalent of the
+  // swipe gesture, mainly for a mouse/trackpad (no swipe to make) rather
+  // than a replacement for it. Goes through the exact same
+  // resolveSwipeTarget/commitDragNeighbor pair a committed swipe does, so
+  // there's still only one codepath that actually navigates. Safe even
+  // when a direction is empty (no dots shown, or -- for parents/children,
+  // which always reserve their space -- shown with zero dots): resolveSwipeTarget
+  // just returns null and there's nothing to commit.
+  function navigateDots(axis, sign) {
+    const neighbor = resolveSwipeTarget(axis, sign);
+    if (neighbor) commitDragNeighbor(neighbor);
+  }
+  els.viewDotsParents.addEventListener('click', () => navigateDots('y', 1));
+  els.viewDotsChildren.addEventListener('click', () => navigateDots('y', -1));
+  els.viewDotsSideLeft.addEventListener('click', () => navigateDots('x', 1));
+  els.viewDotsSideRight.addEventListener('click', () => navigateDots('x', -1));
+
   function populateSelectOptions(excludeId) {
     const people = Object.values(data.people)
       .filter(p => p.id !== excludeId)
