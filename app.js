@@ -3257,15 +3257,24 @@
   // A plain tap on one of the four dot indicators navigates the same
   // direction it's already hinting at -- a click-based equivalent of the
   // swipe gesture, mainly for a mouse/trackpad (no swipe to make) rather
-  // than a replacement for it. Goes through the exact same
-  // resolveSwipeTarget/commitDragNeighbor pair a committed swipe does, so
-  // there's still only one codepath that actually navigates. Safe even
-  // when a direction is empty (no dots shown, or -- for parents/children,
-  // which always reserve their space -- shown with zero dots): resolveSwipeTarget
-  // just returns null and there's nothing to commit.
+  // than a replacement for it. Plays the exact same slide animation a
+  // committed drag ends with, by driving the same startSwipeDrag/
+  // endSwipeDrag pair a real swipe does, just without ever calling
+  // updateSwipeDrag in between (there's no pointer position to follow --
+  // this jumps straight to "fully committed," the same as a real drag
+  // released past the threshold). dragCaptureSign has to be set first,
+  // since startSwipeDrag reads it to resolve which neighbor this
+  // direction actually leads to. Safe even when a direction is empty (no
+  // dots shown, or -- for parents/children, which always reserve their
+  // space -- shown with zero dots): dragNeighbor comes back null, and
+  // endSwipeDrag(false) just tears the (empty, invisible) drag layer back
+  // down without animating anything on screen or calling
+  // commitDragNeighbor -- the same dead-end outcome a real swipe has
+  // nowhere to go.
   function navigateDots(axis, sign) {
-    const neighbor = resolveSwipeTarget(axis, sign);
-    if (neighbor) commitDragNeighbor(neighbor);
+    dragCaptureSign = sign;
+    startSwipeDrag(axis);
+    endSwipeDrag(!!dragNeighbor);
   }
   els.viewDotsParents.addEventListener('click', () => navigateDots('y', 1));
   els.viewDotsChildren.addEventListener('click', () => navigateDots('y', -1));
