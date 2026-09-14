@@ -4949,15 +4949,28 @@
     for (const idx of ringIndices) {
       const members = rings[idx];
       const radius = radiusByRing[idx];
-      // Every ring starts its own first member at a slightly different
-      // angle (a 30° stagger per ring) rather than all pointing straight
-      // up -- with only one or two members in a ring (common for an inner
-      // ring), starting them all at the same angle would otherwise line
-      // every ring's first card up into one vertical spoke, reading as a
-      // stack rather than actual concentric circles.
-      const ringStartAngle = -Math.PI / 2 + idx * (Math.PI / 6);
+      const n = members.length;
+      // Every ring's own axis label always sits straight up, just outside
+      // its circumference (see updateCentricGrid) -- reserve a wedge
+      // around that same angle wide enough to clear both a card's own
+      // half-width and that ring's label text (estimated from its
+      // character count, since the label element itself isn't updated
+      // with this ring's text until later, in updateCentricGrid), then
+      // spread this ring's members evenly across the rest of the circle
+      // instead of the full 360°, so no card can ever land on it.
+      const labelHalfWidth = centricRingLabel(centricMetric, idx).length * 4.5;
+      const halfGap = Math.asin(Math.min(1, (CARD_WIDTH / 2 + labelHalfWidth + 12) / radius));
+      const usableArc = Math.PI * 2 - halfGap * 2;
+      // A per-ring stagger still rotates where in that remaining arc the
+      // first member starts, for the same reason as before: with only
+      // one or two members (common for a small inner ring), always
+      // starting right at the wedge's edge would otherwise line every
+      // ring's first card up in the same spot, reading as a stack rather
+      // than actual concentric circles.
+      const ringPhase = (idx * (Math.PI / 6)) % usableArc;
       members.forEach((p, i) => {
-        const angle = ringStartAngle + (i / members.length) * Math.PI * 2;
+        const v = (ringPhase + (i / n) * usableArc) % usableArc;
+        const angle = -Math.PI / 2 + halfGap + v;
         const card = buildCard(p, { subtitle: centricSubtitle(p) });
         card.style.left = `${originX + radius * Math.cos(angle) - CARD_WIDTH / 2}px`;
         els.content.appendChild(card);
