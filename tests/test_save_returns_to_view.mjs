@@ -21,7 +21,7 @@ try {
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
-  await page.fill('#notesInput', 'Loves hiking.');
+  await page.fill('#contactsList .contact-row-input', 'Loves hiking.');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(150);
 
@@ -29,13 +29,13 @@ try {
     editModalHidden: document.getElementById('personModal').hidden,
     viewModalHidden: document.getElementById('personViewModal').hidden,
     viewName: document.getElementById('viewName').textContent,
-    viewNotes: document.getElementById('viewNotes').textContent,
+    viewContact: document.getElementById('viewContact').textContent,
   }));
   console.log(JSON.stringify(state));
   if (!state.editModalHidden) throw new Error('Expected the Edit modal to be closed');
   if (state.viewModalHidden) throw new Error('Expected the Person View modal to be open after saving an edit');
   if (state.viewName !== 'Jane Doe') throw new Error('Expected the view to show the just-edited person');
-  if (state.viewNotes !== 'Loves hiking.') throw new Error('Expected the view to reflect the just-saved edit');
+  if (!state.viewContact.includes('Loves hiking.')) throw new Error('Expected the view to reflect the just-saved edit');
 
   console.log('\n=== Adding a brand-new person: should still land on the tree (highlighted), not a view card (nothing to view back to) ===');
   await page.click('#viewCloseBtn');

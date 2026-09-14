@@ -73,7 +73,7 @@ try {
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
 
-  console.log('\n=== Solo: no relations at all -- side dot strips hidden, parents/children strips stay in flow empty, relations divider hidden ===');
+  console.log('\n=== Solo: no relations at all -- side dot strips hidden, parents/children strips stay in flow empty, relations divider shown (leads into the always-present Stories section) ===');
   await page.click('.person-card[data-id="solo"]');
   await page.waitForTimeout(300);
   const ds = await dotState();
@@ -82,8 +82,11 @@ try {
   if (ds.parents !== 0 || ds.parentsHidden || ds.children !== 0 || ds.childrenHidden || !ds.leftHidden || !ds.rightHidden) {
     throw new Error(`Expected empty (not hidden) parents/children strips and hidden side strips for a person with no relations, got ${JSON.stringify(ds)}`);
   }
-  if (!relDividerHidden) throw new Error('Expected the relations divider to stay hidden with no relation sections to introduce');
-  console.log('Confirmed: no relations means no dots (parents/children strips stay in flow, empty) and no orphan divider.');
+  // Unlike Notes (which used to hide when empty), the Stories section
+  // always shows -- an invitation to add the first one -- so the divider
+  // leading into it is always visible too, even with nothing else below.
+  if (relDividerHidden) throw new Error('Expected the relations divider to stay visible, leading into the always-shown Stories section');
+  console.log('Confirmed: no relations still means no dots (parents/children strips stay in flow, empty), but the divider into Stories always shows.');
 
   console.log('\nERRORS:', errors);
   if (errors.length) process.exit(1);

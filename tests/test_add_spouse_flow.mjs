@@ -15,14 +15,14 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
-  console.log('=== Edit Michael, change his notes (unsaved), then add a brand-new spouse ===');
+  console.log('=== Edit Michael, change his contact info (unsaved), then add a brand-new spouse ===');
   await page.click('.person-card:has-text("Michael Doe")');
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
 
   // Make an in-progress, unsaved edit that must survive the nested add.
-  await page.fill('#notesInput', 'Loves hiking.');
+  await page.fill('#contactsList .contact-row-input', 'Loves hiking.');
 
   await page.click('#spousesCombo .combo-trigger');
   await page.waitForTimeout(150);
@@ -52,14 +52,14 @@ try {
   const afterState = await page.evaluate(() => ({
     modalTitle: document.getElementById('modalTitle').textContent,
     modalHidden: document.getElementById('personModal').hidden,
-    notes: document.getElementById('notesInput').value,
+    contact: document.querySelector('#contactsList .contact-row-input').textContent,
     chips: Array.from(document.querySelectorAll('#spousesChips .chip')).map(c => c.textContent.replace('✕', '').trim()),
     personId: document.getElementById('personId').value,
   }));
   console.log('after nested save, back in outer form:', JSON.stringify(afterState));
   if (afterState.modalHidden) throw new Error('Expected the modal to still be open (back in the outer edit)');
   if (afterState.modalTitle !== 'Edit Person') throw new Error('Expected to be back in "Edit Person" for Michael');
-  if (afterState.notes !== 'Loves hiking.') throw new Error('Expected the unsaved notes edit to survive the nested add');
+  if (afterState.contact !== 'Loves hiking.') throw new Error('Expected the unsaved contact edit to survive the nested add');
   if (!afterState.chips.some(c => c.includes('Susan Hart'))) throw new Error('Expected Susan Hart to appear as a spouse chip');
 
   // Now save Michael for real, and confirm the couple card + bidirectional
@@ -75,8 +75,8 @@ try {
   if (!michael.spouses.includes(susan.id) || !susan.spouses.includes(michael.id)) {
     throw new Error('Expected a symmetric spouse link between Michael and Susan');
   }
-  console.log('michael.notes persisted:', michael.notes);
-  if (michael.notes !== 'Loves hiking.') throw new Error('Expected Michael\'s notes edit to have actually saved');
+  console.log('michael.contacts persisted:', michael.contacts);
+  if (!(michael.contacts || []).includes('Loves hiking.')) throw new Error('Expected Michael\'s contact edit to have actually saved');
 
   console.log('\n=== Saving returned to Michael\'s view -- should now show the couple card with Susan ===');
   const viewState = await page.evaluate(() => ({
