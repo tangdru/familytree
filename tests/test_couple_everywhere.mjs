@@ -77,7 +77,7 @@ try {
     await page.mouse.move(z.x, z.y + 150, { steps: 10 });
     await page.waitForTimeout(30);
     await page.mouse.up();
-    await page.waitForTimeout(400); // outlasts the swipe's own settle-animation delay before it commits
+    await page.waitForTimeout(600); // outlasts the swipe's own settle-animation delay before it commits
   }
   await swipeDown();
   s = await state();

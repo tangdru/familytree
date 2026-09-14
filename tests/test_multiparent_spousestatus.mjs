@@ -51,7 +51,7 @@ try {
   await page.mouse.move(z.x, z.y + 150, { steps: 10 });
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   s = await cardState();
   console.log(JSON.stringify(s));
   if (s.mode !== 'couple' || !s.members.includes('Step Parent')) {

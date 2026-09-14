@@ -36,7 +36,7 @@ try {
   await page.mouse.move(z.x, z.y + 150, { steps: 10 });
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
 
   const coupleMembers = await page.evaluate(() => document.querySelectorAll('#viewPhotoPair .view-photo-pair-member').length);
   console.log('Couple card photo-pair members after swiping down (expect exactly 2):', coupleMembers);

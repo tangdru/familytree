@@ -66,7 +66,7 @@ try {
   }
   const distinct = new Set(samples.filter(Boolean));
   if (distinct.size < 3) throw new Error(`Expected several distinct in-flight transform values, got ${JSON.stringify(samples)}`);
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   console.log('Confirmed: the outgoing card animates through multiple positions instead of jumping straight to the end.');
 
   console.log('\n=== A dead-end direction (no neighbor) does not navigate or get stuck ===');
