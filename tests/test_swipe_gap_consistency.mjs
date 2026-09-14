@@ -57,7 +57,7 @@ try {
   console.log(JSON.stringify(gapInfo, null, 2));
 
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
 
   const expectedGap = restRect.top; // the modal's own top margin, per startSwipeDrag
   console.log(`\nExpected gap (card's own margin to screen edge): ~${expectedGap}px`);
@@ -95,7 +95,7 @@ try {
   });
   console.log(JSON.stringify(gapInfo2, null, 2));
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
 
   if (Math.abs(gapInfo2.gap - expectedGap) > 2) {
     throw new Error(`Gap mismatch dragging down: got ${gapInfo2.gap}px, expected ~${expectedGap}px (outgoing height ${gapInfo2.outHeight}, incoming height ${gapInfo2.incHeight})`);

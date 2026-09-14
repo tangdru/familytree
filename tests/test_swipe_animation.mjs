@@ -63,7 +63,7 @@ try {
   await page.mouse.move(cx - 90, cy, { steps: 5 });
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
 
   console.log('\n=== After a committed left swipe past threshold: view should now show Younger Sib Doe ===');
   const afterLeft = await page.evaluate(() => ({
@@ -97,7 +97,7 @@ try {
   console.log('dead-end mid-drag slot count (expect 1, outgoing only):', JSON.stringify(midDeadEnd));
   if (midDeadEnd.slotCount !== 1) throw new Error('Expected only the outgoing card in a dead-end drag, got ' + midDeadEnd.slotCount + ' slots');
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   const afterDeadEnd = await page.evaluate(() => document.getElementById('viewName').textContent);
   console.log('name after dead-end release (expect unchanged):', afterDeadEnd);
   if (afterDeadEnd !== 'Younger Sib Doe') throw new Error('Expected dead-end swipe to leave the view unchanged, got: ' + afterDeadEnd);
@@ -115,7 +115,7 @@ try {
   await page.mouse.move(cx3 - 25, cy3, { steps: 4 }); // past deadzone, well under threshold
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   const afterSmallDrag = await page.evaluate(() => ({
     name: document.getElementById('viewName').textContent,
     layerGone: !document.querySelector('.swipe-drag-layer'),
@@ -133,7 +133,7 @@ try {
   await page.mouse.move(cx4, cy4 - 90, { steps: 6 });
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   const afterUp = await page.evaluate(() => document.getElementById('viewName').textContent);
   console.log('name after swipe up (expect Kid Doe):', afterUp);
   if (afterUp !== 'Kid Doe') throw new Error('Expected swipe up to land on Kid Doe, got: ' + afterUp);
@@ -147,7 +147,7 @@ try {
   await page.mouse.move(cx5, cy5 + 90, { steps: 6 });
   await page.waitForTimeout(30);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   const afterDown = await page.evaluate(() => document.getElementById('viewName').textContent);
   console.log('name after swipe down (expect Middle Doe):', afterDown);
   if (afterDown !== 'Middle Doe') throw new Error('Expected swipe down to return to Middle Doe, got: ' + afterDown);

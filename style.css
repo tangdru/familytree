@@ -1216,7 +1216,7 @@ body {
   left: 0;
   width: 100%;
 }
-.swipe-card-slot.swipe-settling { transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.swipe-card-slot.swipe-settling { transition: transform 400ms cubic-bezier(0.22, 0.61, 0.36, 1); }
 
 .view-person {
   display: flex;
@@ -1262,6 +1262,16 @@ body {
 #viewDotsSideRight { grid-column: 3; }
 .view-dots { display: flex; align-items: center; gap: 5px; min-height: 6px; }
 .view-dots[hidden] { display: none; }
+/* Only when there's actually a dot to click -- parents/children reserve
+   this space even with nothing to show (see renderDots' reserveSpace),
+   and a hand cursor (or an enlarged hit area) over an empty reserved
+   strip would suggest a click does something there when it wouldn't.
+   The dots themselves are tiny -- padding plus an equal negative margin
+   grows the actual clickable/tappable box well past them without
+   changing anything about the layout around it (the negative margin
+   cancels the padding's own contribution to size, so neighboring
+   elements sit exactly where they did before). */
+.view-dots:not(:empty) { cursor: pointer; padding: 10px; margin: -10px; }
 .view-dot {
   width: 6px;
   height: 6px;

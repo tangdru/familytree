@@ -91,7 +91,7 @@ try {
   }
 
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
 
   const afterInfo = await page.evaluate(() => {
     const card = document.getElementById('personViewCard');

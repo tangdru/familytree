@@ -3017,7 +3017,7 @@
 
   const SWIPE_THRESHOLD = 48;   // px; smaller drags are taps, not swipes
   const SWIPE_DEADZONE = 10;    // px moved before this counts as dragging at all
-  const SWIPE_SETTLE_MS = 220;  // must match .swipe-settling's transition duration in style.css
+  const SWIPE_SETTLE_MS = 400;  // must match .swipe-settling's transition duration in style.css
   const SWIPE_RESISTANCE = 0.35;    // how far a dead-end drag (no neighbor) travels, relative to the finger
   const SWIPE_RESISTANCE_MAX = 46;  // px cap on a dead-end drag's visual travel
   let swipeStart = null;
@@ -3253,6 +3253,45 @@
     e.stopPropagation();
     e.preventDefault();
   }, true);
+
+  // A plain tap on one of the four dot indicators navigates the same
+  // direction it's already hinting at -- a click-based equivalent of the
+  // swipe gesture, mainly for a mouse/trackpad (no swipe to make) rather
+  // than a replacement for it. Plays the exact same slide animation a
+  // committed drag ends with, by driving the same startSwipeDrag/
+  // endSwipeDrag pair a real swipe does, just without ever calling
+  // updateSwipeDrag in between (there's no pointer position to follow --
+  // this jumps straight to "fully committed," the same as a real drag
+  // released past the threshold). dragCaptureSign has to be set first,
+  // since startSwipeDrag reads it to resolve which neighbor this
+  // direction actually leads to. Safe even when a direction is empty (no
+  // dots shown, or -- for parents/children, which always reserve their
+  // space -- shown with zero dots): dragNeighbor comes back null, and
+  // endSwipeDrag(false) just tears the (empty, invisible) drag layer back
+  // down without animating anything on screen or calling
+  // commitDragNeighbor -- the same dead-end outcome a real swipe has
+  // nowhere to go.
+  function navigateDots(axis, sign) {
+    dragCaptureSign = sign;
+    startSwipeDrag(axis);
+    // A real drag gets this for free -- by the time endSwipeDrag runs,
+    // outgoingEl/incomingEl already sat at real (pointermove-driven)
+    // positions across several already-painted frames, so the .swipe-
+    // settling transition has an actual "from" to animate. A click never
+    // ran any of those frames: outgoingEl/incomingEl are still at the
+    // exact rest positions startSwipeDrag just set, so if endSwipeDrag
+    // ran in this same tick, the browser would collapse "set position,
+    // then immediately set final position" into one paint and the slide
+    // would never visibly happen. Forcing a synchronous layout read
+    // between the two makes the browser commit that starting position
+    // for real first.
+    void outgoingEl.offsetHeight;
+    endSwipeDrag(!!dragNeighbor);
+  }
+  els.viewDotsParents.addEventListener('click', () => navigateDots('y', 1));
+  els.viewDotsChildren.addEventListener('click', () => navigateDots('y', -1));
+  els.viewDotsSideLeft.addEventListener('click', () => navigateDots('x', 1));
+  els.viewDotsSideRight.addEventListener('click', () => navigateDots('x', -1));
 
   function populateSelectOptions(excludeId) {
     const people = Object.values(data.people)

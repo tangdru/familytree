@@ -65,7 +65,7 @@ try {
     }
     await page.waitForTimeout(30);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await page.waitForTimeout(400); // outlasts the swipe's own settle-animation delay before it commits
+    await page.waitForTimeout(600); // outlasts the swipe's own settle-animation delay before it commits
   }
   async function tapMember(name) {
     await page.click(`#viewPhotoPair .view-photo-pair-member[title="${name}"]`);
