@@ -3274,6 +3274,18 @@
   function navigateDots(axis, sign) {
     dragCaptureSign = sign;
     startSwipeDrag(axis);
+    // A real drag gets this for free -- by the time endSwipeDrag runs,
+    // outgoingEl/incomingEl already sat at real (pointermove-driven)
+    // positions across several already-painted frames, so the .swipe-
+    // settling transition has an actual "from" to animate. A click never
+    // ran any of those frames: outgoingEl/incomingEl are still at the
+    // exact rest positions startSwipeDrag just set, so if endSwipeDrag
+    // ran in this same tick, the browser would collapse "set position,
+    // then immediately set final position" into one paint and the slide
+    // would never visibly happen. Forcing a synchronous layout read
+    // between the two makes the browser commit that starting position
+    // for real first.
+    void outgoingEl.offsetHeight;
     endSwipeDrag(!!dragNeighbor);
   }
   els.viewDotsParents.addEventListener('click', () => navigateDots('y', 1));
