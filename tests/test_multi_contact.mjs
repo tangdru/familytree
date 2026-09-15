@@ -76,10 +76,13 @@ try {
     return { title: el.getAttribute('title'), href: el.getAttribute('href') };
   }));
   console.log('view card contact chips:', JSON.stringify(viewLines));
-  if (viewLines.length !== 2) throw new Error('Expected two contact chips on the view card');
-  if (viewLines[0].href !== 'tel:6175551234') throw new Error('Expected first chip to be a tel: link, got: ' + viewLines[0].href);
-  if (viewLines[0].title !== '617-555-1234') throw new Error('Expected first chip title to be the full number, got: ' + viewLines[0].title);
-  if (viewLines[1].href !== 'mailto:jane@gmail.com') throw new Error('Expected second chip to be a mailto: link, got: ' + viewLines[1].href);
+  // The phone number now gets two icon actions (Call + Text) and the
+  // email gets one (Email) -- see buildContactChips in app.js.
+  if (viewLines.length !== 3) throw new Error('Expected three contact action icons on the view card (Call, Text, Email)');
+  if (viewLines[0].href !== 'tel:6175551234') throw new Error('Expected first icon to be a tel: link, got: ' + viewLines[0].href);
+  if (viewLines[0].title !== 'Call: 617-555-1234') throw new Error('Expected first icon title to name the action and the full number, got: ' + viewLines[0].title);
+  if (viewLines[1].href !== 'sms:6175551234') throw new Error('Expected second icon to be an sms: link, got: ' + viewLines[1].href);
+  if (viewLines[2].href !== 'mailto:jane@gmail.com') throw new Error('Expected third icon to be a mailto: link, got: ' + viewLines[2].href);
 
   console.log('\n=== Remove the first contact row in the edit form, save, confirm only the email remains ===');
   await page.click('#viewEditBtn');
@@ -102,7 +105,9 @@ try {
   await page.waitForTimeout(200);
   const legacyViewLines = await page.evaluate(() => Array.from(document.querySelectorAll('#viewContact .contact-chip')).map(el => el.getAttribute('title')));
   console.log('legacy view card contact chips:', JSON.stringify(legacyViewLines));
-  if (JSON.stringify(legacyViewLines) !== JSON.stringify(['617-555-0000'])) throw new Error('Expected the legacy contact to show on the view card');
+  if (JSON.stringify(legacyViewLines) !== JSON.stringify(['Call: 617-555-0000', 'Text: 617-555-0000'])) {
+    throw new Error('Expected the legacy contact to show on the view card as Call + Text icons');
+  }
 
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);

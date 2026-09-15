@@ -101,7 +101,7 @@ try {
   console.log('view card contact chip:', JSON.stringify(viewState));
   if (viewState.hidden) throw new Error('Expected the view card to show the contact chip');
   if (viewState.href !== 'mailto:jane@gmail.com') throw new Error('Expected a mailto: link, got: ' + viewState.href);
-  if (viewState.title !== 'jane@gmail.com') throw new Error('Expected the chip title to hold the full email, got: ' + viewState.title);
+  if (viewState.title !== 'Email: jane@gmail.com') throw new Error('Expected the icon\'s title to name the action and hold the full email, got: ' + viewState.title);
 
   console.log('\n=== Editing back to a phone number and saving shows a tel: link ===');
   await page.click('#viewEditBtn');
@@ -119,7 +119,9 @@ try {
     return { title: a ? a.getAttribute('title') : null, href: a ? a.getAttribute('href') : null };
   });
   console.log('view card contact chip (phone):', JSON.stringify(viewState2));
-  if (viewState2.title !== '415-555-1212') throw new Error('Expected the chip title to hold the full formatted phone number, got: ' + viewState2.title);
+  // querySelector grabs the first of the two icons a phone now renders
+  // (Call, then Text -- see buildContactChips in app.js).
+  if (viewState2.title !== 'Call: 415-555-1212') throw new Error('Expected the Call icon\'s title to name the action and hold the full formatted phone number, got: ' + viewState2.title);
   if (viewState2.href !== 'tel:4155551212') throw new Error('Expected a tel: link with plain digits, got: ' + viewState2.href);
 
   console.log('\nERRORS:', errors);
