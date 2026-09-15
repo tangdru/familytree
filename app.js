@@ -5571,6 +5571,27 @@
 
   // ---------- Startup ----------
 
+  // One-time backfill for anyone who already has a documented birthday but
+  // never got a zodiac saved -- the edit form only auto-fills it live (see
+  // maybeAutoSetZodiac) as someone's OWN birthdate field is touched, which
+  // never happens for existing people nobody's re-opened since. Never
+  // overwrites an already-set zodiac: someone's sign can deliberately
+  // differ from their documented birth year (see zodiacAdjustedBirthDate),
+  // so this only ever fills in a blank, from data already on record.
+  function backfillZodiacs() {
+    let changed = false;
+    for (const p of Object.values(data.people)) {
+      if (!p.zodiac && p.birthDate) {
+        const inferred = inferZodiacFromBirthYear(p.birthDate);
+        if (inferred) {
+          p.zodiac = inferred;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
   async function init() {
     usingSupabase = isSupabaseConfigured() && typeof window.supabase !== 'undefined';
 
@@ -5601,6 +5622,8 @@
         saveLocal();
       }
     }
+
+    if (backfillZodiacs()) await saveData();
 
     renderTree();
     fitToView();
