@@ -1435,22 +1435,32 @@ body {
 }
 .view-contact[hidden] { display: none; }
 
+/* Icon-only now (see buildContactChips in app.js) -- no visible number/
+   address text next to it, just the tel:/sms:/mailto: action itself, so a
+   person with several contacts doesn't need several rows worth of chip
+   text to fit on the card. The full value is still one hover/long-press
+   (title) or screen-reader announcement (aria-label) away. */
 .contact-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   border: 1px solid var(--card-border);
   background: var(--bg);
-  border-radius: 999px;
-  padding: 5px 11px 5px 9px;
-  font-size: 0.78rem;
-  font-weight: 600;
+  border-radius: 50%;
   color: var(--accent-dark);
   text-decoration: none;
   cursor: pointer;
 }
-.contact-chip:hover { border-color: var(--accent); }
-.contact-chip-icon { width: 13px; height: 13px; flex-shrink: 0; display: flex; }
+.contact-chip:hover { border-color: var(--accent); background: var(--surface); }
+/* A plain <span> (see buildContactActionChip) for a value that doesn't
+   parse as a phone or email -- inert, so no pointer cursor or hover
+   affordance implying it's clickable. */
+span.contact-chip { cursor: default; }
+span.contact-chip:hover { border-color: var(--card-border); background: var(--bg); }
+.contact-chip-icon { width: 15px; height: 15px; flex-shrink: 0; display: flex; }
 .contact-chip-icon svg { width: 100%; height: 100%; }
 
 /* Notes, the relations divider, and every relation section below all sit

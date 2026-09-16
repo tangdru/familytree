@@ -29,13 +29,16 @@ try {
     editModalHidden: document.getElementById('personModal').hidden,
     viewModalHidden: document.getElementById('personViewModal').hidden,
     viewName: document.getElementById('viewName').textContent,
-    viewContact: document.getElementById('viewContact').textContent,
+    // "Loves hiking." isn't a phone or email, so it renders as an inert,
+    // icon-only chip (see buildContactChips in app.js) -- the value only
+    // shows up in the chip's title/aria-label, not as visible text.
+    viewContactTitle: document.querySelector('#viewContact .contact-chip')?.getAttribute('title'),
   }));
   console.log(JSON.stringify(state));
   if (!state.editModalHidden) throw new Error('Expected the Edit modal to be closed');
   if (state.viewModalHidden) throw new Error('Expected the Person View modal to be open after saving an edit');
   if (state.viewName !== 'Jane Doe') throw new Error('Expected the view to show the just-edited person');
-  if (!state.viewContact.includes('Loves hiking.')) throw new Error('Expected the view to reflect the just-saved edit');
+  if (state.viewContactTitle !== 'Loves hiking.') throw new Error('Expected the view to reflect the just-saved edit');
 
   console.log('\n=== Adding a brand-new person: should still land on the tree (highlighted), not a view card (nothing to view back to) ===');
   await page.click('#viewCloseBtn');
