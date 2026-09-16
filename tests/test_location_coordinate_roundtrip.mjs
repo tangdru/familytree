@@ -63,7 +63,7 @@ try {
   const preloaded = await page.evaluate(() => document.querySelector('.location-row-input').textContent);
   console.log('preloaded location text:', preloaded);
   if (preloaded !== 'Boston, Massachusetts') throw new Error(`Expected the location to preload as its picked text, got: "${preloaded}"`);
-  await page.fill('#notesInput', 'Just adding a note, not touching location');
+  await page.fill('#contactsList .contact-row-input', 'Just adding a contact, not touching location');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(300);
 

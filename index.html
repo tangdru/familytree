@@ -24,7 +24,7 @@
      never depends on a third party being reachable -- see driver.iife.js's
      own comment in the body for why Driver.js replaced a hand-rolled tour. -->
 <link rel="stylesheet" href="driver.css?v=1">
-<link rel="stylesheet" href="style.css?v=202609180">
+<link rel="stylesheet" href="style.css?v=202609190">
 </head>
 <body>
   <header class="toolbar">
@@ -261,11 +261,6 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <label for="notesInput">Notes</label>
-          <textarea id="notesInput" rows="2" placeholder="Optional notes"></textarea>
-        </div>
-
         <div class="modal-footer">
           <button type="button" id="deletePersonBtn" class="btn btn-danger">Delete</button>
           <div class="spacer"></div>
@@ -366,8 +361,14 @@
              rhythm as .view-info above. -->
         <div class="view-relations">
           <div class="view-divider" id="viewRelationsDivider" hidden></div>
-          <p class="view-notes" id="viewNotes" hidden></p>
-          <div class="view-divider" id="viewNotesDivider" hidden></div>
+          <div class="view-section view-stories-section" id="viewStoriesSection">
+            <div class="view-stories-header">
+              <h4>Stories</h4>
+              <button type="button" class="btn btn-subtle btn-small" id="addStoryBtn">+ Add story</button>
+            </div>
+            <div class="view-stories-list" id="viewStoriesList"></div>
+          </div>
+          <div class="view-divider" id="viewStoriesDivider" hidden></div>
 
           <div class="view-section" id="viewParentsSection" hidden>
             <h4>Parents</h4>
@@ -392,6 +393,11 @@
           <div class="view-section" id="viewLocationsSection" hidden>
             <h4>Previous location(s)</h4>
             <ul class="view-relation-list" id="viewLocationsList"></ul>
+          </div>
+          <div class="view-divider" id="viewMentionedDivider" hidden></div>
+          <div class="view-section" id="viewMentionedSection" hidden>
+            <h4>Mentioned in</h4>
+            <ul class="view-relation-list" id="viewMentionedList"></ul>
           </div>
         </div>
       </div>
@@ -489,6 +495,6 @@
        rather than loaded from a CDN, same as every other local file here. -->
   <script src="driver.iife.js?v=1"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609182"></script>
+  <script src="app.js?v=202609191"></script>
 </body>
 </html>

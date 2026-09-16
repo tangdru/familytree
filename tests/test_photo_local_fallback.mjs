@@ -29,13 +29,13 @@ try {
   await page.waitForTimeout(200);
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
-  await page.fill('#notesInput', 'Loves tea.');
+  await page.fill('#contactsList .contact-row-input', 'Loves tea.');
   await page.click('#personForm button[type="submit"]');
   await page.waitForTimeout(200);
   const afterUnrelatedEdit = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
-  console.log('photo unchanged:', afterUnrelatedEdit.photo === TINY_PNG, '| notes:', afterUnrelatedEdit.notes);
+  console.log('photo unchanged:', afterUnrelatedEdit.photo === TINY_PNG, '| contacts:', afterUnrelatedEdit.contacts);
   if (afterUnrelatedEdit.photo !== TINY_PNG) throw new Error('Expected the existing photo to survive an unrelated edit');
-  if (afterUnrelatedEdit.notes !== 'Loves tea.') throw new Error('Expected the notes edit to have saved');
+  if (!(afterUnrelatedEdit.contacts || []).includes('Loves tea.')) throw new Error('Expected the contacts edit to have saved');
 
   console.log('\n=== Removing the photo via the edit form clears it on save ===');
   await page.click('#viewEditBtn');

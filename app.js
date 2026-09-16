@@ -15,6 +15,8 @@
   }
   const SUPABASE_ROW_ID = 'main';
   const PHOTO_BUCKET = 'photos'; // Supabase Storage bucket -- see supabase-schema.sql
+  const STORY_AUDIO_BUCKET = 'voice-recordings'; // Supabase Storage bucket -- see supabase-schema.sql
+  const STORY_RECORD_MAX_MS = 120000; // 2-minute cap on a single voice recording
   const MAX_EDIT_DIM = 1600; // cap the source image loaded into the crop editor
   const CROP_OUT_W = 450; // 3x the rendered card photo size, for crispness
   const CROP_OUT_H = 330; // matches the card photo's 150:110 aspect ratio
@@ -346,6 +348,10 @@
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  function storyId() {
+    return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
   // Mobile Safari can scroll the page to keep a focused input clear of the
   // on-screen keyboard, and doesn't always scroll back once the keyboard
   // dismisses — leaving the sticky header pushed above the visible area.
@@ -421,7 +427,6 @@
     zodiacAdjustedHint: document.getElementById('zodiacAdjustedHint'),
     contactsList: document.getElementById('contactsList'),
     addContactBtn: document.getElementById('addContactBtn'),
-    notesInput: document.getElementById('notesInput'),
     photoInput: document.getElementById('photoInput'),
     photoPreview: document.getElementById('photoPreview'),
     photoImg: document.getElementById('photoImg'),
@@ -458,9 +463,11 @@
     viewDotsSideLeft: document.getElementById('viewDotsSideLeft'),
     viewDotsSideRight: document.getElementById('viewDotsSideRight'),
     viewContact: document.getElementById('viewContact'),
-    viewNotes: document.getElementById('viewNotes'),
     viewRelationsDivider: document.getElementById('viewRelationsDivider'),
-    viewNotesDivider: document.getElementById('viewNotesDivider'),
+    viewStoriesSection: document.getElementById('viewStoriesSection'),
+    viewStoriesList: document.getElementById('viewStoriesList'),
+    addStoryBtn: document.getElementById('addStoryBtn'),
+    viewStoriesDivider: document.getElementById('viewStoriesDivider'),
     viewParentsSection: document.getElementById('viewParentsSection'),
     viewParentsList: document.getElementById('viewParentsList'),
     viewSiblingsDivider: document.getElementById('viewSiblingsDivider'),
@@ -475,6 +482,9 @@
     viewLocationsDivider: document.getElementById('viewLocationsDivider'),
     viewLocationsSection: document.getElementById('viewLocationsSection'),
     viewLocationsList: document.getElementById('viewLocationsList'),
+    viewMentionedDivider: document.getElementById('viewMentionedDivider'),
+    viewMentionedSection: document.getElementById('viewMentionedSection'),
+    viewMentionedList: document.getElementById('viewMentionedList'),
   };
 
   let pendingPhoto = null; // dataURL currently staged in the form
@@ -852,12 +862,17 @@
   // fast once someone had a few contacts, and the full value is still
   // always reachable via the button's title/aria-label and its own
   // tel:/sms:/mailto: target.
+  // href is null for a value contactHref doesn't recognize as a phone or
+  // email (e.g. free-text notes someone put in the Contact field) -- it
+  // still renders as an inert (non-clickable) icon-only chip rather than
+  // silently disappearing, same as the old plain-text fallback's behavior,
+  // just without a visible label now (see buildContactChips below).
   function buildContactActionChip(icon, label, value, href) {
-    const chip = document.createElement('a');
+    const chip = document.createElement(href ? 'a' : 'span');
     chip.className = 'contact-chip';
-    chip.href = href;
-    chip.title = `${label}: ${value}`;
-    chip.setAttribute('aria-label', `${label} ${value}`);
+    if (href) chip.href = href;
+    chip.title = href ? `${label}: ${value}` : value;
+    chip.setAttribute('aria-label', href ? `${label} ${value}` : value);
     const iconEl = document.createElement('span');
     iconEl.className = 'contact-chip-icon';
     iconEl.innerHTML = icon;
@@ -868,12 +883,15 @@
   // Builds every action button for one contact value -- used on both the
   // single Person View and, grouped per person, the Couple View. Returns
   // a fragment (one button for email, two for phone) so the call site can
-  // just appendChild it; a value contactHref doesn't recognize renders no
-  // buttons at all, same as the old plain-text fallback did.
+  // just appendChild it; a value contactHref doesn't recognize still
+  // renders one inert chip so nothing is silently dropped.
   function buildContactChips(value, countryHint) {
     const frag = document.createDocumentFragment();
     const href = contactHref(value, countryHint);
-    if (!href) return frag;
+    if (!href) {
+      frag.appendChild(buildContactActionChip(PHONE_ICON_SVG, 'Contact', value, null));
+      return frag;
+    }
     if (href.startsWith('mailto:')) {
       frag.appendChild(buildContactActionChip(MAIL_ICON_SVG, 'Email', value, href));
     } else {
@@ -2248,7 +2266,6 @@
     zodiacManuallySet = false;
     updateZodiacAdjustedHint();
     setContactRows(contactsOf(p));
-    els.notesInput.value = p.notes || '';
     pendingPhoto = p.photo || null;
     showPhotoPreview(pendingPhoto);
     els.modalTitle.textContent = 'Edit Person';
@@ -2298,7 +2315,6 @@
       zodiac: els.zodiacInput.value,
       zodiacManuallySet,
       contacts: getContactsFromForm(),
-      notes: els.notesInput.value,
       photo: pendingPhoto,
       parents: parentsCombo.getValues(),
       spouses: spousesCombo.getValues(),
@@ -2325,7 +2341,6 @@
     zodiacManuallySet = snap.zodiacManuallySet;
     updateZodiacAdjustedHint();
     setContactRows(snap.contacts);
-    els.notesInput.value = snap.notes;
     pendingPhoto = snap.photo;
     showPhotoPreview(pendingPhoto);
     els.modalTitle.textContent = snap.title;
@@ -2503,12 +2518,13 @@
   // never leaves a stray line or a missing one.
   function updateSectionDividers() {
     const chain = [
-      { divider: els.viewRelationsDivider, visible: !els.viewNotes.hidden },
-      { divider: els.viewNotesDivider, visible: !els.viewParentsSection.hidden },
+      { divider: els.viewRelationsDivider, visible: !els.viewStoriesSection.hidden },
+      { divider: els.viewStoriesDivider, visible: !els.viewParentsSection.hidden },
       { divider: els.viewSiblingsDivider, visible: !els.viewSiblingsSection.hidden },
       { divider: els.viewSpousesDivider, visible: !els.viewSpousesSection.hidden },
       { divider: els.viewChildrenDivider, visible: !els.viewChildrenSection.hidden },
       { divider: els.viewLocationsDivider, visible: !els.viewLocationsSection.hidden },
+      { divider: els.viewMentionedDivider, visible: !els.viewMentionedSection.hidden },
     ];
     let sawVisible = true;
     for (const { divider, visible } of chain) {
@@ -2629,6 +2645,92 @@
     return person.contact ? [person.contact] : [];
   }
 
+  // ---------- Stories ----------
+  // Each story is { id, text, mentions, audioUrl, createdAt, updatedAt }.
+  // text carries inline @mention tokens as @[Display Name](personId) --
+  // parseMentions/renderStoryText below turn those into live links, and
+  // mentions is kept denormalized alongside text purely so "who's mentioned
+  // where" (see mentionsOf/renderMentionedIn) never has to re-scan text.
+
+  function storiesOf(person) {
+    return (person && Array.isArray(person.stories)) ? person.stories : [];
+  }
+
+  const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
+
+  function parseMentions(text) {
+    const ids = [];
+    let m;
+    MENTION_RE.lastIndex = 0;
+    while ((m = MENTION_RE.exec(text || ''))) {
+      if (!ids.includes(m[2])) ids.push(m[2]);
+    }
+    return ids;
+  }
+
+  // Converts a story's raw text (with @[Name](id) tokens) into a DOM
+  // fragment: plain text runs plus a clickable link for each mention that
+  // still resolves to a real person (a mention whose person was since
+  // deleted just renders as its own display-name text, not a dead link).
+  function renderStoryText(text) {
+    const frag = document.createDocumentFragment();
+    let lastIndex = 0;
+    MENTION_RE.lastIndex = 0;
+    let m;
+    while ((m = MENTION_RE.exec(text || ''))) {
+      if (m.index > lastIndex) frag.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
+      const [full, name, id] = m;
+      if (data.people[id]) {
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'story-mention';
+        link.textContent = '@' + name;
+        link.addEventListener('click', () => openViewModal(id));
+        frag.appendChild(link);
+      } else {
+        frag.appendChild(document.createTextNode('@' + name));
+      }
+      lastIndex = m.index + full.length;
+    }
+    if (lastIndex < (text || '').length) frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+    return frag;
+  }
+
+  // One-time upgrade for data saved before Stories existed: a person's old
+  // single `notes` field becomes their first story instead of being
+  // silently dropped. Runs once per load (see init()) -- after this,
+  // `notes` is gone and `stories` is the only source of truth.
+  function migrateLegacyNotes() {
+    let changed = false;
+    for (const p of Object.values(data.people)) {
+      if (p.notes && !(Array.isArray(p.stories) && p.stories.length)) {
+        const now = new Date().toISOString();
+        p.stories = [{ id: storyId(), text: p.notes, mentions: [], audioUrl: null, createdAt: now, updatedAt: now }];
+        changed = true;
+      }
+      if ('notes' in p) { delete p.notes; changed = true; }
+      if (!Array.isArray(p.stories)) p.stories = [];
+    }
+    return changed;
+  }
+
+  // Every story anywhere in the tree that mentions this person, newest
+  // first -- used for the "Mentioned in" backlink section on their own
+  // card. A mention never duplicates the story onto the mentioned
+  // person's card; this only ever links back to where it actually lives.
+  function storiesMentioning(personId) {
+    const results = [];
+    for (const owner of Object.values(data.people)) {
+      storiesOf(owner).forEach(story => {
+        if ((story.mentions || []).includes(personId)) {
+          results.push({ ownerId: owner.id, story });
+        }
+      });
+    }
+    results.sort((a, b) => (b.story.createdAt || '').localeCompare(a.story.createdAt || ''));
+    return results;
+  }
+
   // The Person View's grouped detail block (single card or couple card
   // alike, for whichever person is selected): birth location, documented/
   // zodiac-adjusted birthdate, and death date, each its own line, present
@@ -2730,6 +2832,495 @@
     container.hidden = !reserveSpace && count === 0;
   }
 
+  // ---------- Stories UI (view card: list, add/edit/delete, mentions, recording) ----------
+
+  const STORY_PENCIL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>';
+  const STORY_TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+  const STORY_MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
+
+  // Which story (if any) is currently open for add/edit on the view card --
+  // { personId, editingId } with editingId null for a brand-new story, or a
+  // story's own id when editing an existing one. Cleared on save, cancel,
+  // and whenever the view card closes, so a stale in-progress editor never
+  // reappears on a later, unrelated visit to the same card.
+  let storyEditorFor = null;
+
+  function closeStoryEditor() {
+    storyEditorFor = null;
+  }
+
+  function formatStoryDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function plainStoryText(text) {
+    MENTION_RE.lastIndex = 0;
+    return (text || '').replace(MENTION_RE, '@$1');
+  }
+
+  function storySnippet(text) {
+    const plain = plainStoryText(text);
+    return plain.length > 60 ? plain.slice(0, 57) + '…' : plain;
+  }
+
+  async function uploadVoiceRecording(personId, blob) {
+    const ext = blob.type && blob.type.includes('mp4') ? 'm4a' : 'webm';
+    const path = `${personId}-${Date.now()}.${ext}`;
+    const { error } = await supabaseClient.storage.from(STORY_AUDIO_BUCKET).upload(path, blob, {
+      contentType: blob.type || 'audio/webm',
+      upsert: true,
+    });
+    if (error) throw error;
+    return supabaseClient.storage.from(STORY_AUDIO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+
+  // Best-effort cleanup, same spirit as deletePhotoIfStored -- a leftover
+  // orphaned recording is harmless and not worth blocking or alarming the
+  // user over.
+  async function deleteVoiceRecordingIfStored(url) {
+    if (!usingSupabase || !url) return;
+    const marker = `/storage/v1/object/public/${STORY_AUDIO_BUCKET}/`;
+    const idx = url.indexOf(marker);
+    if (idx === -1) return;
+    const path = url.slice(idx + marker.length);
+    try {
+      const { error } = await supabaseClient.storage.from(STORY_AUDIO_BUCKET).remove([path]);
+      if (error) throw error;
+    } catch (e) {
+      console.warn('Failed to delete an old voice recording from storage (leaving it orphaned).', e);
+    }
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function saveStory(personId, editingId, text, audioUrl) {
+    const person = data.people[personId];
+    if (!person) return;
+    if (!Array.isArray(person.stories)) person.stories = [];
+    const now = new Date().toISOString();
+    const mentions = parseMentions(text);
+    if (editingId) {
+      const story = person.stories.find(s => s.id === editingId);
+      if (story) {
+        story.text = text;
+        story.mentions = mentions;
+        story.audioUrl = audioUrl;
+        story.updatedAt = now;
+      }
+    } else {
+      person.stories.push({ id: storyId(), text, mentions, audioUrl, createdAt: now, updatedAt: now });
+    }
+    await saveData();
+  }
+
+  async function deleteStory(personId, id) {
+    const person = data.people[personId];
+    if (!person) return;
+    const story = (person.stories || []).find(s => s.id === id);
+    if (!story) return;
+    if (!confirm('Delete this story? This cannot be undone.')) return;
+    person.stories = person.stories.filter(s => s.id !== id);
+    if (storyEditorFor && storyEditorFor.personId === personId && storyEditorFor.editingId === id) closeStoryEditor();
+    await deleteVoiceRecordingIfStored(story.audioUrl);
+    await saveData();
+    renderStories(personId);
+  }
+
+  // Lightweight "@" autocomplete for the story textarea -- unlike the
+  // chip-based parent/spouse combos (createCombo), this inserts a token at
+  // the caret inside free-flowing text rather than managing a fixed set of
+  // selected values, so it gets its own small implementation instead of
+  // reusing createCombo.
+  function attachMentionAutocomplete(textarea, dropdown) {
+    let matches = [];
+    let activeIndex = -1;
+
+    function currentQuery() {
+      const pos = textarea.selectionStart;
+      const before = textarea.value.slice(0, pos);
+      const m = before.match(/(?:^|\s)@([^\s@]*)$/);
+      return m ? { query: m[1], start: pos - m[1].length - 1 } : null;
+    }
+
+    function closeDropdown() {
+      dropdown.hidden = true;
+      dropdown.innerHTML = '';
+      matches = [];
+      activeIndex = -1;
+    }
+
+    function renderOptions() {
+      dropdown.innerHTML = '';
+      matches.forEach((person, i) => {
+        const opt = document.createElement('div');
+        opt.className = 'combo-option story-mention-option';
+        if (i === activeIndex) opt.classList.add('is-active');
+        opt.textContent = person.name || '(unnamed)';
+        opt.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // keep the textarea's focus/selection intact
+          insertMention(person);
+        });
+        dropdown.appendChild(opt);
+      });
+    }
+
+    function insertMention(person) {
+      const ctx = currentQuery();
+      if (!ctx) return;
+      const before = textarea.value.slice(0, ctx.start);
+      const after = textarea.value.slice(textarea.selectionStart);
+      const token = `@[${person.name || '(unnamed)'}](${person.id}) `;
+      textarea.value = before + token + after;
+      const caret = (before + token).length;
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+      closeDropdown();
+    }
+
+    function updateDropdown() {
+      const ctx = currentQuery();
+      if (!ctx) { closeDropdown(); return; }
+      const q = ctx.query.toLowerCase();
+      matches = Object.values(data.people)
+        .filter(p => (p.name || '').toLowerCase().includes(q))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .slice(0, 8);
+      if (!matches.length) { closeDropdown(); return; }
+      activeIndex = 0;
+      dropdown.hidden = false;
+      renderOptions();
+    }
+
+    textarea.addEventListener('input', updateDropdown);
+    textarea.addEventListener('click', updateDropdown);
+    textarea.addEventListener('keydown', (e) => {
+      if (dropdown.hidden) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, matches.length - 1);
+        renderOptions();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+        renderOptions();
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (matches[activeIndex]) {
+          e.preventDefault();
+          insertMention(matches[activeIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+    textarea.addEventListener('blur', () => setTimeout(closeDropdown, 150));
+  }
+
+  // A record/stop toggle button wired to MediaRecorder -- capped at
+  // STORY_RECORD_MAX_MS so a forgotten recording can't run indefinitely.
+  // onRecorded fires once, with the finished Blob, when recording stops
+  // with any audio actually captured.
+  function buildRecordButton(onRecorded) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'story-record-btn';
+    btn.innerHTML = STORY_MIC_SVG + '<span class="story-record-label">Record</span>';
+
+    let mediaRecorder = null;
+    let chunks = [];
+    let stream = null;
+    let timerInterval = null;
+    let stopTimeout = null;
+    let startTime = 0;
+
+    function setLabel(text) {
+      btn.querySelector('.story-record-label').textContent = text;
+    }
+
+    function cleanup() {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+      if (stopTimeout) { clearTimeout(stopTimeout); stopTimeout = null; }
+    }
+
+    function stop() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    }
+
+    async function start() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Voice recording is not supported in this browser.');
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        alert('Could not access the microphone. Please check permissions.');
+        return;
+      }
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.addEventListener('dataavailable', (e) => { if (e.data.size) chunks.push(e.data); });
+      mediaRecorder.addEventListener('stop', () => {
+        cleanup();
+        btn.classList.remove('is-recording');
+        setLabel('Record');
+        if (chunks.length) onRecorded(new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' }));
+      });
+      mediaRecorder.start();
+      startTime = Date.now();
+      btn.classList.add('is-recording');
+      setLabel('0:00');
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - startTime) / 1000);
+        setLabel(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+      }, 250);
+      stopTimeout = setTimeout(stop, STORY_RECORD_MAX_MS);
+    }
+
+    btn.addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') stop();
+      else start();
+    });
+
+    return btn;
+  }
+
+  function buildStoryCard(personId, story) {
+    const card = document.createElement('div');
+    card.className = 'story-card';
+    card.dataset.storyId = story.id;
+
+    const text = document.createElement('p');
+    text.className = 'story-text';
+    text.appendChild(renderStoryText(story.text));
+    card.appendChild(text);
+
+    if (story.audioUrl) {
+      const audio = document.createElement('audio');
+      audio.className = 'story-audio';
+      audio.controls = true;
+      audio.src = story.audioUrl;
+      card.appendChild(audio);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'story-meta';
+    const date = document.createElement('span');
+    date.className = 'story-date';
+    date.textContent = formatStoryDate(story.updatedAt || story.createdAt);
+    meta.appendChild(date);
+
+    const actions = document.createElement('div');
+    actions.className = 'story-actions';
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'icon-btn story-edit-btn';
+    editBtn.setAttribute('aria-label', 'Edit story');
+    editBtn.innerHTML = STORY_PENCIL_SVG;
+    editBtn.addEventListener('click', () => {
+      storyEditorFor = { personId, editingId: story.id };
+      renderStories(personId);
+    });
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'icon-btn story-delete-btn';
+    deleteBtn.setAttribute('aria-label', 'Delete story');
+    deleteBtn.innerHTML = STORY_TRASH_SVG;
+    deleteBtn.addEventListener('click', () => deleteStory(personId, story.id));
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    meta.appendChild(actions);
+    card.appendChild(meta);
+
+    return card;
+  }
+
+  function buildStoryEditor(personId, editingId) {
+    const existing = editingId ? storiesOf(data.people[personId]).find(s => s.id === editingId) : null;
+    const wrap = document.createElement('div');
+    wrap.className = 'story-editor';
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'story-editor-input-wrap';
+    const textarea = document.createElement('textarea');
+    textarea.className = 'story-editor-textarea';
+    textarea.placeholder = 'Share a memory… type @ to mention someone';
+    textarea.rows = 3;
+    textarea.value = existing ? existing.text : '';
+    inputWrap.appendChild(textarea);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'story-mention-dropdown combo-dropdown';
+    dropdown.hidden = true;
+    inputWrap.appendChild(dropdown);
+    wrap.appendChild(inputWrap);
+    attachMentionAutocomplete(textarea, dropdown);
+
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Tip: tap the microphone on your keyboard to dictate.';
+    wrap.appendChild(hint);
+
+    let audioUrl = existing ? (existing.audioUrl || null) : null;
+    let audioBlob = null;
+    let audioRemoved = false;
+
+    const audioPreviewWrap = document.createElement('div');
+    audioPreviewWrap.className = 'story-editor-audio';
+    audioPreviewWrap.hidden = !audioUrl;
+    const audioPreview = document.createElement('audio');
+    audioPreview.controls = true;
+    if (audioUrl) audioPreview.src = audioUrl;
+    const removeAudioBtn = document.createElement('button');
+    removeAudioBtn.type = 'button';
+    removeAudioBtn.className = 'icon-btn';
+    removeAudioBtn.setAttribute('aria-label', 'Remove recording');
+    removeAudioBtn.textContent = '✕';
+    removeAudioBtn.addEventListener('click', () => {
+      audioUrl = null;
+      audioBlob = null;
+      audioRemoved = true;
+      audioPreviewWrap.hidden = true;
+      audioPreview.removeAttribute('src');
+    });
+    audioPreviewWrap.appendChild(audioPreview);
+    audioPreviewWrap.appendChild(removeAudioBtn);
+    wrap.appendChild(audioPreviewWrap);
+
+    const footer = document.createElement('div');
+    footer.className = 'story-editor-footer';
+
+    const recordBtn = buildRecordButton((blob) => {
+      audioBlob = blob;
+      audioRemoved = false;
+      audioUrl = URL.createObjectURL(blob);
+      audioPreview.src = audioUrl;
+      audioPreviewWrap.hidden = false;
+    });
+    footer.appendChild(recordBtn);
+
+    const spacer = document.createElement('div');
+    spacer.className = 'spacer';
+    footer.appendChild(spacer);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      closeStoryEditor();
+      renderStories(personId);
+    });
+    footer.appendChild(cancelBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', async () => {
+      const text = textarea.value.trim();
+      if (!text) { textarea.focus(); return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      try {
+        let finalAudioUrl = existing ? (existing.audioUrl || null) : null;
+        if (audioRemoved && !audioBlob) {
+          await deleteVoiceRecordingIfStored(finalAudioUrl);
+          finalAudioUrl = null;
+        }
+        if (audioBlob) {
+          const oldUrl = existing ? existing.audioUrl : null;
+          if (usingSupabase) {
+            finalAudioUrl = await uploadVoiceRecording(personId, audioBlob);
+            await deleteVoiceRecordingIfStored(oldUrl);
+          } else {
+            finalAudioUrl = await blobToDataUrl(audioBlob);
+          }
+        }
+        await saveStory(personId, editingId, text, finalAudioUrl);
+        closeStoryEditor();
+        renderStories(personId);
+      } catch (err) {
+        console.error('Failed to save story.', err);
+        alert('Could not save the story. Please try again.');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+    footer.appendChild(saveBtn);
+
+    wrap.appendChild(footer);
+    setTimeout(() => textarea.focus(), 0);
+    return wrap;
+  }
+
+  function renderStories(personId) {
+    const p = data.people[personId];
+    if (!p) return;
+    els.viewStoriesList.innerHTML = '';
+    const stories = storiesOf(p).slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const editingHere = !!(storyEditorFor && storyEditorFor.personId === personId);
+
+    if (editingHere && storyEditorFor.editingId === null) {
+      els.viewStoriesList.appendChild(buildStoryEditor(personId, null));
+    }
+
+    if (!stories.length && !editingHere) {
+      const empty = document.createElement('p');
+      empty.className = 'hint story-empty-hint';
+      empty.textContent = 'No stories yet.';
+      els.viewStoriesList.appendChild(empty);
+    }
+
+    stories.forEach(story => {
+      if (editingHere && storyEditorFor.editingId === story.id) {
+        els.viewStoriesList.appendChild(buildStoryEditor(personId, story.id));
+      } else {
+        els.viewStoriesList.appendChild(buildStoryCard(personId, story));
+      }
+    });
+
+    els.addStoryBtn.hidden = editingHere;
+  }
+
+  els.addStoryBtn.addEventListener('click', () => {
+    storyEditorFor = { personId: currentViewId, editingId: null };
+    renderStories(currentViewId);
+  });
+
+  function renderMentionedIn(personId) {
+    const mentions = storiesMentioning(personId);
+    els.viewMentionedList.innerHTML = '';
+    mentions.forEach(({ ownerId, story }) => {
+      const owner = data.people[ownerId];
+      if (!owner) return;
+      const li = document.createElement('li');
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'view-relation-link';
+      link.textContent = owner.name || '(unnamed)';
+      link.addEventListener('click', () => openViewModal(ownerId));
+      const snippet = document.createElement('span');
+      snippet.className = 'story-mention-snippet';
+      snippet.textContent = storySnippet(story.text);
+      li.appendChild(link);
+      li.appendChild(snippet);
+      els.viewMentionedList.appendChild(li);
+    });
+    els.viewMentionedSection.hidden = !mentions.length;
+  }
+
   function renderPersonView(ids, selectedId) {
     const p = data.people[selectedId];
     if (!p) return;
@@ -2820,8 +3411,7 @@
     spouseIds.forEach(sid => els.viewSpouseAvatars.appendChild(buildSpouseAvatar(sid)));
     els.viewSpouseAvatars.hidden = !spouseIds.length;
 
-    els.viewNotes.textContent = p.notes || '';
-    els.viewNotes.hidden = !p.notes;
+    renderStories(selectedId);
 
     fillRelationSection(els.viewParentsSection, els.viewParentsList, p.parents || [], goToParents);
 
@@ -2844,6 +3434,8 @@
 
     fillLocationsSection(els.viewLocationsSection, els.viewLocationsList, locationEntriesOf(p));
 
+    renderMentionedIn(selectedId);
+
     updateSectionDividers();
 
     els.viewModal.hidden = false;
@@ -2854,6 +3446,7 @@
       document.activeElement.blur();
     }
     els.viewModal.hidden = true;
+    closeStoryEditor();
     resetPageScroll();
   }
 
@@ -3385,7 +3978,6 @@
       person.zodiac = els.zodiacInput.value;
       person.contacts = getContactsFromForm();
       delete person.contact; // superseded by contacts -- see contactsOf()
-      person.notes = els.notesInput.value.trim();
       person.photo = photoUrl;
       person.parents = parents;
 
@@ -5623,7 +6215,9 @@
       }
     }
 
-    if (backfillZodiacs()) await saveData();
+    const migratedNotes = migrateLegacyNotes();
+    const backfilledZodiacs = backfillZodiacs();
+    if (migratedNotes || backfilledZodiacs) await saveData();
 
     renderTree();
     fitToView();
