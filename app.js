@@ -1404,6 +1404,10 @@
   // can be far taller than any single screen, so this needs to go well
   // below a "normal" zoomed-out level to let the whole thing fit.
   const MIN_ZOOM = 0.05;
+  // Ceiling for pinch/wheel zoom and for focusOnCard's own zoom-in below --
+  // shared so a search/save focus can never zoom in further than a manual
+  // pinch would ever be allowed to.
+  const MAX_ZOOM = 2;
   const view = { x: 40, y: 20, scale: 1 };
   let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric'
 
@@ -1614,15 +1618,11 @@
     applyTransform();
   }
 
-  // Same end state as fitToView(), but eased in over FIT_VIEW_MS instead of
-  // snapping -- used by the floating fit button, a deliberate user action
-  // that (unlike a live drag/pinch, which must track the pointer 1:1)
-  // benefits from the same "settle, don't jump" feel as the rest of the
-  // tree's animations.
+  // Eases view.{x,y,scale} to a target over FIT_VIEW_MS -- the "settle,
+  // don't jump" tween shared by every deliberate (non-drag) camera move:
+  // fit-to-view and focusOnCard below.
   const FIT_VIEW_MS = 380; // matches CARD_MOVE_MS's transition duration
-  function animateFitToView(options) {
-    const target = computeFitTransform(options);
-    if (!target) return;
+  function animateViewTo(target) {
     const start = { x: view.x, y: view.y, scale: view.scale };
     const startTime = performance.now();
     function step(now) {
@@ -1635,6 +1635,17 @@
       if (t < 1) requestAnimationFrame(step);
     }
     requestAnimationFrame(step);
+  }
+
+  // Same end state as fitToView(), but eased in over FIT_VIEW_MS instead of
+  // snapping -- used by the floating fit button, a deliberate user action
+  // that (unlike a live drag/pinch, which must track the pointer 1:1)
+  // benefits from the same "settle, don't jump" feel as the rest of the
+  // tree's animations.
+  function animateFitToView(options) {
+    const target = computeFitTransform(options);
+    if (!target) return;
+    animateViewTo(target);
   }
   els.fitViewBtn.addEventListener('click', () => {
     if (viewMode === 'zodiac') {
@@ -1660,27 +1671,41 @@
     renderTree();
   });
 
-  // Center a card in the viewport by adjusting our own pan transform.
+  // Center a card in the viewport AND zoom to a fixed, legible size for it
+  // -- CARD_FOCUS_WIDTH_FRACTION of the viewport's width -- rather than
+  // just panning at whatever zoom level happened to be in effect already.
+  // Used whenever the user's attention should jump to one specific person:
+  // right after adding or editing them, and from a search match. Eased via
+  // animateViewTo rather than snapping, same reasoning as animateFitToView.
   // Deliberately not the native el.scrollIntoView(): the tree isn't laid
   // out via normal document scroll, so scrollIntoView walks up the DOM
   // looking for a real scrollable ancestor and finds one anyway — overflow:
   // hidden blocks user scrolling but not programmatic scrolling — and ends
   // up scrolling the whole page (hiding the sticky header) instead of
   // panning the tree.
-  function panToCard(id) {
+  const CARD_FOCUS_WIDTH_FRACTION = 0.26;
+  function focusOnCard(id) {
     const card = els.content.querySelector(`[data-id="${id}"]`);
     if (!card) return;
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
-    const cardCenterX = card.offsetLeft + card.offsetWidth / 2;
-    const cardCenterY = card.offsetTop + card.offsetHeight / 2;
-    view.x = vw / 2 - cardCenterX * view.scale;
-    view.y = vh / 2 - cardCenterY * view.scale;
-    applyTransform();
+    if (!vw || !vh) return;
+    const targetScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, (vw * CARD_FOCUS_WIDTH_FRACTION) / CARD_WIDTH));
+    // Center on the photo circle itself, not the card's full box -- the
+    // name/dates caption below the photo would otherwise pull the box's
+    // own vertical center down, leaving the circle sitting above center.
+    const photo = card.querySelector('.person-photo') || card;
+    const cardCenterX = card.offsetLeft + photo.offsetLeft + photo.offsetWidth / 2;
+    const cardCenterY = card.offsetTop + photo.offsetTop + photo.offsetHeight / 2;
+    animateViewTo({
+      scale: targetScale,
+      x: vw / 2 - cardCenterX * targetScale,
+      y: vh / 2 - cardCenterY * targetScale,
+    });
   }
 
   function setZoom(newScale, anchorClientX, anchorClientY) {
-    newScale = Math.min(2, Math.max(MIN_ZOOM, newScale));
+    newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newScale));
     const rect = els.viewport.getBoundingClientRect();
     const ax = anchorClientX !== undefined ? anchorClientX - rect.left : rect.width / 2;
     const ay = anchorClientY !== undefined ? anchorClientY - rect.top : rect.height / 2;
@@ -2252,6 +2277,11 @@
     spousesCombo.clear();
     spouseStatusDraft = {};
     els.modal.hidden = false;
+    // #personForm IS the scrollable .modal-body -- reused across opens, so
+    // without this it can still be scrolled down from whatever the last
+    // edit session left it at (also covers startAddSpouseFlow/
+    // startAddParentFlow, both of which call this).
+    els.form.scrollTop = 0;
   }
 
   function openModalForEdit(personId) {
@@ -2288,6 +2318,7 @@
     for (const sid of p.spouses) spouseStatusDraft[sid] = spouseStatusOf(p, sid);
     spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
+    els.form.scrollTop = 0; // see openModalForAdd's comment on why this is needed
   }
 
   // Set while the Add/Edit form is repurposed for a nested "add a brand new
@@ -4074,7 +4105,10 @@
       } else {
         // Edit is only ever reached from the read-only Person View's Edit
         // button -- saving should hand you back there, not drop you all the
-        // way out to the tree.
+        // way out to the tree. Focus the tree on them anyway (underneath
+        // the card about to reopen) so it's already framed correctly
+        // whenever they do close back out to it.
+        focusOnCard(id);
         openViewModal(id);
       }
     } finally {
@@ -4126,7 +4160,7 @@
     const card = els.content.querySelector(`[data-id="${id}"]`);
     if (card) {
       card.classList.add('highlight');
-      panToCard(id);
+      focusOnCard(id);
     }
   }
 
