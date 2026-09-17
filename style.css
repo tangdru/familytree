@@ -889,6 +889,17 @@ body {
   font-family: inherit;
   background: var(--bg);
 }
+/* .form-row input[type=text] above (an attribute selector counts as a
+   class, same reasoning already noted on .location-date-group
+   .location-date-part below) has higher specificity than plain
+   .combo-filter and silently wins, collapsing this input's left padding
+   back down to 10px -- exactly where .combo-filter-icon already sits, so
+   the icon visibly overlapped whatever was typed. #-scoped to
+   unambiguously beat it; every .combo-filter in the app lives inside
+   #personForm. */
+#personForm .combo-filter {
+  padding: 8px 10px 8px 32px;
+}
 .combo-options {
   max-height: 180px;
   overflow-y: auto;

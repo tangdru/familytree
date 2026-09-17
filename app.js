@@ -692,6 +692,17 @@
     filterInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeDropdown();
     });
+    // openDropdown()'s own scrollIntoView runs before the on-screen
+    // keyboard has actually opened -- tapping the filter input to type is
+    // a separate event, and the keyboard shrinking the visible viewport
+    // afterward can push an already-correctly-positioned dropdown back out
+    // of view. Re-run it on every visualViewport resize while this
+    // dropdown is open (a no-op once it's closed).
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (!dropdown.hidden) dropdown.scrollIntoView({ block: 'nearest' });
+      });
+    }
     document.addEventListener('click', (e) => {
       if (!dropdown.hidden && !rootEl.contains(e.target)) closeDropdown();
     });
