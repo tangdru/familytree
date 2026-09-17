@@ -386,6 +386,31 @@
     if (document.body.scrollLeft) document.body.scrollLeft = 0;
   }
 
+  // iOS Safari doesn't reliably resize/reposition `position: fixed`
+  // elements against the keyboard-shrunk VISUAL viewport -- a fixed
+  // element's box can keep being computed against the full, pre-keyboard
+  // LAYOUT viewport instead. That's the actual cause behind a modal's own
+  // footer (or, here, a combo dropdown's option list) ending up hidden
+  // behind the keyboard even though max-height: 90dvh and a manual
+  // scrollIntoView both say it should already be visible -- neither one
+  // helps if the modal's own outer box was never resized/repositioned to
+  // begin with. Pinning it directly to visualViewport's current
+  // offset/size in JS sidesteps the whole problem: whatever's actually
+  // visible above the keyboard becomes the modal's real box, so centering,
+  // max-height, and internal scrolling all measure against the true space.
+  function fitModalOverlaysToVisualViewport() {
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    document.querySelectorAll('.modal-overlay:not([hidden])').forEach((overlay) => {
+      overlay.style.top = `${vv.offsetTop}px`;
+      overlay.style.left = `${vv.offsetLeft}px`;
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+      overlay.style.width = `${vv.width}px`;
+      overlay.style.height = `${vv.height}px`;
+    });
+  }
+
   // ---------- DOM refs ----------
 
   const els = {
@@ -611,10 +636,15 @@
       renderOptions('');
       dropdown.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
-      // The dropdown renders right below its trigger, which can sit far
-      // enough down the form (parents/spouses are near the bottom) that it
-      // opens mostly or entirely below the fold -- bring it fully into
-      // view instead of leaving it to a manual scroll.
+      // Pin the modal to the CURRENT visual viewport first (belt-and-
+      // suspenders -- the resize/scroll listeners already do this on every
+      // keyboard open/close, but this closes any timing gap between now
+      // and the next one of those events) before measuring anything inside
+      // it. The dropdown renders right below its trigger, which can sit
+      // far enough down the form (parents/spouses are near the bottom)
+      // that it opens mostly or entirely below the fold -- bring it fully
+      // into view instead of leaving it to a manual scroll.
+      fitModalOverlaysToVisualViewport();
       dropdown.scrollIntoView({ block: 'nearest' });
     }
 
@@ -2300,6 +2330,9 @@
     spousesCombo.clear();
     spouseStatusDraft = {};
     els.modal.hidden = false;
+    // Pins the modal's own box to whatever the visual viewport actually
+    // is right now (belt-and-suspenders -- see fitModalOverlaysToVisualViewport).
+    fitModalOverlaysToVisualViewport();
     // #personForm IS the scrollable .modal-body -- reused across opens, so
     // without this it can still be scrolled down from whatever the last
     // edit session left it at (also covers startAddSpouseFlow/
@@ -2341,6 +2374,7 @@
     for (const sid of p.spouses) spouseStatusDraft[sid] = spouseStatusOf(p, sid);
     spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
+    fitModalOverlaysToVisualViewport(); // see openModalForAdd's comment on why this is needed
     els.form.scrollTop = 0; // see openModalForAdd's comment on why this is needed
   }
 
@@ -3507,6 +3541,7 @@
     updateSectionDividers();
 
     els.viewModal.hidden = false;
+    fitModalOverlaysToVisualViewport(); // see its own definition -- Story editing opens the keyboard here too
   }
 
   function closeViewModal() {
@@ -6375,6 +6410,9 @@
     // (e.g. focusing the Location field) is open. See resetHorizontalScroll.
     window.visualViewport.addEventListener('resize', resetHorizontalScroll);
     window.visualViewport.addEventListener('scroll', resetHorizontalScroll);
+    // Also unconditional, same reasoning -- see fitModalOverlaysToVisualViewport.
+    window.visualViewport.addEventListener('resize', fitModalOverlaysToVisualViewport);
+    window.visualViewport.addEventListener('scroll', fitModalOverlaysToVisualViewport);
   }
   window.addEventListener('scroll', resetHorizontalScroll, { passive: true });
 
