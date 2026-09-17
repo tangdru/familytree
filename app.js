@@ -611,6 +611,11 @@
       renderOptions('');
       dropdown.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
+      // The dropdown renders right below its trigger, which can sit far
+      // enough down the form (parents/spouses are near the bottom) that it
+      // opens mostly or entirely below the fold -- bring it fully into
+      // view instead of leaving it to a manual scroll.
+      dropdown.scrollIntoView({ block: 'nearest' });
     }
 
     function closeDropdown() {
@@ -657,6 +662,12 @@
       renderChips();
       filterInput.value = '';
       renderOptions('');
+      // Closing here (rather than in choose(), below) means this still
+      // waits for the spouse current/former confirm to actually resolve --
+      // that confirm panel lives inside this same dropdown, so closing any
+      // earlier would hide it before it could be answered. Reopening for a
+      // second parent/spouse is just tapping the trigger again.
+      closeDropdown();
     }
 
     function choose(opt) {
