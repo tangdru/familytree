@@ -87,7 +87,7 @@ try {
   if (gmailHidden === null) throw new Error('Expected the button to hide again once an @ is present');
 
   console.log('\n=== Save persists the email, and the view card shows it as a mailto: link ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1.contacts[0]);
   console.log('saved contact:', saved);
@@ -111,7 +111,7 @@ try {
   await page.keyboard.press('Backspace');
   await page.keyboard.type('4155551212');
   await page.waitForTimeout(100);
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   const viewState2 = await page.evaluate(() => {
     const el = document.getElementById('viewContact');

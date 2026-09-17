@@ -45,7 +45,7 @@ try {
   await page.waitForTimeout(600);
   await page.click('.location-row .combo-option:has-text("Boston")');
   await page.waitForTimeout(100);
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   let saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -64,7 +64,7 @@ try {
   console.log('preloaded location text:', preloaded);
   if (preloaded !== 'Boston, Massachusetts') throw new Error(`Expected the location to preload as its picked text, got: "${preloaded}"`);
   await page.fill('#contactsList .contact-row-input', 'Just adding a contact, not touching location');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -82,7 +82,7 @@ try {
   await page.keyboard.press('End');
   await page.keyboard.type(' Metro');
   await page.waitForTimeout(50);
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved after hand-edit:', JSON.stringify(saved.locations));

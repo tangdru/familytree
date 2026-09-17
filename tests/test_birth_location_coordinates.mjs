@@ -47,7 +47,7 @@ try {
   await page.waitForTimeout(600);
   await page.click('#birthLocationSuggestions .combo-option:has-text("Chicago")');
   await page.waitForTimeout(100);
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   let saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -71,7 +71,7 @@ try {
   const preloaded = await page.evaluate(() => document.getElementById('birthLocationInput').textContent);
   if (preloaded !== 'Chicago, Illinois') throw new Error(`Expected birth location to preload as its picked text, got: "${preloaded}"`);
   await page.fill('#contactsList .contact-row-input', 'Unrelated edit');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -91,7 +91,7 @@ try {
   if (assumedStart !== '1985') throw new Error(`Expected the assumed Start year to be 1985, got: ${assumedStart}`);
 
   console.log('\n=== Save with the assumed Start (untouched) -- it persists as a real saved value ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved birthLocation:', JSON.stringify(saved.birthLocation));

@@ -54,7 +54,7 @@ try {
   if (birthValue !== 'Melrose, Massachusetts') throw new Error('Expected birth location field to preload shortened');
 
   console.log('\n=== Saving now (self-heal): the raw stored data should update to the short form ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations:', JSON.stringify(saved.locations));

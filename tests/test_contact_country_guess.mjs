@@ -55,7 +55,7 @@ try {
     if (country !== 'GB') throw new Error('Expected the UK location to guess GB, got: ' + country);
 
     console.log('\n=== Saving and viewing: contactHref should also guess GB from the saved location ===');
-    await page.click('#personForm button[type="submit"]');
+    await page.click('button[type="submit"][form="personForm"]');
     await page.waitForTimeout(200);
     const parseCountry = await page.evaluate(() => window.__lastParseCountry);
     console.log('defaultCountry passed to parsePhoneNumberFromString on view render:', parseCountry);

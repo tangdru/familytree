@@ -30,7 +30,7 @@ try {
   console.log('dropdown options:', JSON.stringify(options));
   if (options.length !== 13) throw new Error('Expected 12 zodiac animals plus the blank option');
   await page.selectOption('#zodiacInput', 'Dragon');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
@@ -51,7 +51,7 @@ try {
 
   console.log('\n=== Clear it back to blank, save, confirm it disappears from the card ===');
   await page.selectOption('#zodiacInput', '');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   metaText = await page.textContent('#viewMeta');
   console.log('meta row after clearing (expect no zodiac mention):', metaText);

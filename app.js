@@ -417,7 +417,8 @@
     modalTitle: document.getElementById('modalTitle'),
     closeModalBtn: document.getElementById('closeModalBtn'),
     cancelBtn: document.getElementById('cancelBtn'),
-    saveBtn: document.querySelector('#personForm button[type="submit"]'),
+    // A sibling of #personForm now, not nested inside it -- see index.html.
+    saveBtn: document.querySelector('button[type="submit"][form="personForm"]'),
     form: document.getElementById('personForm'),
     personId: document.getElementById('personId'),
     nameInput: document.getElementById('nameInput'),

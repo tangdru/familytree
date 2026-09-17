@@ -117,7 +117,7 @@ try {
     if (value !== '+4-4-2-0-7-9-4-6-0-9-5-8') throw new Error('Expected the leading + to survive and reach the stub, got: ' + value);
 
     console.log('\n=== Saving and viewing: contactHref should use parsePhoneNumberFromString\'s E.164 .number ===');
-    await page.click('#personForm button[type="submit"]');
+    await page.click('button[type="submit"][form="personForm"]');
     await page.waitForTimeout(200);
     const href = await page.$eval('#viewContact a', el => el.getAttribute('href'));
     console.log('tel: href:', href);

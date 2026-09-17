@@ -55,7 +55,7 @@ try {
   console.log('current-tag visibility per row:', JSON.stringify(tags));
   if (tags[0].hidden || !tags[1].hidden) throw new Error('Expected only the first row to show the Current tag');
 
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.legacy);
@@ -88,7 +88,7 @@ try {
   rowValues = await page.evaluate(() => Array.from(document.querySelectorAll('.location-row-input')).map(el => el.textContent));
   console.log('rows after removing second:', JSON.stringify(rowValues));
   if (rowValues.length !== 1 || rowValues[0] !== 'Old City, Oldland') throw new Error('Expected only the first row to remain');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const savedAfterRemove = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.legacy);
   console.log('locations after removal save:', JSON.stringify(savedAfterRemove.locations));

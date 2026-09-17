@@ -41,7 +41,7 @@ try {
 
   console.log('\n=== Save button should be back to normal (enabled, "Save") after the dust settles ===');
   const btnState = await page.evaluate(() => {
-    const btn = document.querySelector('#personForm button[type="submit"]');
+    const btn = document.querySelector('button[type="submit"][form="personForm"]');
     return { disabled: btn.disabled, text: btn.textContent };
   });
   console.log(JSON.stringify(btnState));
@@ -61,7 +61,7 @@ try {
   await page.keyboard.type('Second Person');
   const midSaveState = await page.evaluate(() => {
     const form = document.getElementById('personForm');
-    const btn = document.querySelector('#personForm button[type="submit"]');
+    const btn = document.querySelector('button[type="submit"][form="personForm"]');
     form.requestSubmit();
     // Read the button's state immediately after -- still synchronous,
     // before the async handler's first await has resolved.

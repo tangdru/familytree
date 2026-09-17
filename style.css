@@ -457,6 +457,13 @@ body {
   width: 100%;
   max-width: 460px;
   max-height: 90vh;
+  /* dvh shrinks with the on-screen keyboard on mobile browsers that
+     support it (iOS Safari 15.4+); vh above is a static fallback for
+     ones that don't, and stays in effect wherever dvh is invalid.
+     Without this, a modal sized against the pre-keyboard vh could end up
+     taller than the space actually left above the keyboard, pushing its
+     own footer (Save/Cancel) down past the visible, tappable area. */
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 10px 40px rgba(0,0,0,0.3);
@@ -475,6 +482,12 @@ body {
   padding: 16px 20px;
   overflow-y: auto;
 }
+
+/* #personForm IS .modal-body for the Add/Edit form -- flex: 1 + min-height:
+   0 let it fill whatever space #personModal's now-external .modal-footer
+   (see index.html) doesn't need, and scroll its own contents internally,
+   same pattern .view-modal-body already uses for the same reason. */
+#personForm { flex: 1; min-height: 0; }
 
 .form-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 5px; }
 .form-row label { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
@@ -985,18 +998,26 @@ body {
   align-items: center;
   gap: 8px;
   padding-top: 6px;
-  /* Keeps Save/Cancel/Delete clickable even when a combo dropdown right
-     above it (parents/spouses) is open and tall enough to visually reach
-     down this far -- more likely now that the form is shorter without a
-     Notes field below the last combo to push this footer further away.
-     Needs its own stacking context (position + z-index above the combo
-     dropdown's 50) and an opaque background, or the dropdown would paint
-     on top and swallow clicks meant for these buttons. */
+  /* Its own stacking context with an opaque background, above the base
+     z-index everything else in a modal uses -- harmless baseline safety
+     for any modal-footer, though #personModal's own footer no longer
+     actually needs it now that it's a sibling of #personForm rather than
+     nested inside its scrollable box (see #personModal .modal-footer and
+     index.html) -- a combo dropdown can only overflow within that box now,
+     never past it into the footer's own space. */
   position: relative;
   z-index: 60;
   background: var(--surface);
 }
 .modal-footer .spacer { flex: 1; }
+/* Sibling of #personForm (not nested inside it, see index.html), same
+   reason and same fix as .help-modal's own footer just below -- needs its
+   own full padding since it no longer sits inside #personForm's own
+   padded box. */
+#personModal .modal-footer {
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--card-border);
+}
 
 /* ---------- Photo crop overlay ---------- */
 .crop-modal { max-width: 380px; }
@@ -1185,6 +1206,11 @@ body {
    the clones the instant that happened, which is exactly what let their
    heights diverge back to their natural content size mid-swipe. */
 .view-modal { max-width: 420px; height: min(800px, 88vh); }
+/* dvh fallback, same reasoning as .modal's own max-height above -- without
+   it, typing a Story (the one place the keyboard opens inside this card)
+   could leave its footer pushed down past the space actually left above
+   the keyboard. */
+.view-modal { height: min(800px, 88dvh); }
 /* A bit more top padding than the default .modal-body -- with no header
    bar above it anymore, the card's top edge needs its own breathing room
    instead of relying on a header to separate it from the swipe zone. */

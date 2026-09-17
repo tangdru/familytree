@@ -22,7 +22,7 @@ try {
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
   await page.fill('#contactsList .contact-row-input', 'Loves hiking.');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(150);
 
   const state = await page.evaluate(() => ({
@@ -47,7 +47,7 @@ try {
   await page.waitForTimeout(200);
   await page.click('#nameInput');
   await page.keyboard.type('New Person');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(150);
   const addState = await page.evaluate(() => ({
     editModalHidden: document.getElementById('personModal').hidden,
