@@ -1683,7 +1683,7 @@
   // hidden blocks user scrolling but not programmatic scrolling — and ends
   // up scrolling the whole page (hiding the sticky header) instead of
   // panning the tree.
-  const CARD_FOCUS_WIDTH_FRACTION = 0.2;
+  const CARD_FOCUS_WIDTH_FRACTION = 0.26;
   function focusOnCard(id) {
     const card = els.content.querySelector(`[data-id="${id}"]`);
     if (!card) return;
@@ -2277,6 +2277,11 @@
     spousesCombo.clear();
     spouseStatusDraft = {};
     els.modal.hidden = false;
+    // #personForm IS the scrollable .modal-body -- reused across opens, so
+    // without this it can still be scrolled down from whatever the last
+    // edit session left it at (also covers startAddSpouseFlow/
+    // startAddParentFlow, both of which call this).
+    els.form.scrollTop = 0;
   }
 
   function openModalForEdit(personId) {
@@ -2313,6 +2318,7 @@
     for (const sid of p.spouses) spouseStatusDraft[sid] = spouseStatusOf(p, sid);
     spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
+    els.form.scrollTop = 0; // see openModalForAdd's comment on why this is needed
   }
 
   // Set while the Add/Edit form is repurposed for a nested "add a brand new

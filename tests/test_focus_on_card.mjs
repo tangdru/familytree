@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core';
 
 // focusOnCard() (see app.js) centers a specific person's card in the
-// viewport AND zooms so their circle is CARD_FOCUS_WIDTH_FRACTION (20%) of
+// viewport AND zooms so their circle is CARD_FOCUS_WIDTH_FRACTION (26%) of
 // the viewport's width, regardless of whatever zoom level was already in
 // effect -- used after adding a person, after editing one, and from a
 // search match, so the user's attention always lands on the right card at
@@ -15,7 +15,7 @@ const people = {
 };
 
 const VIEWPORT = { width: 480, height: 950 };
-const EXPECTED_SCALE = (VIEWPORT.width * 0.2) / 150; // CARD_FOCUS_WIDTH_FRACTION * vw / CARD_WIDTH
+const EXPECTED_SCALE = (VIEWPORT.width * 0.26) / 150; // CARD_FOCUS_WIDTH_FRACTION * vw / CARD_WIDTH
 const EXPECTED_CARD_WIDTH = 150 * EXPECTED_SCALE;
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -31,7 +31,7 @@ try {
   await page.waitForTimeout(300);
 
   // Checks two different elements: the whole card's box (its width is what
-  // "zoomed to 20% of viewport width" means -- CARD_WIDTH, 150px, scaled)
+  // "zoomed to 26% of viewport width" means -- CARD_WIDTH, 150px, scaled)
   // and the photo circle within it specifically (what should actually be
   // CENTERED -- the card's own box also includes the name/dates caption
   // below the photo, which would pull a whole-box center down off the
@@ -65,7 +65,7 @@ try {
     if (!rect) throw new Error(`${label}: card not found`);
     console.log(label, JSON.stringify(rect));
     if (Math.abs(rect.cardWidth - EXPECTED_CARD_WIDTH) > 3) {
-      throw new Error(`${label}: expected card width ~${EXPECTED_CARD_WIDTH.toFixed(1)}px (20% of viewport width), got ${rect.cardWidth.toFixed(1)}px`);
+      throw new Error(`${label}: expected card width ~${EXPECTED_CARD_WIDTH.toFixed(1)}px (26% of viewport width), got ${rect.cardWidth.toFixed(1)}px`);
     }
     if (Math.abs(rect.photoCenterX - center.x) > 3) {
       throw new Error(`${label}: expected the photo circle horizontally centered (~${center.x}), got centerX ${rect.photoCenterX.toFixed(1)}`);
@@ -85,7 +85,7 @@ try {
   await page.click('button[type="submit"]');
   await page.waitForTimeout(500); // outlasts FIT_VIEW_MS (380ms)
   assertFocused(await cardAndPhotoRectByName('Zoe Focus'), await treeViewportCenter(), 'After adding Zoe Focus');
-  console.log('Confirmed: newly-added person ends up centered at 20% viewport width.');
+  console.log('Confirmed: newly-added person ends up centered at 26% viewport width.');
 
   console.log('\n=== Editing an existing person centers + zooms the tree behind the Person View card ===');
   await page.click('.person-card:has-text("Jane Doe")');
