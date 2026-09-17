@@ -200,6 +200,14 @@
   let supabaseClient = null;
   let usingSupabase = false;
 
+  // Whether a story's voice recording can actually be uploaded right now --
+  // true immediately in local-only mode (no bucket needed there, see
+  // buildStoryEditor's save handler), otherwise only once the STORY_AUDIO_BUCKET
+  // has actually been created (probed once in init(), see below). Lets the
+  // record button hide itself on a Supabase-connected tree that hasn't run
+  // the updated supabase-schema.sql yet, instead of failing on first use.
+  let voiceRecordingReady = true;
+
   function isSupabaseConfigured() {
     const cfg = window.SUPABASE_CONFIG;
     return !!(cfg && cfg.url && cfg.anonKey);
@@ -3200,14 +3208,20 @@
     const footer = document.createElement('div');
     footer.className = 'story-editor-footer';
 
-    const recordBtn = buildRecordButton((blob) => {
-      audioBlob = blob;
-      audioRemoved = false;
-      audioUrl = URL.createObjectURL(blob);
-      audioPreview.src = audioUrl;
-      audioPreviewWrap.hidden = false;
-    });
-    footer.appendChild(recordBtn);
+    // Hidden (not just disabled) rather than shown-and-failing when a
+    // Supabase-connected tree hasn't run the updated schema yet -- see
+    // voiceRecordingReady. Playback/remove of an already-saved recording
+    // stays available regardless; only *starting a new one* is gated.
+    if (voiceRecordingReady) {
+      const recordBtn = buildRecordButton((blob) => {
+        audioBlob = blob;
+        audioRemoved = false;
+        audioUrl = URL.createObjectURL(blob);
+        audioPreview.src = audioUrl;
+        audioPreviewWrap.hidden = false;
+      });
+      footer.appendChild(recordBtn);
+    }
 
     const spacer = document.createElement('div');
     spacer.className = 'spacer';
@@ -6120,7 +6134,32 @@
     { element: '#addPersonBtn', popover: { description: 'Tap here to add a new person to the family tree.' } },
     { element: '#viewModeSelect', popover: { description: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.' } },
     { element: '#searchToggleBtn', popover: { description: 'Search for anyone in the tree by name.' } },
-    { element: '.person-card', popover: { description: 'Tap anyone’s card to see their full profile, family connections, and contact info.' } },
+    {
+      element: '.person-card',
+      popover: {
+        description: 'Tap anyone’s card to see their full profile, family connections, and contact info.',
+        // Opens that same card into its Person View before advancing, so
+        // the next step (Stories) has a real, on-screen #addStoryBtn to
+        // highlight instead of the empty tree behind it -- driver.js
+        // decides whether to skip a step by checking its element exists
+        // BEFORE that step's own onHighlightStarted hook ever runs, so
+        // the open has to happen here, synchronously, ahead of moveNext.
+        onNextClick: (el, step, opts) => {
+          document.querySelector('.person-card')?.click();
+          opts.driver.moveNext();
+        },
+      },
+    },
+    {
+      element: '#addStoryBtn',
+      popover: { description: 'Add Stories to a profile — memories, mentions of other people, anecdotes worth keeping.' },
+      // Closes the card again on the way out -- the next step's own
+      // target (Fit-to-view, sitting on the tree underneath) needs it out
+      // of the way. (The tour only ever shows Next/Close -- see
+      // showButtons on the driver config below -- so there's no Previous
+      // to symmetrically re-open it for.)
+      onDeselected: () => closeViewModal(),
+    },
     { element: '#fitViewBtn', popover: { description: 'Lost? Tap here to fit everyone back into view.' } },
     // Nothing left to skip on this last step -- Done already ends the tour.
     { element: '#helpBtn', popover: { description: 'Come back here any time to reread this guide or replay the walkthrough.', showButtons: ['next'] } },
@@ -6200,6 +6239,21 @@
         }
         setSyncStatus('connected');
         subscribeRealtime();
+
+        // Probe for the voice-recordings bucket rather than assuming it
+        // exists -- a Supabase-connected tree only has it once someone's
+        // manually re-run the updated supabase-schema.sql (see PR notes),
+        // and uploading to a bucket that doesn't exist yet would otherwise
+        // only fail at the point someone actually tries to save a
+        // recording. list() exercises the same read policy an upload would
+        // need, so a missing bucket or missing policy both correctly leave
+        // recording hidden.
+        try {
+          const { error } = await supabaseClient.storage.from(STORY_AUDIO_BUCKET).list('', { limit: 1 });
+          voiceRecordingReady = !error;
+        } catch (e) {
+          voiceRecordingReady = false;
+        }
       } catch (e) {
         console.error('Could not reach Supabase, falling back to local-only mode.', e);
         usingSupabase = false;
