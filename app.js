@@ -6152,7 +6152,7 @@
     },
     {
       element: '#addStoryBtn',
-      popover: { description: 'Add Stories to a profile — memories, mentions of other people, even a voice recording.' },
+      popover: { description: 'Add Stories to a profile — memories, mentions of other people, anecdotes worth keeping.' },
       // Closes the card again on the way out -- the next step's own
       // target (Fit-to-view, sitting on the tree underneath) needs it out
       // of the way. (The tour only ever shows Next/Close -- see

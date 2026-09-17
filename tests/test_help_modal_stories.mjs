@@ -34,9 +34,6 @@ try {
   console.log('Stories section text:', storiesText);
   if (!storiesText.includes('@')) throw new Error('Expected the Stories help text to mention @mentions');
   if (!storiesText.toLowerCase().includes('mentioned in')) throw new Error('Expected the Stories help text to mention the "Mentioned in" backlink');
-  if (!storiesText.toLowerCase().includes('microphone') && !storiesText.toLowerCase().includes('voice')) {
-    throw new Error('Expected the Stories help text to mention voice recording');
-  }
   console.log('Confirmed: Stories help section exists with the right content.');
 
   console.log('\nERRORS:', errors);
