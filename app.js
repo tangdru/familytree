@@ -770,7 +770,7 @@
 
   const parentsCombo = createCombo(document.getElementById('parentsCombo'), {
     multiple: true,
-    placeholder: 'Add parent…',
+    placeholder: '+ Add parent',
     createLabel: '+ Add new parent',
     onCreateNew: startAddParentFlow,
   });
@@ -831,7 +831,7 @@
 
   const spousesCombo = createCombo(document.getElementById('spousesCombo'), {
     multiple: true,
-    placeholder: 'Add spouse/partner…',
+    placeholder: '+ Add spouse/partner',
     createLabel: '+ Add new spouse',
     onCreateNew: startAddSpouseFlow,
     chipDecorator: buildSpouseStatusToggle,

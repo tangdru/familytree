@@ -828,21 +828,26 @@ body {
 
 /* A real <button>, not a text input: tapping it must never raise the
    on-screen keyboard — only the .combo-filter inside the open dropdown
-   should do that, and only once someone deliberately taps it. */
+   should do that, and only once someone deliberately taps it (so, unlike
+   a real text field, there's no auto-zoom-on-focus risk to a sub-16px
+   font-size here). Same look as .add-location-btn/.add-contact-btn just
+   below -- every .combo-trigger in the app is a multi-select "add
+   another" link (parents/spouses) whose own label never changes once
+   items are added (see createCombo -- multi mode never calls
+   setTriggerText), so there's no real placeholder/filled state to style
+   differently, just this one permanent "+ Add another" affordance. */
 .combo-trigger {
-  display: block;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  background: var(--surface);
-  font-size: 16px;
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
   font-family: inherit;
-  text-align: left;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--accent-dark);
   cursor: pointer;
 }
-.combo-trigger.placeholder .combo-trigger-text { color: var(--ink-soft); }
 .combo-clear {
   position: absolute;
   right: 6px;
