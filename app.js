@@ -408,6 +408,23 @@
       overlay.style.bottom = 'auto';
       overlay.style.width = `${vv.width}px`;
       overlay.style.height = `${vv.height}px`;
+      // .modal's own sizing (max-height: 90vh/90dvh, or .view-modal's
+      // height: min(800px, 88vh/88dvh)) is STILL a CSS viewport unit --
+      // if dvh doesn't actually shrink with the keyboard on a given
+      // device (the same root cause the overlay's own pin above works
+      // around), the modal itself still wouldn't shrink even though the
+      // overlay now correctly does, which is exactly how search results
+      // stayed hidden even after that first fix. Cap it directly from the
+      // SAME JS-measured vv.height instead (an inline max-height always
+      // bounds height, whichever one the stylesheet happens to use), so
+      // there's no remaining CSS-viewport-unit dependency left anywhere in
+      // this sizing chain -- only what visualViewport itself reports.
+      const modal = overlay.querySelector('.modal');
+      if (modal) {
+        const overlayStyle = getComputedStyle(overlay);
+        const verticalPadding = parseFloat(overlayStyle.paddingTop) + parseFloat(overlayStyle.paddingBottom);
+        modal.style.maxHeight = `${Math.max(0, vv.height - verticalPadding)}px`;
+      }
     });
   }
 
