@@ -42,7 +42,7 @@ try {
   // edit form with the notes edit still intact and Susan now a spouse chip.
   await page.click('#nameInput');
   await page.keyboard.type('Susan Hart');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   // New: adding a spouse (existing or brand-new) now asks current/former
   // before the chip appears.
@@ -64,7 +64,7 @@ try {
 
   // Now save Michael for real, and confirm the couple card + bidirectional
   // spouse link both come out correctly.
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const dataAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people);

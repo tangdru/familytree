@@ -386,6 +386,48 @@
     if (document.body.scrollLeft) document.body.scrollLeft = 0;
   }
 
+  // iOS Safari doesn't reliably resize/reposition `position: fixed`
+  // elements against the keyboard-shrunk VISUAL viewport -- a fixed
+  // element's box can keep being computed against the full, pre-keyboard
+  // LAYOUT viewport instead. That's the actual cause behind a modal's own
+  // footer (or, here, a combo dropdown's option list) ending up hidden
+  // behind the keyboard even though max-height: 90dvh and a manual
+  // scrollIntoView both say it should already be visible -- neither one
+  // helps if the modal's own outer box was never resized/repositioned to
+  // begin with. Pinning it directly to visualViewport's current
+  // offset/size in JS sidesteps the whole problem: whatever's actually
+  // visible above the keyboard becomes the modal's real box, so centering,
+  // max-height, and internal scrolling all measure against the true space.
+  function fitModalOverlaysToVisualViewport() {
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    document.querySelectorAll('.modal-overlay:not([hidden])').forEach((overlay) => {
+      overlay.style.top = `${vv.offsetTop}px`;
+      overlay.style.left = `${vv.offsetLeft}px`;
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+      overlay.style.width = `${vv.width}px`;
+      overlay.style.height = `${vv.height}px`;
+      // .modal's own sizing (max-height: 90vh/90dvh, or .view-modal's
+      // height: min(800px, 88vh/88dvh)) is STILL a CSS viewport unit --
+      // if dvh doesn't actually shrink with the keyboard on a given
+      // device (the same root cause the overlay's own pin above works
+      // around), the modal itself still wouldn't shrink even though the
+      // overlay now correctly does, which is exactly how search results
+      // stayed hidden even after that first fix. Cap it directly from the
+      // SAME JS-measured vv.height instead (an inline max-height always
+      // bounds height, whichever one the stylesheet happens to use), so
+      // there's no remaining CSS-viewport-unit dependency left anywhere in
+      // this sizing chain -- only what visualViewport itself reports.
+      const modal = overlay.querySelector('.modal');
+      if (modal) {
+        const overlayStyle = getComputedStyle(overlay);
+        const verticalPadding = parseFloat(overlayStyle.paddingTop) + parseFloat(overlayStyle.paddingBottom);
+        modal.style.maxHeight = `${Math.max(0, vv.height - verticalPadding)}px`;
+      }
+    });
+  }
+
   // ---------- DOM refs ----------
 
   const els = {
@@ -417,7 +459,8 @@
     modalTitle: document.getElementById('modalTitle'),
     closeModalBtn: document.getElementById('closeModalBtn'),
     cancelBtn: document.getElementById('cancelBtn'),
-    saveBtn: document.querySelector('#personForm button[type="submit"]'),
+    // A sibling of #personForm now, not nested inside it -- see index.html.
+    saveBtn: document.querySelector('button[type="submit"][form="personForm"]'),
     form: document.getElementById('personForm'),
     personId: document.getElementById('personId'),
     nameInput: document.getElementById('nameInput'),
@@ -610,6 +653,16 @@
       renderOptions('');
       dropdown.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
+      // Pin the modal to the CURRENT visual viewport first (belt-and-
+      // suspenders -- the resize/scroll listeners already do this on every
+      // keyboard open/close, but this closes any timing gap between now
+      // and the next one of those events) before measuring anything inside
+      // it. The dropdown renders right below its trigger, which can sit
+      // far enough down the form (parents/spouses are near the bottom)
+      // that it opens mostly or entirely below the fold -- bring it fully
+      // into view instead of leaving it to a manual scroll.
+      fitModalOverlaysToVisualViewport();
+      dropdown.scrollIntoView({ block: 'nearest' });
     }
 
     function closeDropdown() {
@@ -656,6 +709,12 @@
       renderChips();
       filterInput.value = '';
       renderOptions('');
+      // Closing here (rather than in choose(), below) means this still
+      // waits for the spouse current/former confirm to actually resolve --
+      // that confirm panel lives inside this same dropdown, so closing any
+      // earlier would hide it before it could be answered. Reopening for a
+      // second parent/spouse is just tapping the trigger again.
+      closeDropdown();
     }
 
     function choose(opt) {
@@ -680,6 +739,17 @@
     filterInput.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeDropdown();
     });
+    // openDropdown()'s own scrollIntoView runs before the on-screen
+    // keyboard has actually opened -- tapping the filter input to type is
+    // a separate event, and the keyboard shrinking the visible viewport
+    // afterward can push an already-correctly-positioned dropdown back out
+    // of view. Re-run it on every visualViewport resize while this
+    // dropdown is open (a no-op once it's closed).
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (!dropdown.hidden) dropdown.scrollIntoView({ block: 'nearest' });
+      });
+    }
     document.addEventListener('click', (e) => {
       if (!dropdown.hidden && !rootEl.contains(e.target)) closeDropdown();
     });
@@ -717,7 +787,7 @@
 
   const parentsCombo = createCombo(document.getElementById('parentsCombo'), {
     multiple: true,
-    placeholder: 'Add parent…',
+    placeholder: '+ Add parent',
     createLabel: '+ Add new parent',
     onCreateNew: startAddParentFlow,
   });
@@ -778,7 +848,7 @@
 
   const spousesCombo = createCombo(document.getElementById('spousesCombo'), {
     multiple: true,
-    placeholder: 'Add spouse/partner…',
+    placeholder: '+ Add spouse/partner',
     createLabel: '+ Add new spouse',
     onCreateNew: startAddSpouseFlow,
     chipDecorator: buildSpouseStatusToggle,
@@ -2277,6 +2347,9 @@
     spousesCombo.clear();
     spouseStatusDraft = {};
     els.modal.hidden = false;
+    // Pins the modal's own box to whatever the visual viewport actually
+    // is right now (belt-and-suspenders -- see fitModalOverlaysToVisualViewport).
+    fitModalOverlaysToVisualViewport();
     // #personForm IS the scrollable .modal-body -- reused across opens, so
     // without this it can still be scrolled down from whatever the last
     // edit session left it at (also covers startAddSpouseFlow/
@@ -2318,6 +2391,7 @@
     for (const sid of p.spouses) spouseStatusDraft[sid] = spouseStatusOf(p, sid);
     spousesCombo.setValues(p.spouses);
     els.modal.hidden = false;
+    fitModalOverlaysToVisualViewport(); // see openModalForAdd's comment on why this is needed
     els.form.scrollTop = 0; // see openModalForAdd's comment on why this is needed
   }
 
@@ -3484,6 +3558,7 @@
     updateSectionDividers();
 
     els.viewModal.hidden = false;
+    fitModalOverlaysToVisualViewport(); // see its own definition -- Story editing opens the keyboard here too
   }
 
   function closeViewModal() {
@@ -6352,6 +6427,9 @@
     // (e.g. focusing the Location field) is open. See resetHorizontalScroll.
     window.visualViewport.addEventListener('resize', resetHorizontalScroll);
     window.visualViewport.addEventListener('scroll', resetHorizontalScroll);
+    // Also unconditional, same reasoning -- see fitModalOverlaysToVisualViewport.
+    window.visualViewport.addEventListener('resize', fitModalOverlaysToVisualViewport);
+    window.visualViewport.addEventListener('scroll', fitModalOverlaysToVisualViewport);
   }
   window.addEventListener('scroll', resetHorizontalScroll, { passive: true });
 

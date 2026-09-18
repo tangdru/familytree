@@ -24,7 +24,7 @@
      never depends on a third party being reachable -- see driver.iife.js's
      own comment in the body for why Driver.js replaced a hand-rolled tour. -->
 <link rel="stylesheet" href="driver.css?v=1">
-<link rel="stylesheet" href="style.css?v=202609190">
+<link rel="stylesheet" href="style.css?v=202609201">
 </head>
 <body>
   <header class="toolbar">
@@ -221,7 +221,7 @@
           <div class="combo combo-multi" id="parentsCombo">
             <div class="combo-chips" id="parentsChips"></div>
             <button type="button" class="combo-trigger placeholder" aria-labelledby="parentsLabel" aria-haspopup="listbox" aria-expanded="false">
-              <span class="combo-trigger-text">Add parent…</span>
+              <span class="combo-trigger-text">+ Add parent</span>
             </button>
             <div class="combo-dropdown" id="parentsDropdown" hidden>
               <div class="combo-filter-wrap">
@@ -240,7 +240,7 @@
           <div class="combo combo-multi" id="spousesCombo">
             <div class="combo-chips" id="spousesChips"></div>
             <button type="button" class="combo-trigger placeholder" aria-labelledby="spousesLabel" aria-haspopup="listbox" aria-expanded="false">
-              <span class="combo-trigger-text">Add spouse/partner…</span>
+              <span class="combo-trigger-text">+ Add spouse/partner</span>
             </button>
             <div class="combo-dropdown" id="spousesDropdown" hidden>
               <div class="combo-filter-wrap">
@@ -261,13 +261,22 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" id="deletePersonBtn" class="btn btn-danger">Delete</button>
-          <div class="spacer"></div>
-          <button type="button" id="cancelBtn" class="btn">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
-        </div>
       </form>
+      <!-- Sibling of #personForm (not nested inside it) so it stays pinned
+           to the modal's bottom edge instead of scrolling away with the
+           form -- and, since a combo dropdown (parents/spouses) can only
+           ever overflow within #personForm's own scrollable box now, it
+           can no longer float an opaque bar through the middle of that
+           dropdown's option list the way a footer nested inside the same
+           scrollable box could. Save is a submit button living outside
+           its <form> -- the form="personForm" attribute is what still
+           ties it to that form's submit event. -->
+      <div class="modal-footer">
+        <button type="button" id="deletePersonBtn" class="btn btn-danger">Delete</button>
+        <div class="spacer"></div>
+        <button type="button" id="cancelBtn" class="btn">Cancel</button>
+        <button type="submit" form="personForm" class="btn btn-primary">Save</button>
+      </div>
     </div>
   </div>
 
@@ -499,6 +508,6 @@
        rather than loaded from a CDN, same as every other local file here. -->
   <script src="driver.iife.js?v=1"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609195"></script>
+  <script src="app.js?v=202609203"></script>
 </body>
 </html>

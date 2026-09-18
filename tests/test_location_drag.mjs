@@ -63,7 +63,7 @@ try {
   if (!afterTags[0] || afterTags[1] || afterTags[2]) throw new Error('Expected only the new first row to show the Current tag');
 
   console.log('\n=== Save and confirm the new order persists ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations:', JSON.stringify(saved.locations));

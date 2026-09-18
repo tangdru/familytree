@@ -30,7 +30,7 @@ try {
   await page.click('#viewEditBtn');
   await page.waitForTimeout(200);
   await page.fill('#contactsList .contact-row-input', 'Loves tea.');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   const afterUnrelatedEdit = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('photo unchanged:', afterUnrelatedEdit.photo === TINY_PNG, '| contacts:', afterUnrelatedEdit.contacts);
@@ -44,7 +44,7 @@ try {
   console.log('remove-photo button hidden (expect null -- a photo is set):', removeBtnHidden);
   if (removeBtnHidden !== null) throw new Error('Expected the remove-photo button to be visible when a photo is set');
   await page.click('#removePhotoBtn');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   const afterRemove = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1.photo);
   console.log('photo after removal (expect empty string):', JSON.stringify(afterRemove));

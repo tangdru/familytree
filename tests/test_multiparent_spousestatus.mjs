@@ -88,7 +88,7 @@ try {
     throw new Error('Expected Kid to now have two recorded parents: Bio Parent and Step Parent');
   }
 
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const savedKid = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.kid);
@@ -113,7 +113,7 @@ try {
   const afterToggle = await page.evaluate(() => document.querySelector('#spousesChips .chip-status')?.textContent);
   console.log('after tapping the toggle (this side now says):', afterToggle);
   if (afterToggle !== 'Current') throw new Error('Expected the toggle to flip to Current on this side');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const dataAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people);

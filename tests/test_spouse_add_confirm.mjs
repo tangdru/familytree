@@ -55,7 +55,7 @@ try {
   if (state.chips.length !== 1 || state.chips[0] !== 'Blair Existing') throw new Error('Expected Blair Existing to now be a chip');
   if (state.statusLabel !== 'Former') throw new Error('Expected the new chip\'s status to already read Former');
 
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people);
   console.log('Alex.spouseStatus:', JSON.stringify(saved.a.spouseStatus));
@@ -72,7 +72,7 @@ try {
   await page.waitForTimeout(200);
   await page.click('#nameInput');
   await page.keyboard.type('Casey New');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   state = await page.evaluate(() => ({

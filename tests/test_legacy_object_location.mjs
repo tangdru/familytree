@@ -71,7 +71,7 @@ try {
   const rowValues = await page.evaluate(() => Array.from(document.querySelectorAll('.location-row-input')).map(el => el.textContent));
   console.log('preloaded rows:', JSON.stringify(rowValues));
   if (rowValues[0] !== 'Boston, Massachusetts') throw new Error(`Expected the object location to preload as its text, got: ${JSON.stringify(rowValues)}`);
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations after resave:', JSON.stringify(saved.locations));

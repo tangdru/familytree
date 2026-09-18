@@ -39,10 +39,19 @@ try {
       };
     });
     const expectedPctVh = vp.height * 0.88;
-    const expectedHeight = Math.min(800, expectedPctVh);
+    // fitModalOverlaysToVisualViewport (see app.js) also caps the modal at
+    // the overlay's real available space (viewport height minus its own
+    // 20px+20px padding) via an inline max-height, JS-measured rather than
+    // relying on dvh/vh alone -- at most viewport sizes 88vh is already
+    // the tighter constraint and this cap never engages, but at very
+    // short heights it's the correct binding one: the old 88vh-only
+    // formula could let the modal encroach a few px into that padding
+    // (e.g. 300*0.88=264 leaves only 36px for a real 40px of padding).
+    const expectedAvailableSpace = vp.height - 40;
+    const expectedHeight = Math.min(800, expectedPctVh, expectedAvailableSpace);
     console.log(`${vp.name} (${vp.width}x${vp.height}): cardHeight=${info.cardHeight.toFixed(1)} expected=${expectedHeight.toFixed(1)} fitsInViewport=${info.cardBottom <= info.viewportHeight} footerVisible=${info.footerVisible}`);
     if (Math.abs(info.cardHeight - expectedHeight) > 1) {
-      throw new Error(`${vp.name}: card height ${info.cardHeight} doesn't match expected min(800, 88vh)=${expectedHeight}`);
+      throw new Error(`${vp.name}: card height ${info.cardHeight} doesn't match expected min(800, 88vh, available-space)=${expectedHeight}`);
     }
     if (info.cardBottom > info.viewportHeight + 1) {
       throw new Error(`${vp.name}: card overflows the viewport (bottom ${info.cardBottom} > viewport height ${info.viewportHeight})`);

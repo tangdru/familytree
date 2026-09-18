@@ -82,7 +82,7 @@ try {
   console.log('Confirmed: outside click closes the popover.');
 
   console.log('\n=== Save, then verify the saved year-only date strings ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1);
   console.log('saved locations:', JSON.stringify(saved.locations));

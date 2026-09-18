@@ -45,7 +45,7 @@ try {
   // with no current/former confirm step (parents don't have that status).
   await page.click('#nameInput');
   await page.keyboard.type('Susan Hart');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
 
   const afterState = await page.evaluate(() => ({
@@ -62,7 +62,7 @@ try {
   if (!afterState.chips.some(c => c.includes('Susan Hart'))) throw new Error('Expected Susan Hart to appear as a parent chip');
 
   console.log('\n=== Save Jane for real, confirm the parent link persisted ===');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(300);
 
   const dataAfterSave = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people);

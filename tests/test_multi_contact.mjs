@@ -63,7 +63,7 @@ try {
   console.log('first row gmail button still hidden (phone row, expect true):', firstGmailHidden);
   if (!firstGmailHidden) throw new Error('Expected the first (phone) row\'s gmail button to stay hidden');
 
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1.contacts);
@@ -92,7 +92,7 @@ try {
   const remaining = await page.evaluate(() => Array.from(document.querySelectorAll('.contact-row-input')).map(el => el.textContent));
   console.log('rows after removing the first:', JSON.stringify(remaining));
   if (JSON.stringify(remaining) !== JSON.stringify(['jane@gmail.com'])) throw new Error('Expected only the email row to remain');
-  await page.click('#personForm button[type="submit"]');
+  await page.click('button[type="submit"][form="personForm"]');
   await page.waitForTimeout(200);
   const savedAfterRemove = await page.evaluate(() => JSON.parse(localStorage.getItem('familytree.data.v1')).people.p1.contacts);
   console.log('saved contacts after removal:', JSON.stringify(savedAfterRemove));
