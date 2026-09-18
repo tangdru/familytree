@@ -1,15 +1,25 @@
 import { chromium } from 'playwright-core';
 
 // Exercises voiceRecordingReady's actual Supabase-connected branch (see
-// init() in app.js): a bucket probe via storage.from(bucket).list() right
-// after connecting, which the record button's presence depends on. Real
-// network access to Supabase/its CDN is blocked in this sandbox, so both
-// are faked via request interception -- config.js is replaced with fake
-// (but well-formed) credentials, and the supabase-js CDN script is
-// replaced with a minimal fake client exercising the exact same call
-// shapes app.js makes (loadRemote/saveRemote/subscribeRealtime/the
-// bucket probe), just resolving locally instead of over the network.
-function fakeSupabaseScript(bucketListError) {
+// init() in app.js): a bucket probe via a real (tiny, upserted-in-place)
+// storage.from(bucket).upload() right after connecting, which the record
+// button's presence depends on. Deliberately NOT list(): storage.objects.
+// bucket_id has no real existence check behind a list() query -- it's
+// just a SELECT filtered by bucket_id, and the RLS read policy this
+// schema installs matches that filter whether or not any such bucket
+// actually exists, so a missing bucket and an existing-but-empty one both
+// come back as `{ data: [], error: null }` (confirmed directly against
+// the real project's database). An upload can't have that ambiguity:
+// storage.objects.bucket_id is a hard foreign key into storage.buckets
+// (id), so inserting into a bucket that was never created fails at the
+// database level regardless of any RLS policy. Real network access to
+// Supabase/its CDN is blocked in this sandbox, so both are faked via
+// request interception -- config.js is replaced with fake (but
+// well-formed) credentials, and the supabase-js CDN script is replaced
+// with a minimal fake client exercising the exact same call shapes
+// app.js makes (loadRemote/saveRemote/subscribeRealtime/the bucket
+// probe), just resolving locally instead of over the network.
+function fakeSupabaseScript(bucketMissing) {
   return `window.supabase = {
     createClient: () => ({
       from: () => ({
@@ -19,7 +29,7 @@ function fakeSupabaseScript(bucketListError) {
       channel: () => ({ on: () => ({ subscribe: () => {} }) }),
       storage: {
         from: () => ({
-          list: async () => ({ error: ${bucketListError ? `{ message: 'Bucket not found' }` : 'null'}, data: ${bucketListError ? 'null' : '[]'} }),
+          upload: async () => ({ error: ${bucketMissing ? `{ message: 'insert or update on table "objects" violates foreign key constraint "objects_bucketId_fkey"' }` : 'null'} }),
         }),
       },
     }),

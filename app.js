@@ -6354,11 +6354,32 @@
         // manually re-run the updated supabase-schema.sql (see PR notes),
         // and uploading to a bucket that doesn't exist yet would otherwise
         // only fail at the point someone actually tries to save a
-        // recording. list() exercises the same read policy an upload would
-        // need, so a missing bucket or missing policy both correctly leave
-        // recording hidden.
+        // recording.
+        //
+        // NOT list(): storage.objects.bucket_id has no real per-request
+        // existence check behind it -- Storage's list() is just a SELECT
+        // against storage.objects filtered by bucket_id, and the RLS read
+        // policy this schema installs (`bucket_id = 'voice-recordings'`)
+        // matches that filter regardless of whether any such bucket
+        // actually exists in storage.buckets. A bucket that was never
+        // created and an existing-but-empty bucket both come back as
+        // `{ data: [], error: null }` -- confirmed directly against this
+        // project's own database: querying storage.objects as the anon
+        // role for a bucket_id with zero real buckets still just returns
+        // zero rows, no error. That's exactly why this stayed stuck
+        // showing the Record button in production with no bucket created
+        // at all.
+        //
+        // A real upload doesn't have this ambiguity: storage.objects.
+        // bucket_id is a hard foreign key into storage.buckets(id), so
+        // inserting into a bucket that doesn't exist fails at the
+        // database level no matter what any RLS policy says. Probing with
+        // an actual (tiny, upserted-in-place) upload -- the same
+        // operation saving a real recording performs -- means a missing
+        // bucket AND a missing/misconfigured insert policy both correctly
+        // leave recording hidden, which list() could never guarantee.
         try {
-          const { error } = await supabaseClient.storage.from(STORY_AUDIO_BUCKET).list('', { limit: 1 });
+          const { error } = await supabaseClient.storage.from(STORY_AUDIO_BUCKET).upload('.probe', new Blob(['probe']), { upsert: true });
           voiceRecordingReady = !error;
         } catch (e) {
           voiceRecordingReady = false;
