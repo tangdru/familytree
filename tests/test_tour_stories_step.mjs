@@ -1,13 +1,16 @@
 import { chromium } from 'playwright-core';
 
-// The first-time walkthrough (Driver.js, see TOUR_STEPS in app.js) now
-// includes a step pointing at the Stories "+ Add story" button -- unlike
-// every other step, that element only exists once a Person View card is
-// actually open, so the person-card step's onNextClick opens one before
-// advancing, and the Stories step's onDeselected closes it again on the
-// way out. (The tour only ever shows Next/Close buttons -- see
-// showButtons on the driver config -- so there's no backward navigation
-// to worry about.) Note: Driver.js leaves its own `driver-active-element`
+// The first-time walkthrough (Driver.js, see TOUR_STEPS in app.js) includes
+// steps pointing at the Stories "+ Add story" button and its voice-recording
+// mic button -- unlike most other steps, those elements only exist once a
+// Person View card (and, for the mic, its story editor) is actually open, so
+// each step's own onNextClick opens the next thing before advancing, and the
+// Fit-to-view step's onHighlightStarted closes the card again on the way out
+// (rather than either Stories step's own onDeselected, so it still runs even
+// if the mic step is skipped -- e.g. voiceRecordingReady false). (The tour
+// only ever shows Next/Close buttons -- see showButtons on the driver config
+// -- so there's no backward navigation to worry about.) Note: Driver.js
+// leaves its own `driver-active-element`
 // CSS class on every previously-highlighted element in this version
 // rather than removing it (a pre-existing quirk, reproducible even on the
 // original 4-step tour) -- so these checks use the popover's own
@@ -34,7 +37,9 @@ try {
   await page.waitForTimeout(200);
   await page.click('#replayTourBtn');
   await page.waitForTimeout(300);
-  for (let i = 0; i < 3; i++) {
+  // 6 clicks: addPerson -> viewModeSelect -> Traditional -> Chronological ->
+  // Centric -> search -> person-card (see TOUR_STEPS in app.js).
+  for (let i = 0; i < 6; i++) {
     await page.click('.driver-popover-next-btn');
     await page.waitForTimeout(250);
   }
@@ -62,7 +67,27 @@ try {
   if (!onStories.popoverJustBelowAddStoryBtn) throw new Error('Expected the popover to be positioned right at #addStoryBtn');
   console.log('Confirmed: Stories step opens the view card and targets #addStoryBtn.');
 
-  console.log('\n=== Advancing past Stories closes the view card again, landing on Fit-to-view ===');
+  console.log('\n=== Advancing past Stories opens the story editor and targets the record button ===');
+  await page.click('.driver-popover-next-btn');
+  await page.waitForTimeout(400);
+  const onRecord = await page.evaluate(() => {
+    const popover = document.querySelector('.driver-popover')?.getBoundingClientRect();
+    const recordBtn = document.querySelector('.story-record-btn')?.getBoundingClientRect();
+    return {
+      viewModalHidden: document.getElementById('personViewModal').hidden,
+      popoverText: document.querySelector('.driver-popover-description')?.textContent,
+      popoverJustBelowRecordBtn: recordBtn && popover && Math.abs(popover.top - recordBtn.bottom) < 30,
+    };
+  });
+  console.log(JSON.stringify(onRecord));
+  if (onRecord.viewModalHidden) throw new Error('Expected the Person View to still be open on the record-button tour step');
+  if (!onRecord.popoverText.toLowerCase().includes('mic') && !onRecord.popoverText.toLowerCase().includes('record')) {
+    throw new Error(`Expected the record-button step's description, got: ${onRecord.popoverText}`);
+  }
+  if (!onRecord.popoverJustBelowRecordBtn) throw new Error('Expected the popover to be positioned right at the record button');
+  console.log('Confirmed: leaving Stories forward opens the story editor and targets the record button.');
+
+  console.log('\n=== Advancing past the record button closes the view card again, landing on Fit-to-view ===');
   await page.click('.driver-popover-next-btn');
   await page.waitForTimeout(400);
   const afterFit = await page.evaluate(() => ({
@@ -70,11 +95,11 @@ try {
     popoverText: document.querySelector('.driver-popover-description')?.textContent,
   }));
   console.log(JSON.stringify(afterFit));
-  if (!afterFit.viewModalHidden) throw new Error('Expected the Person View to close after leaving the Stories step');
+  if (!afterFit.viewModalHidden) throw new Error('Expected the Person View to close after leaving the record-button step');
   if (!afterFit.popoverText.includes('Fit to view') && !afterFit.popoverText.includes('fit everyone')) {
     throw new Error(`Expected the Fit-to-view step, got: ${afterFit.popoverText}`);
   }
-  console.log('Confirmed: leaving Stories forward closes the view card.');
+  console.log('Confirmed: leaving the record-button step forward closes the view card.');
 
   console.log('\n=== No Previous button anywhere -- the tour is forward-only (Next/Close) ===');
   const prevVisible = await page.locator('.driver-popover-prev-btn').isVisible().catch(() => false);
