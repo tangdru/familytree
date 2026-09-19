@@ -3154,6 +3154,7 @@
     let timerInterval = null;
     let stopTimeout = null;
     let startTime = 0;
+    let stopWaiters = [];
 
     function setLabel(text) {
       btn.querySelector('.story-record-label').textContent = text;
@@ -3187,7 +3188,9 @@
         cleanup();
         btn.classList.remove('is-recording');
         setLabel('Record');
-        if (chunks.length) onRecorded(new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' }));
+        const blob = chunks.length ? new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' }) : null;
+        if (blob) onRecorded(blob);
+        stopWaiters.splice(0).forEach((resolve) => resolve(blob));
       });
       mediaRecorder.start();
       startTime = Date.now();
@@ -3203,6 +3206,18 @@
     btn.addEventListener('click', () => {
       if (mediaRecorder && mediaRecorder.state === 'recording') stop();
       else start();
+    });
+
+    // Used by the Save button so tapping Save mid-recording finishes the
+    // recording (and waits for its blob) instead of silently ignoring the
+    // click -- previously Save only ever looked at whatever audioBlob was
+    // already captured, which was still null while recording was in
+    // progress. Resolves with the recorded blob (or null if nothing was
+    // recording / nothing was captured).
+    btn.stopAndWait = () => new Promise((resolve) => {
+      if (!mediaRecorder || mediaRecorder.state !== 'recording') { resolve(null); return; }
+      stopWaiters.push(resolve);
+      stop();
     });
 
     return btn;
@@ -3313,17 +3328,38 @@
     const footer = document.createElement('div');
     footer.className = 'story-editor-footer';
 
+    // The on-screen keyboard opening for the textarea only auto-scrolls
+    // enough to keep the textarea itself in view -- it has no idea the
+    // record/cancel/save buttons below it exist, so they end up clipped
+    // behind the keyboard inside the view modal's scrollable body. Fix it
+    // directly by scrolling the footer into view ourselves, both right
+    // after opening and again whenever the keyboard's own resize of the
+    // visual viewport settles (the first call can run before the keyboard
+    // has finished animating in). The listener self-removes once this
+    // editor's wrap is no longer in the DOM.
+    function scrollFooterIntoView() {
+      footer.scrollIntoView({ block: 'nearest' });
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function onResize() {
+        if (!wrap.isConnected) { window.visualViewport.removeEventListener('resize', onResize); return; }
+        scrollFooterIntoView();
+      });
+    }
+
     // Hidden (not just disabled) rather than shown-and-failing when a
     // Supabase-connected tree hasn't run the updated schema yet -- see
     // voiceRecordingReady. Playback/remove of an already-saved recording
     // stays available regardless; only *starting a new one* is gated.
+    let recordBtn = null;
     if (voiceRecordingReady) {
-      const recordBtn = buildRecordButton((blob) => {
+      recordBtn = buildRecordButton((blob) => {
         audioBlob = blob;
         audioRemoved = false;
         audioUrl = URL.createObjectURL(blob);
         audioPreview.src = audioUrl;
         audioPreviewWrap.hidden = false;
+        scrollFooterIntoView();
       });
       footer.appendChild(recordBtn);
     }
@@ -3347,8 +3383,13 @@
     saveBtn.className = 'btn btn-primary';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
+      // Tapping Save while still recording used to silently no-op (it only
+      // ever looked at audioBlob, which stays null until the recorder's
+      // 'stop' event fires) -- finish the recording first so Save always
+      // acts on whatever was actually captured.
+      if (recordBtn) audioBlob = (await recordBtn.stopAndWait()) || audioBlob;
       const text = textarea.value.trim();
-      if (!text) { textarea.focus(); return; }
+      if (!text && !audioBlob && !audioUrl) { textarea.focus(); return; }
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
       try {
@@ -3380,7 +3421,10 @@
     footer.appendChild(saveBtn);
 
     wrap.appendChild(footer);
-    setTimeout(() => textarea.focus(), 0);
+    setTimeout(() => {
+      textarea.focus();
+      scrollFooterIntoView();
+    }, 0);
     return wrap;
   }
 
