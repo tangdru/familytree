@@ -6285,7 +6285,54 @@
   // tour. Styling lives in style.css under ".driver-popover".
   const TOUR_STEPS = [
     { element: '#addPersonBtn', popover: { description: 'Tap here to add a new person to the family tree.' } },
-    { element: '#viewModeSelect', popover: { description: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.' } },
+    {
+      element: '#viewModeSelect',
+      popover: {
+        description: 'Switch between Traditional, Chronological, Zodiac, and Centric views of the tree.',
+        // Always starts the next few demo steps from a known view
+        // (Traditional), regardless of whatever view was active before
+        // Replay walkthrough was used.
+        onNextClick: (el, step, opts) => {
+          els.viewModeSelect.value = 'traditional';
+          els.viewModeSelect.dispatchEvent(new Event('change'));
+          opts.driver.moveNext();
+        },
+      },
+    },
+    {
+      element: '#treeViewport',
+      popover: {
+        description: 'Traditional Tree: the classic generation-by-generation layout, parents above children.',
+        onNextClick: (el, step, opts) => {
+          els.viewModeSelect.value = 'chronological';
+          els.viewModeSelect.dispatchEvent(new Event('change'));
+          opts.driver.moveNext();
+        },
+      },
+    },
+    {
+      element: '#chronoRuler',
+      popover: {
+        description: 'Chronological Tree: everyone lined up by birth year, with a year ruler along the left edge.',
+        onNextClick: (el, step, opts) => {
+          els.viewModeSelect.value = 'centric';
+          els.viewModeSelect.dispatchEvent(new Event('change'));
+          opts.driver.moveNext();
+        },
+      },
+    },
+    {
+      element: '#centricMetricToggle',
+      popover: { description: 'Centric View: concentric rings around one person, showing everyone else’s age or location relative to them.' },
+      // Back to Traditional before the tour continues -- leaving Centric
+      // active would change how a plain tap on a person-card behaves for
+      // the Person View step right after it (a first click in Centric
+      // mode just recenters instead of opening the card).
+      onDeselected: () => {
+        els.viewModeSelect.value = 'traditional';
+        els.viewModeSelect.dispatchEvent(new Event('change'));
+      },
+    },
     { element: '#searchToggleBtn', popover: { description: 'Search for anyone in the tree by name.' } },
     {
       element: '.person-card',
@@ -6305,15 +6352,34 @@
     },
     {
       element: '#addStoryBtn',
-      popover: { description: 'Add Stories to a profile — memories, mentions of other people, anecdotes worth keeping.' },
-      // Closes the card again on the way out -- the next step's own
-      // target (Fit-to-view, sitting on the tree underneath) needs it out
-      // of the way. (The tour only ever shows Next/Close -- see
-      // showButtons on the driver config below -- so there's no Previous
-      // to symmetrically re-open it for.)
-      onDeselected: () => closeViewModal(),
+      popover: {
+        description: 'Add Stories to a profile — memories, mentions of other people, anecdotes worth keeping.',
+        // Opens the story editor before advancing, so the next step has a
+        // real, on-screen record button to highlight -- same reasoning as
+        // the person-card step's own onNextClick above.
+        onNextClick: (el, step, opts) => {
+          document.getElementById('addStoryBtn')?.click();
+          opts.driver.moveNext();
+        },
+      },
     },
-    { element: '#fitViewBtn', popover: { description: 'Lost? Tap here to fit everyone back into view.' } },
+    {
+      element: '.story-record-btn',
+      // Skipped automatically (skipMissingElement, below) on a Supabase-
+      // connected tree that hasn't run the updated schema yet -- see
+      // voiceRecordingReady -- since the record button doesn't exist at all.
+      popover: { description: 'Tap the mic to record a voice memory instead of typing -- it plays back right on the story once saved.' },
+    },
+    {
+      element: '#fitViewBtn',
+      popover: { description: 'Lost? Tap here to fit everyone back into view.' },
+      // Closes the Person View card (and any open Stories editor within
+      // it) before this step highlights -- the previous two steps left it
+      // open, and Fit-to-view sits on the tree underneath it. Handled here
+      // rather than on the Stories steps' own deselect so it still runs
+      // even if the record-button step above was skipped.
+      onHighlightStarted: () => closeViewModal(),
+    },
     // Nothing left to skip on this last step -- Done already ends the tour.
     { element: '#helpBtn', popover: { description: 'Come back here any time to reread this guide or replay the walkthrough.', showButtons: ['next'] } },
   ];
