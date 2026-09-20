@@ -19,12 +19,18 @@
 
   const $ = (id) => document.getElementById(id);
 
-  function showMicError(msg) {
-    const el = $('micError');
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+  }
+
+  function showError(msg, durationMs = 6000) {
+    const el = $('appError');
     el.textContent = msg;
     el.classList.remove('hidden');
-    setTimeout(() => el.classList.add('hidden'), 6000);
+    if (el._hideTimer) clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => el.classList.add('hidden'), durationMs);
   }
+  const showMicError = showError;
 
   async function ensureMic() {
     if (micStream) return true;
@@ -359,12 +365,44 @@
     if (text) loadSong(text);
   });
 
-  $('chordproFile').addEventListener('change', (e) => {
+  function setImportStatus(msg) {
+    const el = $('importStatus');
+    if (!msg) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  $('chordproFile').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const name = file.name.toLowerCase();
+
+    if (name.endsWith('.pdf') || name.endsWith('.docx') || name.endsWith('.doc')) {
+      setImportStatus(`Converting ${file.name}…`);
+      try {
+        const converted = await importLeadSheetFile(file);
+        $('pasteText').value = converted;
+        $('pasteArea').classList.remove('hidden');
+        $('pasteAreaHint').textContent =
+          `Converted from ${file.name} — chord placement is a best-effort guess, so check it over (and fill in Key/Tempo above) before Load.`;
+        setImportStatus('');
+        $('pasteText').focus();
+      } catch (err) {
+        setImportStatus('');
+        showError(`Couldn't convert ${file.name}: ${err.message || err}`, 9000);
+      }
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => loadSong(String(reader.result));
     reader.readAsText(file);
+    e.target.value = '';
   });
 
   populateDemoSongs();

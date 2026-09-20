@@ -9,9 +9,15 @@ open `index.html` (served, not `file://`, so the microphone works) and go.
 ## What it does
 
 - **Song chart** — paste or upload a [ChordPro](https://www.chordpro.org/chordpro/chordpro-introduction/)-style
-  chord chart, or pick one of two bundled demo songs (Amazing Grace, You Are
-  My Sunshine). Chords render above the lyrics; tap any chord to see its
-  fingering.
+  chord chart, upload a PDF or Word (.docx) lead sheet, or pick one of two
+  bundled demo songs (Amazing Grace, You Are My Sunshine). Chords render
+  above the lyrics; tap any chord to see its fingering.
+- **PDF/Word lead sheet import** — reconstructs the chord-above-lyric
+  layout from the file's text positions (PDF) or paragraph order (Word),
+  detects lines that are made up entirely of chord symbols, and merges
+  each onto the lyric line below it as inline ChordPro chords. This is a
+  heuristic, not exact, so the result is shown in the paste box for you to
+  check and fix before loading — see limitations below.
 - **Baritone chord diagrams** — fingerings are *computed*, not hand-typed:
   each chord symbol is parsed into a root + interval set, and the app
   searches fret positions on the D/G/B/E strings for a valid voicing
@@ -37,10 +43,27 @@ open `index.html` (served, not `file://`, so the microphone works) and go.
 
 - **No "name a song and it finds the chords" lookup.** That needs an
   external song/chord database (or real audio fingerprinting, Shazam-style)
-  this app doesn't have access to. Bring your own ChordPro chart instead.
+  this app doesn't have access to. Bring your own ChordPro chart, PDF, or
+  Word lead sheet instead.
 - **No pitch-accuracy grading** ("was that the right note"), only *timing*
   feedback — matching played notes to expected pitches would need the chart
   to encode a full melody/tab, not just chords+lyrics.
+
+### PDF/Word import limitations
+
+- Needs a real text layer — a **scanned or image-only PDF has no text to
+  read** and will be rejected. (A "Print to PDF" or Word-exported PDF has a
+  text layer; a photographed/scanned chart doesn't, short of adding OCR,
+  which isn't in scope here.)
+- Only **.docx** is supported, not the old binary **.doc** format — re-save
+  from Word as .docx first.
+- Chord/lyric alignment is column-position guesswork: it works well for
+  the common "one line of chords directly above one line of lyrics"
+  layout, less well for chords inside a table, multi-column layouts, or
+  chords wrapped mid-word. That's why the converted result lands in the
+  paste box instead of loading straight away — check it, nudge a `[Chord]`
+  left or right if it landed mid-word, fill in Key/Tempo (not extracted),
+  then Load.
 
 ## Format for your own songs
 
@@ -74,15 +97,25 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
+## Built with
+
+Plain HTML/JS/CSS, no build step. `vendor/` has two locally-hosted
+libraries (not loaded from a CDN, so the app doesn't depend on one being
+reachable): [pdf.js](https://mozilla.github.io/pdf.js/) (Apache-2.0) for
+reading PDF text, and [mammoth.js](https://github.com/mwilliamson/mammoth.js)
+(BSD-2-Clause) for reading .docx text.
+
 ## Testing
 
-`smoke_test.mjs` and `smoke_test_mic.mjs` are Playwright scripts (not part
-of the served app) that load the page in headless Chromium and click
-through song loading, chord diagrams, scrolling playback, and the
-mic-gated tuner/rhythm-coach/key-detect flows (using Chromium's fake audio
-device). Run a static server first, then:
+`smoke_test.mjs`, `smoke_test_mic.mjs`, and `smoke_test_import.mjs` are
+Playwright scripts (not part of the served app) that load the page in
+headless Chromium and click through song loading, chord diagrams,
+scrolling playback, the mic-gated tuner/rhythm-coach/key-detect flows
+(using Chromium's fake audio device), and PDF/Word lead sheet import.
+Run a static server first, then:
 
 ```
 node smoke_test.mjs
 node smoke_test_mic.mjs
+node smoke_test_import.mjs   # uses the committed sample_leadsheet.pdf/.docx fixtures
 ```

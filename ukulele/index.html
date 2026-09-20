@@ -21,18 +21,25 @@
         <option value="">-- choose --</option>
       </select>
 
-      <label for="chordproFile" class="file-label">Upload ChordPro (.cho/.chopro/.txt)</label>
-      <input type="file" id="chordproFile" accept=".cho,.chopro,.pro,.txt" />
+      <label for="chordproFile" class="file-label">Upload chart (.cho/.txt/.pdf/.docx)</label>
+      <input type="file" id="chordproFile" accept=".cho,.chopro,.pro,.txt,.pdf,.docx,.doc" />
 
       <button id="togglePasteBtn" class="secondary-btn" type="button">Paste chords instead</button>
     </div>
+    <div id="importStatus" class="import-status hidden"></div>
     <div id="pasteArea" class="paste-area hidden">
+      <p id="pasteAreaHint" class="hint" style="margin-top:0">Paste or edit ChordPro-style text, then Load.</p>
       <textarea id="pasteText" rows="8" placeholder="{title: My Song}&#10;{key: G}&#10;{tempo: 100}&#10;[G]Some lyrics [D]here..."></textarea>
       <button id="loadPastedBtn" class="primary-btn" type="button">Load</button>
     </div>
     <p class="hint">
       No song database lookup here (that needs an external service this app
       doesn't have) &mdash; pick a demo, paste a <a href="https://www.chordpro.org/chordpro/chordpro-introduction/" target="_blank" rel="noopener">ChordPro</a>-style chart, or upload one.
+      A PDF or Word (.docx) lead sheet works too: chord placement is
+      reconstructed automatically and shown for you to review/fix before
+      loading, since that reconstruction is best-effort, not exact &mdash;
+      it needs real selectable text (a scanned/image-only PDF has none to
+      read), and .doc (the old binary format) isn't supported, only .docx.
     </p>
   </section>
 
@@ -108,10 +115,12 @@
     <div id="chordModalContent" class="chord-modal-content"></div>
   </div>
 
-  <div id="micError" class="mic-error hidden"></div>
+  <div id="appError" class="app-error hidden"></div>
 
 </main>
 
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/mammoth.browser.min.js"></script>
 <script src="js/pitch.js"></script>
 <script src="js/chordpro.js"></script>
 <script src="js/chords-baritone.js"></script>
@@ -120,6 +129,7 @@
 <script src="js/tuner.js"></script>
 <script src="js/keydetect.js"></script>
 <script src="js/rhythm.js"></script>
+<script src="js/leadsheet-import.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
