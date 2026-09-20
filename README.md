@@ -51,6 +51,12 @@ The `tests/` folder has a full Playwright regression suite
 walkthrough — handy if you're poking at the code and want to make sure
 nothing broke.
 
+## Also in this repo
+
+[`ukulele/`](ukulele/) is an unrelated side project hosted alongside the
+family tree: a browser-based baritone ukulele practice coach (chord charts,
+tuner, rhythm feedback). See its own README for details.
+
 ## Built with
 
 Vanilla JavaScript, HTML, and CSS — plus [Supabase](https://supabase.com)

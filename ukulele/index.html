@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Baritone Uke Coach</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="app-header">
+  <h1>Baritone Uke Coach</h1>
+  <p class="tagline">Listen, follow the chart, get feedback on your timing.</p>
+</header>
+
+<main class="app-main">
+
+  <section class="panel song-loader" aria-label="Load a song">
+    <div class="song-loader-row">
+      <label for="demoSongSelect">Demo song</label>
+      <select id="demoSongSelect">
+        <option value="">-- choose --</option>
+      </select>
+
+      <label for="chordproFile" class="file-label">Upload ChordPro (.cho/.chopro/.txt)</label>
+      <input type="file" id="chordproFile" accept=".cho,.chopro,.pro,.txt" />
+
+      <button id="togglePasteBtn" class="secondary-btn" type="button">Paste chords instead</button>
+    </div>
+    <div id="pasteArea" class="paste-area hidden">
+      <textarea id="pasteText" rows="8" placeholder="{title: My Song}&#10;{key: G}&#10;{tempo: 100}&#10;[G]Some lyrics [D]here..."></textarea>
+      <button id="loadPastedBtn" class="primary-btn" type="button">Load</button>
+    </div>
+    <p class="hint">
+      No song database lookup here (that needs an external service this app
+      doesn't have) &mdash; pick a demo, paste a <a href="https://www.chordpro.org/chordpro/chordpro-introduction/" target="_blank" rel="noopener">ChordPro</a>-style chart, or upload one.
+    </p>
+  </section>
+
+  <section class="panel song-meta" aria-label="Song info">
+    <div class="meta-block">
+      <div id="songTitle" class="song-title">No song loaded</div>
+      <div id="songArtist" class="song-artist"></div>
+    </div>
+    <div class="meta-block">
+      <span class="meta-label">Key</span>
+      <span id="keyDisplay" class="meta-value">&mdash;</span>
+      <button id="detectKeyBtn" class="secondary-btn small-btn" type="button">Detect from mic</button>
+    </div>
+    <div class="meta-block">
+      <span class="meta-label">Tempo</span>
+      <input id="tempoInput" type="number" min="30" max="240" value="90" />
+      <span class="unit">BPM</span>
+      <button id="tapTempoBtn" class="secondary-btn small-btn" type="button">Tap</button>
+    </div>
+    <div class="meta-block">
+      <span class="meta-label">Time</span>
+      <span id="timeSigDisplay" class="meta-value">4/4</span>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <button class="tab-btn active" data-tab="play" role="tab" aria-selected="true" type="button">Play &amp; Scroll</button>
+    <button class="tab-btn" data-tab="tuner" role="tab" aria-selected="false" type="button">Tuner</button>
+    <button class="tab-btn" data-tab="rhythm" role="tab" aria-selected="false" type="button">Rhythm Coach</button>
+  </nav>
+
+  <section id="tab-play" class="tab-panel panel" role="tabpanel">
+    <div class="transport">
+      <button id="playBtn" class="primary-btn" type="button">▶ Play</button>
+      <button id="stopBtn" class="secondary-btn" type="button">■ Stop</button>
+      <label class="scroll-toggle">
+        <input type="checkbox" id="autoScrollToggle" checked />
+        Auto-scroll
+      </label>
+    </div>
+    <div id="songView" class="song-view">
+      <p class="empty-hint">Load a song above to see the chart here.</p>
+    </div>
+  </section>
+
+  <section id="tab-tuner" class="tab-panel panel hidden" role="tabpanel">
+    <button id="tunerToggleBtn" class="primary-btn" type="button">🎤 Start Tuner</button>
+    <div class="tuner-display">
+      <div id="tunerNote" class="tuner-note">&mdash;</div>
+      <div class="tuner-meter">
+        <div id="tunerNeedle" class="tuner-needle"></div>
+        <div class="tuner-meter-center-line"></div>
+      </div>
+      <div id="tunerCents" class="tuner-cents"></div>
+      <div id="tunerString" class="tuner-string-hint"></div>
+    </div>
+    <p class="hint">Baritone tuning: D3 &middot; G3 &middot; B3 &middot; E4 (low to high) &mdash; same as a guitar's top 4 strings.</p>
+  </section>
+
+  <section id="tab-rhythm" class="tab-panel panel hidden" role="tabpanel">
+    <button id="rhythmToggleBtn" class="primary-btn" type="button">🎤 Start Rhythm Coach</button>
+    <p class="hint">Starts the metronome at the tempo above and listens for your strums, comparing each one to the beat.</p>
+    <div id="beatTrack" class="beat-track"></div>
+    <div class="rhythm-stats">
+      <div class="stat"><span id="statOnTime" class="stat-value">&mdash;</span><span class="stat-label">on-time</span></div>
+      <div class="stat"><span id="statAvgMs" class="stat-value">&mdash;</span><span class="stat-label">avg ms off</span></div>
+      <div class="stat"><span id="statCount" class="stat-value">0</span><span class="stat-label">strums heard</span></div>
+    </div>
+  </section>
+
+  <div id="chordModal" class="chord-modal hidden">
+    <div class="chord-modal-backdrop"></div>
+    <div id="chordModalContent" class="chord-modal-content"></div>
+  </div>
+
+  <div id="micError" class="mic-error hidden"></div>
+
+</main>
+
+<script src="js/pitch.js"></script>
+<script src="js/chordpro.js"></script>
+<script src="js/chords-baritone.js"></script>
+<script src="js/songs.js"></script>
+<script src="js/metronome.js"></script>
+<script src="js/tuner.js"></script>
+<script src="js/keydetect.js"></script>
+<script src="js/rhythm.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
