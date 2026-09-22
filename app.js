@@ -1479,7 +1479,7 @@
   // pinch would ever be allowed to.
   const MAX_ZOOM = 2;
   const view = { x: 40, y: 20, scale: 1 };
-  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'map'
+  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'globe'
 
   // Centric view's own state: which person is at the center, and which
   // proximity metric currently decides ring placement -- see
@@ -1565,10 +1565,6 @@
       els.chronoRulerInner.style.transform = `translateY(${view.y}px)`;
       repositionChronoRulerLabels();
     }
-    // Keeps Map View's markers/clusters a constant on-screen size as the
-    // map itself zooms, and re-clusters once the zoom has moved enough to
-    // matter -- see updateMapZoomLevel's own comment.
-    if (viewMode === 'map') updateMapZoomLevel();
   }
   applyTransform();
 
@@ -1607,7 +1603,20 @@
     if (previousViewMode === 'chronological' && viewMode === 'traditional') {
       playChronoDotAssemble(false);
     }
-    if (viewMode === 'map' && previousViewMode !== 'map') mapEntryFadePending = true;
+    if (viewMode === 'globe' && previousViewMode !== 'globe') {
+      // Globe View doesn't use the shared view.x/y/scale canvas transform
+      // at all -- its own projection outputs viewport-space coordinates
+      // directly (see renderGlobeFrame), so any transform left over from
+      // whatever view was active before must be zeroed out here, once,
+      // rather than have it silently double up with the globe's own
+      // positioning.
+      view.x = 0;
+      view.y = 0;
+      view.scale = 1;
+      applyTransform();
+      globeEntryFadePending = true;
+      globeInitialScale = null; // recomputed for this viewport on entry
+    }
     renderTree();
     // Spawned AFTER renderTree() so chronoMinYear/chronoRulerLabels already
     // reflect the freshly-rendered chrono layout it's assembling onto.
@@ -1618,15 +1627,12 @@
       // Fit the columns' width only -- see computeFitTransform's own note
       // on why height is deliberately left out here.
       animateFitToView({ horizontalOnly: true });
-    } else if (viewMode === 'map') {
-      // Fill the screen's height instead of shrinking the whole world
-      // down to also fit its width -- see computeFitTransform's own note
-      // on verticalOnly -- then zoom back out a bit further (MAP_ZOOM_OUT)
-      // so more of the world is visible without panning, now that the
-      // smaller MAP_CARD_SCALE cards need less clearance from each other.
-      // The map still ends up wider than the viewport; panning (already
-      // free-form on this shared canvas) is how the rest of it is reached.
-      animateFitToView({ verticalOnly: true, zoomOut: MAP_ZOOM_OUT });
+    } else if (viewMode === 'globe') {
+      // renderTree() above already ran renderGlobeView(), which establishes
+      // its own initial rotation/scale and renders the first frame --
+      // nothing more to do here. Unlike every other view, Globe View never
+      // touches view.x/y/scale or animateFitToView at all (see the
+      // previousViewMode reset above and renderGlobeFrame's own note).
     } else if (viewMode === 'centric') {
       // renderTree() above already ran renderCentric(), which triggers
       // its own pan/zoom animation (animateCentricZoom) anchored on this
@@ -1747,8 +1753,8 @@
   els.fitViewBtn.addEventListener('click', () => {
     if (viewMode === 'zodiac') {
       animateFitToView({ horizontalOnly: true });
-    } else if (viewMode === 'map') {
-      animateFitToView({ verticalOnly: true, zoomOut: MAP_ZOOM_OUT });
+    } else if (viewMode === 'globe') {
+      animateGlobeTo(GLOBE_DEFAULT_ROTATION, globeInitialScale);
     } else if (viewMode === 'centric' && prevCentricGrid) {
       // Re-fit around the SAME anchored origin renderCentric() last used
       // -- nothing about the rings changed, just the pan/zoom, so this is
@@ -1804,14 +1810,10 @@
   }
 
   function setZoom(newScale, anchorClientX, anchorClientY) {
-    // Map View gets a much higher ceiling than the tree views -- MAX_ZOOM
-    // (2x) was tuned for a family-tree diagram, but the whole world only
-    // spans MAP_W (1600) px of map-space to begin with, so 2x is nowhere
-    // near enough to visually separate two real cities that are merely
-    // close together rather than at the exact same address. See
-    // MAP_MAX_ZOOM's own comment.
-    const maxZoom = viewMode === 'map' ? MAP_MAX_ZOOM : MAX_ZOOM;
-    newScale = Math.min(maxZoom, Math.max(MIN_ZOOM, newScale));
+    // Globe View has its own independent zoom (globeScale, see
+    // setGlobeZoom) with its own much higher ceiling, and never calls
+    // this function at all.
+    newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newScale));
     const rect = els.viewport.getBoundingClientRect();
     const ax = anchorClientX !== undefined ? anchorClientX - rect.left : rect.width / 2;
     const ay = anchorClientY !== undefined ? anchorClientY - rect.top : rect.height / 2;
@@ -1825,6 +1827,10 @@
 
   els.viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (viewMode === 'globe') {
+      setGlobeZoom(globeScale * (1 + -e.deltaY * 0.0015));
+      return;
+    }
     const delta = -e.deltaY * 0.0015;
     setZoom(view.scale + delta, e.clientX, e.clientY);
   }, { passive: false });
@@ -1846,15 +1852,26 @@
     }
   });
 
+  // Drag pans the shared canvas transform in every view except Globe,
+  // where the exact same gesture instead rotates the sphere -- panStart
+  // holds whichever shape the active mode actually needs (a translate
+  // offset for the tree views, a starting rotation for the globe) rather
+  // than keeping two entirely separate drag-tracking systems side by side.
   let isPanning = false, panStart = null;
   els.viewport.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle')) return;
+    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) return;
     isPanning = true;
-    panStart = { x: e.clientX - view.x, y: e.clientY - view.y };
+    panStart = viewMode === 'globe'
+      ? { x: e.clientX, y: e.clientY, rotation: globeRotation.slice() }
+      : { x: e.clientX - view.x, y: e.clientY - view.y };
     els.viewport.classList.add('grabbing');
   });
   window.addEventListener('mousemove', (e) => {
     if (!isPanning) return;
+    if (viewMode === 'globe') {
+      rotateGlobeBy(e.clientX - panStart.x, e.clientY - panStart.y, panStart.rotation);
+      return;
+    }
     view.x = e.clientX - panStart.x;
     view.y = e.clientY - panStart.y;
     applyTransform();
@@ -1879,14 +1896,16 @@
   let pinchStartScale = 1;
 
   els.viewport.addEventListener('touchstart', (e) => {
-    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle')) { touchMode = null; return; }
+    if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
-      touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+      touchPanStart = viewMode === 'globe'
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY, rotation: globeRotation.slice() }
+        : { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
     } else if (e.touches.length === 2) {
       touchMode = 'pinch';
       pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
-      pinchStartScale = view.scale;
+      pinchStartScale = viewMode === 'globe' ? globeScale : view.scale;
     }
   }, { passive: true });
 
@@ -1894,12 +1913,20 @@
     if (!touchMode) return;
     e.preventDefault();
     if (touchMode === 'pan' && e.touches.length === 1) {
+      if (viewMode === 'globe') {
+        rotateGlobeBy(e.touches[0].clientX - touchPanStart.x, e.touches[0].clientY - touchPanStart.y, touchPanStart.rotation);
+        return;
+      }
       view.x = e.touches[0].clientX - touchPanStart.x;
       view.y = e.touches[0].clientY - touchPanStart.y;
       applyTransform();
     } else if (touchMode === 'pinch' && e.touches.length === 2) {
       const dist = touchDistance(e.touches[0], e.touches[1]);
       const mid = touchMidpoint(e.touches[0], e.touches[1]);
+      if (viewMode === 'globe') {
+        setGlobeZoom(pinchStartScale * (dist / pinchStartDist));
+        return;
+      }
       setZoom(pinchStartScale * (dist / pinchStartDist), mid.x, mid.y);
     }
   }, { passive: false });
@@ -1907,7 +1934,9 @@
   els.viewport.addEventListener('touchend', (e) => {
     if (e.touches.length === 1) {
       touchMode = 'pan';
-      touchPanStart = { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+      touchPanStart = viewMode === 'globe'
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY, rotation: globeRotation.slice() }
+        : { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
     } else {
       touchMode = null;
     }
@@ -2784,13 +2813,13 @@
     });
   }
 
-  // A person's current-location coordinates for Map View (see
-  // renderMapView) -- locations[0] (the app's own "current" convention,
+  // A person's current-location coordinates for Globe View (see
+  // renderGlobeView) -- locations[0] (the app's own "current" convention,
   // see locationEntriesOf) if it has coordinates, else birthLocation as a
   // fallback for someone with no locations[] entries at all. Returns null
-  // (skipped on the map) when neither has coordinates -- an entry saved
+  // (skipped on the globe) when neither has coordinates -- an entry saved
   // before the location autocomplete existed, or a manually-typed one,
-  // can't be placed on the map.
+  // can't be placed on the globe.
   function currentLocationCoordsOf(person) {
     if (!person) return null;
     const current = locationEntriesOf(person)[0];
@@ -4593,7 +4622,7 @@
     if (viewMode === 'chronological') renderChronological();
     else if (viewMode === 'zodiac') renderZodiac();
     else if (viewMode === 'centric') renderCentric();
-    else if (viewMode === 'map') renderMapView();
+    else if (viewMode === 'globe') renderGlobeView();
     else renderTraditional();
   }
 
@@ -4784,12 +4813,12 @@
         // touching the user's own pan/zoom.
         renderTree();
       } else {
-        // Zodiac/Centric/Map cards are shown as individuals, regrouped by
-        // sign, proximity, or location rather than by relationship --
+        // Zodiac/Centric/Globe cards are shown as individuals, regrouped
+        // by sign, proximity, or location rather than by relationship --
         // opening straight into a spouse-paired Couple View would cut
         // against that, so force the single Person View for just the
         // clicked card instead.
-        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric' || viewMode === 'map';
+        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric' || viewMode === 'globe';
         openViewModal(person.id, { forceSingle });
       }
     });
@@ -6312,82 +6341,101 @@
     });
   }
 
-  // ---------- Map View ----------
+  // ---------- Globe View ----------
   // Plots each person's CURRENT location (no history, no migration -- see
-  // currentLocationCoordsOf) on a Robinson-projection world map. Cards are
-  // real buildCard() person cards, positioned by projected lat/lon instead
-  // of tree/ring math, and carried in and out by the exact same
-  // captureCardPositions()/animateLayoutIn() FLIP transition every other
-  // view uses -- no separate marker element, no separate click handling,
-  // no separate move animation to maintain. Land is drawn as backdrop
-  // straight into the shared #linesSvg, same as Chrono's gridlines or
-  // Centric's ring circles are backdrop drawn into that same SVG.
+  // currentLocationCoordsOf) on a spinning orthographic globe. Cards are
+  // real buildCard() person cards, positioned by projecting lon/lat
+  // through the globe's current rotation/scale every frame (unlike the
+  // tree views, this can't be a cheap CSS transform: rotating a sphere
+  // moves every point along a different curved path, so the land outline
+  // and every marker are recomputed on each drag/zoom step). Land is
+  // drawn as backdrop straight into the shared #linesSvg, same as
+  // Chrono's gridlines or Centric's ring circles are backdrop drawn into
+  // that same SVG. This view also fully bypasses the shared view.x/y/
+  // scale canvas transform every other view uses -- see the
+  // viewModeSelect handler's own reset on entry, and rotateGlobeBy/
+  // setGlobeZoom below, which are wired into the shared drag/wheel/pinch
+  // handlers as their own branch rather than going through
+  // applyTransform()/setZoom() at all.
   //
-  // d3, d3-geo-projection (for geoRobinson) and topojson-client, plus
-  // world-atlas's countries-110m.json, are vendored locally rather than
-  // loaded from a CDN -- same reasoning as driver.iife.js (see its own
-  // comment in index.html): this view has no graceful degradation without
-  // them, unlike e.g. libphonenumber-js. They're ~450KB combined and most
+  // d3 (bundled with the core geoOrthographic/geoPath/geoDistance this
+  // view needs -- no extra d3-geo-projection required, unlike the old
+  // Robinson-projection flat map) and topojson-client, plus world-atlas's
+  // countries-110m.json, are vendored locally rather than loaded from a
+  // CDN -- same reasoning as driver.iife.js (see its own comment in
+  // index.html): this view has no graceful degradation without them,
+  // unlike e.g. libphonenumber-js. They're ~400KB combined and most
   // sessions never open this view, so they're only injected the first
-  // time someone actually switches to Map View -- see ensureMapLibs.
+  // time someone actually switches to Globe View -- see ensureGlobeLibs.
 
-  const MAP_W = 1600;
-  const MAP_H = 800;
-  // Dials the fill-height fit (see computeFitTransform's own note on
-  // verticalOnly) back out a bit further, trading some of that fit's size
-  // for more of the world visible without panning on first entry --
-  // decluttering itself is clustering's job now (see below), not this.
-  const MAP_ZOOM_OUT = 0.7;
-  // Markers/clusters render at this CSS scale when view.scale is 1, and
-  // are counter-scaled against every zoom change (see updateMapZoomLevel)
-  // to stay this same size on screen regardless of how zoomed in or out
-  // the map itself is -- the whole point being that the map zooms and the
-  // people on it don't, same as pins on a real map.
-  const MAP_MARKER_TARGET_SCALE = 0.3;
-  // Two people whose current-location points land within this many
-  // SCREEN pixels of each other (at the map's current zoom) collapse into
-  // one numbered cluster instead of two overlapping cards -- purely a
-  // function of view.scale, recomputed as it changes (see
-  // updateMapZoomLevel), unlike the old fixed-map-space overlap check
-  // this replaces.
-  const MAP_CLUSTER_PIXEL_RADIUS = 50;
-  // How much closer a cluster click zooms in, capped at MAP_MAX_ZOOM -- a
-  // cluster whose members are still within MAP_CLUSTER_PIXEL_RADIUS once
-  // that cap is hit (an exact shared address, which no amount of zoom can
-  // ever visually separate) falls back to a fanned row instead of an
-  // unbreakable cluster -- see renderMapMarkers.
-  const MAP_CLUSTER_ZOOM_FACTOR = 3;
-  // The tree views' shared MAX_ZOOM (2x) makes sense for a family-tree
-  // diagram, but the whole world only spans MAP_W (1600) px of map-space
-  // to begin with, so 2x barely zooms in at all in real terms -- nowhere
-  // near enough to separate two cities that are merely close together
-  // rather than at the exact same address (see setZoom, which picks this
-  // ceiling specifically for Map View). 30x gets a person-width of
-  // separation down to roughly a few km apart at typical latitudes,
-  // comfortably past "different neighborhoods of the same city" -- only
-  // an exact shared address should still need the fan-out fallback.
-  const MAP_MAX_ZOOM = 30;
-  let mapLibsPromise = null;
-  let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
-  // Each person's raw, unscaled projected {x,y} (plus their subtitle
-  // text) -- computed once per full renderMapView() call and reused by
-  // every zoom-triggered re-cluster afterward, so panning/zooming never
-  // has to re-run the projection or re-parse the land topology.
-  let mapPeoplePoints = [];
-  // The view.scale clustering was last computed at -- re-clustering only
-  // runs once the zoom has moved far enough from this to plausibly change
-  // any group's membership (see updateMapZoomLevel), not on every single
-  // drag/wheel/animation frame.
-  let mapLastClusterScale = null;
-  // Sequences the land fade-in (10% -> 100% opacity) below to play only
-  // when actually switching INTO Map View, not on every later re-render
-  // triggered while already there (adding a person, a zoom-triggered
-  // re-cluster, etc.) -- set by the viewModeSelect handler right before
-  // calling renderTree(), consumed (and cleared) the moment the land
-  // path is actually drawn.
-  let mapEntryFadePending = false;
+  // Centers the initial view on the Americas/Atlantic, where this app's
+  // own data tends to cluster -- rotate([lambda, phi]) brings the point
+  // at geographic (-lambda, -phi) to the center of the visible hemisphere.
+  const GLOBE_DEFAULT_ROTATION = [90, -38];
+  // Markers/clusters always render at this flat CSS scale, at any zoom
+  // level -- unlike the old flat map (where this same constant had to be
+  // divided by view.scale to counteract the shared canvas's own ancestor
+  // CSS transform), Globe View's cards live inside a canvas permanently
+  // pinned at scale(1) (see the viewModeSelect handler's entry reset) and
+  // are positioned by the projection's own translate/scale, which already
+  // outputs real viewport pixels -- so nothing further needs counteracting.
+  // Distances between markers still grow as globeScale increases (that IS
+  // "zooming in"); it's each marker's own rendered size that stays fixed,
+  // same as pins on a real map.
+  const GLOBE_MARKER_TARGET_SCALE = 0.3;
+  // Two people whose current-location points land within this many SCREEN
+  // pixels of each other (at the globe's current rotation and zoom)
+  // collapse into one numbered cluster instead of two overlapping cards.
+  const GLOBE_CLUSTER_PIXEL_RADIUS = 50;
+  // How much closer a cluster click zooms in, capped at
+  // globeInitialScale * GLOBE_ZOOM_IN_FACTOR -- a cluster whose members
+  // are still within GLOBE_CLUSTER_PIXEL_RADIUS once that cap is hit (an
+  // exact shared address, which no amount of zoom can ever visually
+  // separate) falls back to a fanned row instead of an unbreakable
+  // cluster -- see renderGlobeFrame.
+  const GLOBE_CLUSTER_ZOOM_FACTOR = 3;
+  // globeScale (the projection's own pixel radius) is clamped to this
+  // range around globeInitialScale -- a little room to zoom out for
+  // context, and a lot of room to zoom in: at GLOBE_ZOOM_IN_FACTOR (40x)
+  // a person-width of separation resolves down to roughly a few km apart
+  // at typical latitudes, comfortably past "different neighborhoods of
+  // the same city" -- only an exact shared address should still need the
+  // fan-out fallback.
+  const GLOBE_ZOOM_OUT_FACTOR = 0.4;
+  const GLOBE_ZOOM_IN_FACTOR = 40;
+  let globeLibsPromise = null;
+  let globeWorldLand = null; // GeoJSON, set once ensureGlobeLibs resolves
+  // Each person's raw {lon, lat} (plus their subtitle text) -- computed
+  // once per renderGlobeView() call (on entry or a data change) and
+  // re-projected fresh every rendered frame after that, since rotating
+  // the globe moves every point along a curved path, not a flat
+  // translate -- unlike the old flat map, there's no cheaper "just pan"
+  // case to special-case here.
+  let globePeople = [];
+  // [longitude, latitude] in degrees -- see GLOBE_DEFAULT_ROTATION.
+  let globeRotation = GLOBE_DEFAULT_ROTATION.slice();
+  // The projection's current pixel radius; globeInitialScale is the value
+  // that exactly fits the globe to the viewport on entry (recomputed each
+  // time the view is entered, since the viewport may have resized), used
+  // as the reference point for both the zoom clamp and the marker
+  // counter-scale above.
+  let globeScale = 300;
+  let globeInitialScale = null;
+  // Batches rotate/zoom-triggered re-renders to at most once per animation
+  // frame (see scheduleGlobeRender) -- a drag or pinch gesture can fire
+  // many move events between two frames, and re-projecting the land path
+  // and every marker is real work worth not repeating faster than the
+  // screen can even show it.
+  let globeRenderQueued = false;
+  // Sequences the entry fade (10% -> 100% opacity) below to play only
+  // when actually switching INTO Globe View, not on every later re-render
+  // triggered while already there (adding a person, a drag/zoom frame,
+  // etc.) -- set by the viewModeSelect handler right before calling
+  // renderTree(), consumed (and cleared) the moment the first frame is
+  // actually drawn.
+  let globeEntryFadePending = false;
 
-  function loadMapScript(src) {
+  function loadGlobeScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
@@ -6397,29 +6445,25 @@
     });
   }
 
-  function ensureMapLibs() {
-    if (!mapLibsPromise) {
-      // d3-geo-projection extends the global d3 object it expects to
-      // already exist (adding geoRobinson), so it must load strictly
-      // after d3.min.js, not just alongside it.
-      mapLibsPromise = (async () => {
-        await loadMapScript('d3.min.js');
-        await loadMapScript('d3-geo-projection.min.js');
-        await loadMapScript('topojson-client.min.js');
+  function ensureGlobeLibs() {
+    if (!globeLibsPromise) {
+      globeLibsPromise = (async () => {
+        await loadGlobeScript('d3.min.js');
+        await loadGlobeScript('topojson-client.min.js');
         const res = await fetch('countries-110m.json');
         const topo = await res.json();
-        mapWorldLand = topojson.feature(topo, topo.objects.land);
+        globeWorldLand = topojson.feature(topo, topo.objects.land);
       })().catch(err => {
         // Reset so a later call (the background preload below, or
-        // renderMapView's own on-demand call) gets a fresh attempt instead
-        // of permanently replaying this one failure -- a transient network
-        // blip during the background preload shouldn't mean Map View can
-        // never load for the rest of the session.
-        mapLibsPromise = null;
+        // renderGlobeView's own on-demand call) gets a fresh attempt
+        // instead of permanently replaying this one failure -- a
+        // transient network blip during the background preload shouldn't
+        // mean Globe View can never load for the rest of the session.
+        globeLibsPromise = null;
         throw err;
       });
     }
-    return mapLibsPromise;
+    return globeLibsPromise;
   }
 
   // Reserved for a future migration-trails feature (tracing a person's
@@ -6439,27 +6483,24 @@
     return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
   }
 
-  // Groups mapPeoplePoints indices whose projected points land within
-  // MAP_CLUSTER_PIXEL_RADIUS screen pixels of each other AT THE CURRENT
-  // view.scale -- purely a function of zoom, recomputed as it changes
-  // (see updateMapZoomLevel). Deliberately transitive (A near B near C
-  // joins all three even if A and C alone wouldn't) -- that's ordinary,
-  // expected clustering behavior, the same thing map pin clusters
-  // everywhere do, unlike the old fixed-degree "is this the same address"
-  // check this replaces.
-  function clusterMapPoints() {
+  // Groups indices into `points` (each { point: {x,y}, ... }, already
+  // projected for the CURRENT frame) whose screen positions land within
+  // GLOBE_CLUSTER_PIXEL_RADIUS of each other. Deliberately transitive (A
+  // near B near C joins all three even if A and C alone wouldn't) --
+  // that's ordinary, expected clustering behavior, the same thing map pin
+  // clusters everywhere do.
+  function clusterGlobePoints(points) {
     const used = new Set();
     const groups = [];
-    for (let i = 0; i < mapPeoplePoints.length; i++) {
+    for (let i = 0; i < points.length; i++) {
       if (used.has(i)) continue;
       const group = [i];
       used.add(i);
-      const anchor = mapPeoplePoints[i].point;
-      for (let j = i + 1; j < mapPeoplePoints.length; j++) {
+      const anchor = points[i].point;
+      for (let j = i + 1; j < points.length; j++) {
         if (used.has(j)) continue;
-        const other = mapPeoplePoints[j].point;
-        const screenDist = Math.hypot(anchor.x - other.x, anchor.y - other.y) * view.scale;
-        if (screenDist < MAP_CLUSTER_PIXEL_RADIUS) { group.push(j); used.add(j); }
+        const other = points[j].point;
+        if (Math.hypot(anchor.x - other.x, anchor.y - other.y) < GLOBE_CLUSTER_PIXEL_RADIUS) { group.push(j); used.add(j); }
       }
       groups.push(group);
     }
@@ -6467,7 +6508,7 @@
   }
 
   // Spreads points that can't be told apart by zooming any further (an
-  // exact shared address -- see renderMapMarkers) into a horizontal row
+  // exact shared address -- see renderGlobeFrame) into a horizontal row
   // centered on their shared spot, the same CARD_WIDTH/SPOUSE_GAP rhythm
   // the tree views already space cards by.
   function fanOutRow(points, step) {
@@ -6478,30 +6519,92 @@
     return points.map((_, k) => ({ x: startX + k * step, y: cy }));
   }
 
-  // Rebuilds just the marker/cluster layer from the already-projected
-  // mapPeoplePoints -- called once by renderMapView() itself (with the
-  // FLIP transition, on an actual view entry or data change) and again,
-  // FLIP-free, every time updateMapZoomLevel() decides the zoom has moved
-  // far enough to re-cluster. Never touches the land or re-runs the
-  // projection, so a zoom-triggered re-cluster stays cheap.
-  function renderMapMarkers(options) {
+  // The one real per-frame render: reprojects the land and every visible
+  // person from scratch against the CURRENT globeRotation/globeScale, and
+  // rebuilds the marker/cluster layer to match. Called on entry (with the
+  // FLIP transition, animateFlip: true) and, FLIP-free, on every
+  // subsequent drag/pinch/wheel/animated frame via scheduleGlobeRender or
+  // animateGlobeTo.
+  function renderGlobeFrame(options) {
     const animateFlip = options && options.animateFlip;
+    const vw = els.viewport.clientWidth;
+    const vh = els.viewport.clientHeight;
+    if (!vw || !vh || !globeWorldLand) return;
+
+    // Sized to the viewport directly, not a separate "world space" size
+    // the tree views' shared computeFitTransform would then scale/pan --
+    // the projection's own translate/scale already outputs viewport-space
+    // coordinates for both the land and every marker, so there's nothing
+    // left for that shared fit system to do here.
+    els.content.style.width = `${vw}px`;
+    els.content.style.height = `${vh}px`;
+    els.svg.setAttribute('width', vw);
+    els.svg.setAttribute('height', vh);
+    els.svg.style.width = `${vw}px`;
+    els.svg.style.height = `${vh}px`;
+
+    const projection = d3.geoOrthographic()
+      .scale(globeScale)
+      .translate([vw / 2, vh / 2])
+      .rotate(globeRotation)
+      .clipAngle(90); // only render/project the front-facing hemisphere
+    const geoPath = d3.geoPath(projection);
+
+    const animateEntryIn = globeEntryFadePending;
+    globeEntryFadePending = false;
+
+    els.svg.innerHTML = '';
+    const spherePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    spherePath.setAttribute('d', geoPath({ type: 'Sphere' }));
+    spherePath.setAttribute('fill', 'var(--globe-ocean)');
+    spherePath.setAttribute('stroke', 'none');
+    els.svg.appendChild(spherePath);
+
+    const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    landPath.setAttribute('d', geoPath(globeWorldLand));
+    landPath.setAttribute('fill', 'var(--map-land)');
+    landPath.setAttribute('stroke', 'none');
+    els.svg.appendChild(landPath);
+    if (animateEntryIn) {
+      // Force the 10% frame to actually paint before releasing to 100% --
+      // without this the two opacity writes coalesce into one and nothing
+      // visibly fades (same technique animateLayoutIn uses for cards).
+      spherePath.style.opacity = landPath.style.opacity = '0.1';
+      spherePath.style.transition = landPath.style.transition = 'opacity 500ms ease-out';
+      void landPath.getBoundingClientRect();
+      requestAnimationFrame(() => { spherePath.style.opacity = landPath.style.opacity = '1'; });
+    }
+
     const oldPositions = animateFlip ? captureCardPositions() : null;
     els.content.querySelectorAll('.map-card, .map-cluster').forEach(el => el.remove());
 
-    const zoomScale = MAP_MARKER_TARGET_SCALE / view.scale;
+    // A person on the far side of the globe (more than a quarter-circle
+    // from the point currently facing the viewer) isn't shown at all --
+    // the projection would otherwise happily project them onto the
+    // visible disc anyway, since clipAngle only clips drawn geometry, not
+    // point projection.
+    const front = [-globeRotation[0], -globeRotation[1]];
+    const visible = globePeople
+      .map(p => {
+        if (d3.geoDistance([p.lon, p.lat], front) > Math.PI / 2) return null;
+        const [x, y] = projection([p.lon, p.lat]);
+        return { person: p.person, text: p.text, lon: p.lon, lat: p.lat, point: { x, y } };
+      })
+      .filter(Boolean);
+
+    const zoomScale = GLOBE_MARKER_TARGET_SCALE;
+    const atMaxZoom = globeScale >= globeInitialScale * GLOBE_ZOOM_IN_FACTOR - 1e-6;
     const cardEls = {};
-    for (const group of clusterMapPoints()) {
-      // A cluster still within MAP_CLUSTER_PIXEL_RADIUS once MAP_MAX_ZOOM
-      // is reached can never be broken apart by zooming any further (most
+    for (const group of clusterGlobePoints(visible)) {
+      // A cluster still within GLOBE_CLUSTER_PIXEL_RADIUS once fully
+      // zoomed in can never be broken apart by zooming any further (most
       // often an exact shared address) -- show it as individuals, fanned
       // out, rather than an unbreakable cluster badge.
-      const forceIndividuals = group.length === 1 || view.scale >= MAP_MAX_ZOOM - 1e-6;
-      if (forceIndividuals) {
-        const rawPoints = group.map(idx => mapPeoplePoints[idx].point);
-        const points = group.length > 1 ? fanOutRow(rawPoints, CARD_WIDTH * MAP_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
+      if (group.length === 1 || atMaxZoom) {
+        const rawPoints = group.map(idx => visible[idx].point);
+        const points = group.length > 1 ? fanOutRow(rawPoints, CARD_WIDTH * GLOBE_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
         group.forEach((idx, k) => {
-          const { person, text } = mapPeoplePoints[idx];
+          const { person, text } = visible[idx];
           const card = buildCard(person, { subtitle: text });
           // A plain CSS transform, not smaller layout dimensions, so
           // left/top still center the card on its point exactly the same
@@ -6520,24 +6623,28 @@
           card.style.top = `${pt.y - card.offsetHeight / 2}px`;
         });
       } else {
-        const cx = group.reduce((sum, idx) => sum + mapPeoplePoints[idx].point.x, 0) / group.length;
-        const cy = group.reduce((sum, idx) => sum + mapPeoplePoints[idx].point.y, 0) / group.length;
+        const cx = group.reduce((sum, idx) => sum + visible[idx].point.x, 0) / group.length;
+        const cy = group.reduce((sum, idx) => sum + visible[idx].point.y, 0) / group.length;
+        // Geographic (not screen) center, so clicking can rotate the
+        // globe to face this cluster head-on -- averaging plain lon/lat
+        // is only a fair approximation near the antimeridian, but every
+        // member here is already close enough on screen to cluster
+        // together, so that edge case can't actually occur in practice.
+        const avgLon = group.reduce((sum, idx) => sum + visible[idx].lon, 0) / group.length;
+        const avgLat = group.reduce((sum, idx) => sum + visible[idx].lat, 0) / group.length;
         const badge = document.createElement('div');
         badge.className = 'map-cluster';
         badge.textContent = String(group.length);
-        badge.title = group.map(idx => mapPeoplePoints[idx].person.name || '(unnamed)').join(', ');
+        badge.title = group.map(idx => visible[idx].person.name || '(unnamed)').join(', ');
         badge.style.setProperty('--map-zoom-scale', zoomScale);
         badge.style.left = `${cx}px`;
         badge.style.top = `${cy}px`;
-        // Zooms in centered on the cluster -- MAP_CLUSTER_ZOOM_FACTOR
-        // closer, capped at MAP_MAX_ZOOM. animateViewTo's own per-frame
-        // applyTransform() call keeps every marker's counter-scale (and,
-        // once the zoom has moved enough, the cluster grouping itself)
-        // updated throughout the animation, not just at the end.
+        // Rotates to face the cluster head-on and zooms in
+        // GLOBE_CLUSTER_ZOOM_FACTOR closer, capped at the same ceiling
+        // the pinch/wheel zoom itself respects.
         badge.addEventListener('click', () => {
-          const targetScale = Math.min(MAP_MAX_ZOOM, view.scale * MAP_CLUSTER_ZOOM_FACTOR);
-          const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
-          animateViewTo({ scale: targetScale, x: vw / 2 - cx * targetScale, y: vh / 2 - cy * targetScale });
+          const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * GLOBE_CLUSTER_ZOOM_FACTOR);
+          animateGlobeTo([-avgLon, -avgLat], targetScale);
         });
         els.content.appendChild(badge);
       }
@@ -6546,112 +6653,117 @@
     if (animateFlip) animateLayoutIn(cardEls, oldPositions);
   }
 
-  // Runs on every pan/zoom update while Map View is active (see
-  // applyTransform). Updating each marker's own counter-scale is cheap
-  // (just a CSS custom property) and happens every single call, keeping
-  // sizes visually correct even mid-gesture; actually re-clustering can
-  // add or remove elements, so it only re-runs once the zoom has moved
-  // more than 20% from where clustering last ran -- comfortably below
-  // that, no group's membership could plausibly have changed anyway.
-  function updateMapZoomLevel() {
-    const zoomScale = MAP_MARKER_TARGET_SCALE / view.scale;
-    els.content.querySelectorAll('.map-card, .map-cluster').forEach(el => {
-      el.style.setProperty('--map-zoom-scale', zoomScale);
+  function scheduleGlobeRender() {
+    if (globeRenderQueued) return;
+    globeRenderQueued = true;
+    requestAnimationFrame(() => {
+      globeRenderQueued = false;
+      renderGlobeFrame();
     });
-    if (mapLastClusterScale === null) {
-      mapLastClusterScale = view.scale;
-      return;
-    }
-    const ratio = view.scale / mapLastClusterScale;
-    // Reaching MAP_MAX_ZOOM always re-clusters regardless of the ratio
-    // gate -- this is the boundary where an unresolvable cluster (an
-    // exact shared address, no amount of further zoom can ever separate
-    // it) gives way to a fanned row (see renderMapMarkers), and a small
-    // final zoom step that crosses into MAP_MAX_ZOOM can otherwise fall
-    // under the 20% threshold and never trigger that fallback.
-    const justReachedMaxZoom = view.scale >= MAP_MAX_ZOOM - 1e-6 && mapLastClusterScale < MAP_MAX_ZOOM - 1e-6;
-    if (ratio > 1.2 || ratio < 1 / 1.2 || justReachedMaxZoom) {
-      mapLastClusterScale = view.scale;
-      renderMapMarkers();
-    }
   }
 
-  function renderMapView() {
+  // The standard orthographic-drag formula (see e.g. Mike Bostock's own
+  // d3 globe examples): at globeScale pixels of radius, rotating by θ
+  // radians moves a point at the equator (the center of the visible
+  // hemisphere, where a drag most directly translates to rotation) by
+  // very close to globeScale*θ screen pixels -- solving for θ given a
+  // drag of dx pixels makes the globe track the pointer 1:1 at the
+  // surface, the same "grab and turn" feel as the fit-view icon's own
+  // real-world globe. baseRotation is wherever the drag/touch STARTED
+  // (not the live globeRotation), so a fast, jittery gesture still
+  // resolves to a smooth net rotation from that fixed reference.
+  function rotateGlobeBy(dx, dy, baseRotation) {
+    const degreesPerPixel = (180 / Math.PI) / globeScale;
+    globeRotation = [
+      baseRotation[0] + dx * degreesPerPixel,
+      Math.max(-90, Math.min(90, baseRotation[1] - dy * degreesPerPixel)),
+    ];
+    scheduleGlobeRender();
+  }
+
+  function setGlobeZoom(newScale) {
+    const min = globeInitialScale * GLOBE_ZOOM_OUT_FACTOR;
+    const max = globeInitialScale * GLOBE_ZOOM_IN_FACTOR;
+    globeScale = Math.min(max, Math.max(min, newScale));
+    scheduleGlobeRender();
+  }
+
+  // Eases rotation and zoom to a target together over FIT_VIEW_MS -- the
+  // globe's own equivalent of animateViewTo, used by a cluster click and
+  // by the fit-view button's reset. Linear interpolation of the rotation
+  // angles themselves (not the shortest great-circle path between them)
+  // is a deliberate simplification: every caller's target is either the
+  // fixed default rotation or a cluster that's already on the visible
+  // hemisphere, so the interpolated path never has to cross the far side
+  // of the globe.
+  function animateGlobeTo(targetRotation, targetScale) {
+    const startRotation = globeRotation.slice();
+    const startScale = globeScale;
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / FIT_VIEW_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      globeRotation = [
+        startRotation[0] + (targetRotation[0] - startRotation[0]) * eased,
+        startRotation[1] + (targetRotation[1] - startRotation[1]) * eased,
+      ];
+      globeScale = startScale + (targetScale - startScale) * eased;
+      renderGlobeFrame();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function renderGlobeView() {
     els.content.innerHTML = '';
     els.svg.innerHTML = '';
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
     if (!hasPeople) return;
 
-    // A fixed-size world canvas (rather than sizing to the viewport) so
-    // the Robinson projection's own aspect ratio is never stretched --
-    // computeFitTransform() then scales/pans this into view exactly like
-    // every other view's own content size.
-    els.content.style.width = `${MAP_W}px`;
-    els.content.style.height = `${MAP_H}px`;
-    els.svg.setAttribute('width', MAP_W);
-    els.svg.setAttribute('height', MAP_H);
-    els.svg.style.width = `${MAP_W}px`;
-    els.svg.style.height = `${MAP_H}px`;
-
-    if (!mapWorldLand) {
-      ensureMapLibs().then(() => { if (viewMode === 'map') renderMapView(); });
+    if (!globeWorldLand) {
+      ensureGlobeLibs().then(() => { if (viewMode === 'globe') renderGlobeView(); });
       const loading = document.createElement('div');
       loading.className = 'map-loading-placeholder';
-      loading.textContent = 'Loading world map…';
+      loading.textContent = 'Loading globe…';
       els.content.appendChild(loading);
       return;
     }
 
-    const projection = d3.geoRobinson().fitSize([MAP_W, MAP_H], mapWorldLand);
-    const geoPath = d3.geoPath(projection);
-
-    // Only on an actual switch INTO Map View (see mapEntryFadePending) --
-    // a later re-render triggered while already here (adding a person,
-    // etc.) redraws the land instantly instead of replaying the fade
-    // every time.
-    const animateLandIn = mapEntryFadePending;
-    mapEntryFadePending = false;
-
-    const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    landPath.setAttribute('d', geoPath(mapWorldLand));
-    landPath.setAttribute('fill', 'var(--map-land)');
-    landPath.setAttribute('stroke', 'none');
-    if (animateLandIn) {
-      landPath.style.opacity = '0.1';
-      landPath.style.transition = 'opacity 500ms ease-out';
-    }
-    els.svg.appendChild(landPath);
-    if (animateLandIn) {
-      // Force the 10% frame to actually paint before releasing to 100% --
-      // without this the two opacity writes coalesce into one and nothing
-      // visibly fades (same technique animateLayoutIn uses for cards).
-      void landPath.getBoundingClientRect();
-      requestAnimationFrame(() => { landPath.style.opacity = '1'; });
-    }
-
-    mapPeoplePoints = Object.values(data.people)
+    globePeople = Object.values(data.people)
       .map(person => {
         const coords = currentLocationCoordsOf(person);
         if (!coords) return null;
-        const [x, y] = projection([coords.lon, coords.lat]);
-        return { person, text: coords.text, point: { x, y } };
+        return { person, text: coords.text, lon: coords.lon, lat: coords.lat };
       })
       .filter(Boolean);
 
-    // Re-established fresh on every full render so the very first
-    // zoom-triggered re-cluster compares against the scale clustering
-    // actually just ran at here, not a stale value from a previous visit
-    // to this view.
-    mapLastClusterScale = view.scale;
+    // Only recomputed when actually null (see the viewModeSelect handler,
+    // which resets it to null on every fresh entry into this view) --
+    // never on a mere data change while already here, so adding a person
+    // doesn't yank the zoom/rotation out from under someone mid-gesture.
+    if (globeInitialScale === null) {
+      const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
+      globeInitialScale = Math.min(vw, vh) / 2 * 0.85;
+      globeScale = globeInitialScale;
+      globeRotation = GLOBE_DEFAULT_ROTATION.slice();
+    }
 
     // Same FLIP transition every other view uses for its cards -- and
     // since it keys purely on person id (not on which view produced the
     // old position), switching straight from Traditional/Chrono/Zodiac/
-    // Centric into Map View (or back) glides every card from its old
-    // layout position to its geographic one for free.
-    renderMapMarkers({ animateFlip: true });
+    // Centric into Globe View (or back) glides every card from its old
+    // layout position to wherever it first lands on the globe, for free.
+    renderGlobeFrame({ animateFlip: true });
   }
+
+  // A resize can't otherwise reach this view between gestures (nothing
+  // else re-renders it), and every frame already reads the viewport's
+  // current size fresh -- so re-rendering here is enough to adapt,
+  // without needing to touch globeScale/globeRotation at all.
+  window.addEventListener('resize', () => {
+    if (viewMode === 'globe') scheduleGlobeRender();
+  });
 
   // ---------- Seed sample data on first run ----------
 
@@ -6933,17 +7045,17 @@
     renderTree();
     fitToView();
 
-    // Preload Map View's own vendored libraries (see ensureMapLibs) in the
-    // background so the first time someone actually switches to that view
-    // doesn't have to wait on ~450KB of JS/JSON -- deferred via
+    // Preload Globe View's own vendored libraries (see ensureGlobeLibs) in
+    // the background so the first time someone actually switches to that
+    // view doesn't have to wait on ~400KB of JS/JSON -- deferred via
     // requestIdleCallback (falling back to a plain timeout on Safari,
     // which doesn't implement it) so this never competes with the page's
     // own initial paint/interactivity for bandwidth or CPU. Silently
-    // ignores failure (e.g. offline): renderMapView's own on-demand call
+    // ignores failure (e.g. offline): renderGlobeView's own on-demand call
     // still tries again the moment someone actually opens that view.
-    const preloadMapLibs = () => ensureMapLibs().catch(() => {});
-    if (window.requestIdleCallback) requestIdleCallback(preloadMapLibs);
-    else setTimeout(preloadMapLibs, 2000);
+    const preloadGlobeLibs = () => ensureGlobeLibs().catch(() => {});
+    if (window.requestIdleCallback) requestIdleCallback(preloadGlobeLibs);
+    else setTimeout(preloadGlobeLibs, 2000);
 
     // navigator.webdriver is true for automation-controlled browsers
     // (Playwright, Selenium, etc.) and false for a real visitor -- skips
