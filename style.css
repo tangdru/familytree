@@ -373,11 +373,19 @@ body {
 }
 
 /* ---------- Map View ---------- */
-/* Map View has no marker/toggle CSS of its own -- it plots real
-   .person-card elements (see buildCard/renderMapView in app.js), so it
-   inherits all of .person-card/.person-photo's styling automatically.
-   The only view-specific rule is this one-shot loading message, shown
-   only until the vendored map libraries finish their first (lazy) load. */
+/* Map View plots real .person-card elements (see buildCard/renderMapView
+   in app.js), so it inherits all of .person-card/.person-photo's styling
+   automatically -- .map-card below just scales that same card down. */
+.map-card {
+  transform: scale(0.5); /* must match MAP_CARD_SCALE in app.js */
+}
+/* Composed with the base hover-lift rather than replacing it, so hovering
+   a map card still lifts -- just from its own (smaller) resting scale
+   instead of from scale(1). */
+.map-card:hover { transform: scale(0.5) translateY(-3px); }
+
+/* One-shot loading message, shown only until the vendored map libraries
+   finish their first (lazy) load. */
 .map-loading-placeholder {
   position: absolute;
   top: 50%;
