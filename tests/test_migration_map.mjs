@@ -6,8 +6,10 @@ import { chromium } from 'playwright-core';
 // stops (birth in Manila, then New York, then San Francisco) so she gets
 // 2 arc segments once focused; Ana has 2 stops (Sao Paulo -> Sydney) and
 // is never focused, so she stays a single flat dim-grey arc; Tom has only
-// a birthLocation (1 stop) so he gets a marker but no arc at all.
-const p1 = 'p1', p2 = 'p2', p3 = 'p3';
+// a birthLocation (1 stop) so he gets a marker but no arc at all. Ravi
+// shares Tom's exact coordinates, covering resolveMigrationMarkerOverlaps
+// fanning their two markers apart instead of stacking them.
+const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4';
 const people = {
   [p1]: {
     id: p1, name: 'Jane Doe', birthDate: '1985-03-02', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
@@ -25,6 +27,13 @@ const people = {
     id: p3, name: 'Ana Cruz', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     birthLocation: { text: 'Sao Paulo, Brazil', lat: -23.5505, lon: -46.6333, startDate: '1978-01-01', endDate: '2005-01-01' },
     locations: [{ text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093, startDate: '2005-01-01', endDate: null }],
+  },
+  // Same exact coordinates as Tom's -- covers resolveMigrationMarkerOverlaps
+  // fanning out two people who currently live in the same place instead of
+  // stacking their markers exactly on top of each other.
+  [p4]: {
+    id: p4, name: 'Ravi Singh', birthDate: '1988-11-20', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
+    birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278, startDate: '1988-11-20', endDate: null },
   },
 };
 
@@ -52,8 +61,8 @@ try {
   const landDrawn = await page.evaluate(() => !!document.querySelector('#linesSvg path'));
   if (!landDrawn) throw new Error('Expected a filled land path in #linesSvg once the map libs finish loading');
   const markerCount = await page.evaluate(() => document.querySelectorAll('.migration-marker').length);
-  if (markerCount !== 3) throw new Error(`Expected 3 markers (one per person with a geocoded stop), got ${markerCount}`);
-  console.log('Confirmed: toggle visible, land drawn, 3 markers placed.');
+  if (markerCount !== 4) throw new Error(`Expected 4 markers (one per person with a geocoded stop), got ${markerCount}`);
+  console.log('Confirmed: toggle visible, land drawn, 4 markers placed.');
 
   console.log('\n=== Everyone starts dim grey with no arc-focus and no gradients ===');
   const initialGradients = await page.evaluate(() => document.querySelectorAll('linearGradient').length);
@@ -98,8 +107,34 @@ try {
   await page.click('#migrationModeToggle .centric-metric-btn[data-mode="static"]');
   await page.waitForTimeout(300);
   const markersBack = await page.evaluate(() => document.querySelectorAll('.migration-marker').length);
-  if (markersBack !== 3) throw new Error(`Expected 3 markers again after switching back to Static, got ${markersBack}`);
+  if (markersBack !== 4) throw new Error(`Expected 4 markers again after switching back to Static, got ${markersBack}`);
   console.log('Confirmed: Static mode restores the full map.');
+
+  console.log('\n=== Tom and Ravi share the exact same coordinates, but their markers never overlap ===');
+  // Read the world-space left/top the render function itself set (not
+  // getBoundingClientRect, which reports post-pan/zoom screen pixels --
+  // the map's own fit-to-view scale would otherwise shrink this distance
+  // and make the assertion depend on viewport size).
+  const [tomPos, raviPos] = await page.evaluate(([tId, rId]) => {
+    const posOf = (id) => {
+      const el = document.querySelector(`.migration-marker[data-id="${id}"]`);
+      return { x: parseFloat(el.style.left), y: parseFloat(el.style.top) };
+    };
+    return [posOf(tId), posOf(rId)];
+  }, [p2, p4]);
+  const centerDist = Math.hypot(tomPos.x - raviPos.x, tomPos.y - raviPos.y);
+  if (centerDist < 30) throw new Error(`Expected Tom and Ravi's markers to be fanned at least a marker-width apart, got ${centerDist}px`);
+  // Both must still be independently clickable -- the actual bug being
+  // fixed is that a fully-overlapping marker intercepts the one beneath it.
+  await page.click(`.migration-marker[data-id="${p4}"]`);
+  await page.waitForTimeout(300);
+  const raviFocused = await page.evaluate((id) => document.querySelector(`.migration-marker[data-id="${id}"]`).classList.contains('focused'), p4);
+  if (!raviFocused) throw new Error("Expected Ravi's marker to be clickable and become focused despite sharing Tom's coordinates");
+  await page.click(`.migration-marker[data-id="${p2}"]`);
+  await page.waitForTimeout(300);
+  const tomFocused = await page.evaluate((id) => document.querySelector(`.migration-marker[data-id="${id}"]`).classList.contains('focused'), p2);
+  if (!tomFocused) throw new Error("Expected Tom's marker to also be independently clickable");
+  console.log(`Confirmed: markers fanned ${centerDist.toFixed(1)}px apart, both independently clickable.`);
 
   console.log('\n=== Leaving Migration Map for another view hides the toggle and placeholder ===');
   await page.selectOption('#viewModeSelect', 'traditional');

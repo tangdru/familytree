@@ -6329,6 +6329,12 @@
 
   const MIGRATION_MAP_W = 1600;
   const MIGRATION_MAP_H = 800;
+  // Matches .migration-marker's own width/height in style.css -- used to
+  // detect when two people's current-location markers would overlap (see
+  // resolveMigrationMarkerOverlaps) and to space fanned-out markers apart
+  // by at least this much plus a small gap.
+  const MIGRATION_MARKER_SIZE = 30;
+  const MIGRATION_MARKER_GAP = 4;
   let migrationLibsPromise = null;
   let migrationWorldLand = null; // GeoJSON, set once loadMigrationLibs resolves
 
@@ -6374,6 +6380,49 @@
     return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
   }
 
+  // Two or more people can share the exact same (or a nearly identical)
+  // current location -- a married couple, a whole household -- which
+  // would otherwise stack their circular markers exactly on top of each
+  // other, making every marker but the topmost unclickable. Given each
+  // person's already-projected stop points, this mutates each affected
+  // person's FINAL point in place, fanning members of the same cluster
+  // out evenly around their shared spot on a small ring sized so the
+  // markers never touch. Arcs are drawn from these same mutated points
+  // (see renderMigrationMap), so a focused person's path still visibly
+  // ends exactly on their (now offset) marker.
+  function resolveMigrationMarkerOverlaps(projectedPeople) {
+    const used = new Set();
+    const minCenterDist = MIGRATION_MARKER_SIZE + MIGRATION_MARKER_GAP;
+    for (let i = 0; i < projectedPeople.length; i++) {
+      if (used.has(i)) continue;
+      const group = [i];
+      used.add(i);
+      const anchor = projectedPeople[i].points[projectedPeople[i].points.length - 1];
+      for (let j = i + 1; j < projectedPeople.length; j++) {
+        if (used.has(j)) continue;
+        const other = projectedPeople[j].points[projectedPeople[j].points.length - 1];
+        if (Math.hypot(anchor.x - other.x, anchor.y - other.y) < MIGRATION_MARKER_SIZE) {
+          group.push(j);
+          used.add(j);
+        }
+      }
+      if (group.length < 2) continue;
+      const n = group.length;
+      const cx = group.reduce((sum, idx) => sum + projectedPeople[idx].points[projectedPeople[idx].points.length - 1].x, 0) / n;
+      const cy = group.reduce((sum, idx) => sum + projectedPeople[idx].points[projectedPeople[idx].points.length - 1].y, 0) / n;
+      // Evenly spaced on a ring whose radius is exactly big enough that
+      // adjacent points are minCenterDist apart -- the chord length for N
+      // points spaced 2*pi/N apart on a circle of radius r is
+      // 2*r*sin(pi/N), solved here for r.
+      const radius = minCenterDist / (2 * Math.sin(Math.PI / n));
+      group.forEach((idx, k) => {
+        const theta = -Math.PI / 2 + (2 * Math.PI * k) / n;
+        const pts = projectedPeople[idx].points;
+        pts[pts.length - 1] = { x: cx + radius * Math.cos(theta), y: cy + radius * Math.sin(theta) };
+      });
+    }
+  }
+
   function renderMigrationMap() {
     els.content.innerHTML = '';
     els.svg.innerHTML = '';
@@ -6415,21 +6464,29 @@
     landPath.setAttribute('stroke', 'none');
     els.svg.appendChild(landPath);
 
-    const peopleWithStops = Object.values(data.people)
-      .map(person => ({ person, stops: migrationStopsFor(person) }))
-      .filter(({ stops }) => stops.length > 0);
+    const peopleWithPoints = Object.values(data.people)
+      .map(person => ({
+        person,
+        points: migrationStopsFor(person).map(s => {
+          const [x, y] = projection([s.lon, s.lat]);
+          return { x, y };
+        }),
+      }))
+      .filter(({ points }) => points.length > 0);
+
+    // Mutates each affected person's final point in place so overlapping
+    // current-location markers fan out instead of stacking -- must run
+    // before arcs are drawn below, since a focused arc's last segment
+    // needs to end on the same (possibly offset) point the marker uses.
+    resolveMigrationMarkerOverlaps(peopleWithPoints);
 
     // Draw non-focused arcs first so the focused person's own arc always
     // ends up on top of everyone else's.
-    const drawOrder = [...peopleWithStops].sort((a, b) =>
+    const drawOrder = [...peopleWithPoints].sort((a, b) =>
       (a.person.id === migrationFocusId ? 1 : 0) - (b.person.id === migrationFocusId ? 1 : 0));
 
-    for (const { person, stops } of drawOrder) {
-      if (stops.length < 2) continue;
-      const points = stops.map(s => {
-        const [x, y] = projection([s.lon, s.lat]);
-        return { x, y };
-      });
+    for (const { person, points } of drawOrder) {
+      if (points.length < 2) continue;
       const isFocused = person.id === migrationFocusId;
       const segments = points.length - 1;
       for (let i = 0; i < segments; i++) {
@@ -6472,9 +6529,8 @@
       }
     }
 
-    for (const { person, stops } of peopleWithStops) {
-      const last = stops[stops.length - 1];
-      const [x, y] = projection([last.lon, last.lat]);
+    for (const { person, points } of peopleWithPoints) {
+      const { x, y } = points[points.length - 1];
       const marker = document.createElement('div');
       marker.className = 'migration-marker' + (person.id === migrationFocusId ? ' focused' : '');
       marker.dataset.id = person.id;
