@@ -1479,7 +1479,7 @@
   // pinch would ever be allowed to.
   const MAX_ZOOM = 2;
   const view = { x: 40, y: 20, scale: 1 };
-  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric'
+  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'map'
 
   // Centric view's own state: which person is at the center, and which
   // proximity metric currently decides ring placement -- see
@@ -2746,6 +2746,26 @@
       const endDate = isObj && entry.endDate ? entry.endDate : null;
       return { text, lat, lon, startDate, endDate };
     });
+  }
+
+  // A person's current-location coordinates for Map View (see
+  // renderMapView) -- locations[0] (the app's own "current" convention,
+  // see locationEntriesOf) if it has coordinates, else birthLocation as a
+  // fallback for someone with no locations[] entries at all. Returns null
+  // (skipped on the map) when neither has coordinates -- an entry saved
+  // before the location autocomplete existed, or a manually-typed one,
+  // can't be placed on the map.
+  function currentLocationCoordsOf(person) {
+    if (!person) return null;
+    const current = locationEntriesOf(person)[0];
+    if (current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
+      return { lat: current.lat, lon: current.lon, text: current.text };
+    }
+    const bl = person.birthLocation;
+    if (bl && typeof bl === 'object' && Number.isFinite(bl.lat) && Number.isFinite(bl.lon)) {
+      return { lat: bl.lat, lon: bl.lon, text: shortenLocationText(bl.text || '') };
+    }
+    return null;
   }
 
   // A person's contact entries (phone/email, in whatever order they were
@@ -4537,6 +4557,7 @@
     if (viewMode === 'chronological') renderChronological();
     else if (viewMode === 'zodiac') renderZodiac();
     else if (viewMode === 'centric') renderCentric();
+    else if (viewMode === 'map') renderMapView();
     else renderTraditional();
   }
 
@@ -4727,11 +4748,12 @@
         // touching the user's own pan/zoom.
         renderTree();
       } else {
-        // Zodiac/Centric cards are shown as individuals, regrouped by sign
-        // or proximity rather than by relationship -- opening straight
-        // into a spouse-paired Couple View would cut against that, so
-        // force the single Person View for just the clicked card instead.
-        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric';
+        // Zodiac/Centric/Map cards are shown as individuals, regrouped by
+        // sign, proximity, or location rather than by relationship --
+        // opening straight into a spouse-paired Couple View would cut
+        // against that, so force the single Person View for just the
+        // clicked card instead.
+        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric' || viewMode === 'map';
         openViewModal(person.id, { forceSingle });
       }
     });
@@ -6254,17 +6276,227 @@
     });
   }
 
+  // ---------- Map View ----------
+  // Plots each person's CURRENT location (no history, no migration -- see
+  // currentLocationCoordsOf) on a Robinson-projection world map. Cards are
+  // real buildCard() person cards, positioned by projected lat/lon instead
+  // of tree/ring math, and carried in and out by the exact same
+  // captureCardPositions()/animateLayoutIn() FLIP transition every other
+  // view uses -- no separate marker element, no separate click handling,
+  // no separate move animation to maintain. Land is drawn as backdrop
+  // straight into the shared #linesSvg, same as Chrono's gridlines or
+  // Centric's ring circles are backdrop drawn into that same SVG.
+  //
+  // d3, d3-geo-projection (for geoRobinson) and topojson-client, plus
+  // world-atlas's countries-110m.json, are vendored locally rather than
+  // loaded from a CDN -- same reasoning as driver.iife.js (see its own
+  // comment in index.html): this view has no graceful degradation without
+  // them, unlike e.g. libphonenumber-js. They're ~450KB combined and most
+  // sessions never open this view, so they're only injected the first
+  // time someone actually switches to Map View -- see ensureMapLibs.
+
+  const MAP_W = 1600;
+  const MAP_H = 800;
+  let mapLibsPromise = null;
+  let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
+
+  function loadMapScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.body.appendChild(script);
+    });
+  }
+
+  function ensureMapLibs() {
+    if (!mapLibsPromise) {
+      // d3-geo-projection extends the global d3 object it expects to
+      // already exist (adding geoRobinson), so it must load strictly
+      // after d3.min.js, not just alongside it.
+      mapLibsPromise = (async () => {
+        await loadMapScript('d3.min.js');
+        await loadMapScript('d3-geo-projection.min.js');
+        await loadMapScript('topojson-client.min.js');
+        const res = await fetch('countries-110m.json');
+        const topo = await res.json();
+        mapWorldLand = topojson.feature(topo, topo.objects.land);
+      })().catch(err => {
+        // Reset so a later call (the background preload below, or
+        // renderMapView's own on-demand call) gets a fresh attempt instead
+        // of permanently replaying this one failure -- a transient network
+        // blip during the background preload shouldn't mean Map View can
+        // never load for the rest of the session.
+        mapLibsPromise = null;
+        throw err;
+      });
+    }
+    return mapLibsPromise;
+  }
+
+  // Reserved for a future migration-trails feature (tracing a person's
+  // full location history over time as an arc, not just their current
+  // dot) -- not called anywhere yet. Quadratic-bezier control point that
+  // always bows the arc upward on screen (toward smaller Y) regardless of
+  // which way the person actually traveled, so many overlapping paths on
+  // one map read as a consistent "arc = movement" visual language rather
+  // than noise.
+  function migrationArcPath(a, b, curvature = 0.16) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    let nx = -dy / dist, ny = dx / dist;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const cx = (a.x + b.x) / 2 + nx * dist * curvature;
+    const cy = (a.y + b.y) / 2 + ny * dist * curvature;
+    return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
+  }
+
+  // Two or more people can share the exact same (or a nearly identical)
+  // current location -- a married couple, a whole household -- which
+  // would otherwise stack their full-size cards exactly on top of each
+  // other. Given each person's already-projected point, this mutates
+  // each affected person's point in place, spreading members of the same
+  // cluster into a horizontal row centered on their shared spot -- the
+  // same CARD_WIDTH/SPOUSE_GAP rhythm the tree views already space cards
+  // by, rather than a bespoke spacing constant just for this view.
+  // Clusters on real lat/lon proximity, NOT projected screen distance --
+  // a fixed pixel threshold would also catch two genuinely different
+  // cities that just happen to land close together once the whole world
+  // is compressed onto a 1600px-wide map (e.g. Boston and Chicago, ~1700km
+  // apart, project only ~68px apart at this scale), wrongly treating them
+  // as one shared location. A tight degree threshold instead only matches
+  // an actual shared address/city -- the app's own location autocomplete
+  // returns the same coordinates for the same picked city -- and stays
+  // correct regardless of the map's current zoom or projection.
+  const SAME_LOCATION_DEGREES = 0.05;
+
+  function resolveMapCardOverlaps(peopleWithPoints) {
+    const used = new Set();
+    const step = CARD_WIDTH + SPOUSE_GAP;
+    for (let i = 0; i < peopleWithPoints.length; i++) {
+      if (used.has(i)) continue;
+      const group = [i];
+      used.add(i);
+      const anchor = peopleWithPoints[i];
+      for (let j = i + 1; j < peopleWithPoints.length; j++) {
+        if (used.has(j)) continue;
+        const other = peopleWithPoints[j];
+        if (Math.hypot(anchor.lat - other.lat, anchor.lon - other.lon) < SAME_LOCATION_DEGREES) {
+          group.push(j);
+          used.add(j);
+        }
+      }
+      if (group.length < 2) continue;
+      const n = group.length;
+      const cx = group.reduce((sum, idx) => sum + peopleWithPoints[idx].point.x, 0) / n;
+      const startX = cx - ((n - 1) * step) / 2;
+      group.forEach((idx, k) => {
+        peopleWithPoints[idx].point = { x: startX + k * step, y: peopleWithPoints[idx].point.y };
+      });
+    }
+  }
+
+  function renderMapView() {
+    const oldPositions = captureCardPositions();
+    els.content.innerHTML = '';
+    els.svg.innerHTML = '';
+    const hasPeople = Object.keys(data.people).length > 0;
+    els.emptyState.hidden = hasPeople;
+    if (!hasPeople) return;
+
+    // A fixed-size world canvas (rather than sizing to the viewport) so
+    // the Robinson projection's own aspect ratio is never stretched --
+    // computeFitTransform() then scales/pans this into view exactly like
+    // every other view's own content size.
+    els.content.style.width = `${MAP_W}px`;
+    els.content.style.height = `${MAP_H}px`;
+    els.svg.setAttribute('width', MAP_W);
+    els.svg.setAttribute('height', MAP_H);
+    els.svg.style.width = `${MAP_W}px`;
+    els.svg.style.height = `${MAP_H}px`;
+
+    if (!mapWorldLand) {
+      ensureMapLibs().then(() => { if (viewMode === 'map') renderMapView(); });
+      const loading = document.createElement('div');
+      loading.className = 'map-loading-placeholder';
+      loading.textContent = 'Loading world map…';
+      els.content.appendChild(loading);
+      return;
+    }
+
+    const projection = d3.geoRobinson().fitSize([MAP_W, MAP_H], mapWorldLand);
+    const geoPath = d3.geoPath(projection);
+
+    const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    landPath.setAttribute('d', geoPath(mapWorldLand));
+    landPath.setAttribute('fill', 'var(--map-land)');
+    landPath.setAttribute('stroke', 'none');
+    els.svg.appendChild(landPath);
+
+    const peopleWithPoints = Object.values(data.people)
+      .map(person => {
+        const coords = currentLocationCoordsOf(person);
+        if (!coords) return null;
+        const [x, y] = projection([coords.lon, coords.lat]);
+        return { person, text: coords.text, lat: coords.lat, lon: coords.lon, point: { x, y } };
+      })
+      .filter(Boolean);
+
+    // Mutates each affected person's point in place so people who share a
+    // current location fan out into a row instead of stacking their
+    // cards exactly on top of each other.
+    resolveMapCardOverlaps(peopleWithPoints);
+
+    const cardEls = {};
+    for (const { person, text, point } of peopleWithPoints) {
+      const card = buildCard(person, { subtitle: text });
+      card.style.left = `${point.x - CARD_WIDTH / 2}px`;
+      els.content.appendChild(card);
+      cardEls[person.id] = card;
+      // Two-phase like every other view: set top only after the card is
+      // in the DOM and its real (name-wrap-dependent) height can be
+      // measured.
+      card.style.top = `${point.y - card.offsetHeight / 2}px`;
+    }
+
+    // Same FLIP transition every other view uses -- and since it keys
+    // purely on person id (not on which view produced the old position),
+    // switching straight from Traditional/Chrono/Zodiac/Centric into Map
+    // View (or back) glides every card from its old layout position to
+    // its geographic one for free.
+    animateLayoutIn(cardEls, oldPositions);
+  }
+
   // ---------- Seed sample data on first run ----------
 
   function seedSampleData() {
     const gp1 = uid(), gp2 = uid(), parent1 = uid(), parent2 = uid(), child1 = uid(), child2 = uid();
     data.people = {
-      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2] },
-      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', photo: '', notes: '', parents: [], spouses: [gp1] },
-      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2] },
-      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', photo: '', notes: '', parents: [], spouses: [parent1] },
-      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
-      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
+      // Geocoded birthLocation/locations below double as Map View's own
+      // demo data -- a believable spread across several cities rather
+      // than leaving it empty the first time someone opens that view.
+      // Map View only ever plots the CURRENT location (locations[0], or
+      // birthLocation if that's all someone has -- see
+      // currentLocationCoordsOf), but the full history is still real,
+      // meaningful data worth keeping for a future migration-trails view.
+      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2],
+        birthLocation: { text: 'Dublin, Ireland', lat: 53.3498, lon: -6.2603, startDate: '1938-03-12', endDate: '1958-06-01' },
+        locations: [{ text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1958-06-01', endDate: '2015-11-02' }] },
+      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', photo: '', notes: '', parents: [], spouses: [gp1],
+        birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278, startDate: '1935-07-04', endDate: '1958-06-01' },
+        locations: [{ text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1958-06-01', endDate: '2012-01-20' }] },
+      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2],
+        birthLocation: { text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1962-05-18', endDate: '1985-09-01' },
+        locations: [{ text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1985-09-01', endDate: null }] },
+      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', photo: '', notes: '', parents: [], spouses: [parent1],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1960-09-09', endDate: null } },
+      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1990-02-14', endDate: '2015-08-01' },
+        locations: [{ text: 'Seattle, WA', lat: 47.6062, lon: -122.3321, startDate: '2015-08-01', endDate: null }] },
+      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1993-08-30', endDate: '2018-03-01' },
+        locations: [{ text: 'San Francisco, CA', lat: 37.7749, lon: -122.4194, startDate: '2018-03-01', endDate: null }] },
     };
   }
 
@@ -6515,6 +6747,18 @@
 
     renderTree();
     fitToView();
+
+    // Preload Map View's own vendored libraries (see ensureMapLibs) in the
+    // background so the first time someone actually switches to that view
+    // doesn't have to wait on ~450KB of JS/JSON -- deferred via
+    // requestIdleCallback (falling back to a plain timeout on Safari,
+    // which doesn't implement it) so this never competes with the page's
+    // own initial paint/interactivity for bandwidth or CPU. Silently
+    // ignores failure (e.g. offline): renderMapView's own on-demand call
+    // still tries again the moment someone actually opens that view.
+    const preloadMapLibs = () => ensureMapLibs().catch(() => {});
+    if (window.requestIdleCallback) requestIdleCallback(preloadMapLibs);
+    else setTimeout(preloadMapLibs, 2000);
 
     // navigator.webdriver is true for automation-controlled browsers
     // (Playwright, Selenium, etc.) and false for a real visitor -- skips

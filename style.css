@@ -36,6 +36,10 @@
      step is a subtle shade change rather than a bold color jump. */
   --centric-inner: #f4f1ea;
   --centric-outer: #c9c9c9;
+  /* Map View's land fill (see renderMapView in app.js) -- a dedicated
+     token for the same reason as --centric-inner/outer above: a dark,
+     mostly-neutral value that doesn't map cleanly onto --surface. */
+  --map-land: #e4dcc8;
 }
 
 * { box-sizing: border-box; }
@@ -366,6 +370,23 @@ body {
 .centric-center-card .person-photo {
   border-color: var(--accent);
   box-shadow: 0 6px 18px rgba(60,45,20,0.28);
+}
+
+/* ---------- Map View ---------- */
+/* Map View has no marker/toggle CSS of its own -- it plots real
+   .person-card elements (see buildCard/renderMapView in app.js), so it
+   inherits all of .person-card/.person-photo's styling automatically.
+   The only view-specific rule is this one-shot loading message, shown
+   only until the vendored map libraries finish their first (lazy) load. */
+.map-loading-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 320px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
 }
 
 .empty-state {
@@ -1707,6 +1728,7 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --ink-soft: #b3a892;
     --card-border: #4a4131;
     --shadow: 0 2px 8px rgba(0,0,0,0.4);
+    --map-land: #2c2c2c;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
   }
@@ -1754,6 +1776,10 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
   --shadow: 0 2px 8px rgba(0,0,0,0.4);
   --centric-inner: #6a6a6a;
   --centric-outer: #2c2c2c;
+  /* Validated against this theme's own --surface (#363636) with the
+     dataviz skill's OKLCH contrast check: filled land needs no border at
+     this contrast. */
+  --map-land: #262626;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same
