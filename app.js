@@ -1603,6 +1603,7 @@
     if (previousViewMode === 'chronological' && viewMode === 'traditional') {
       playChronoDotAssemble(false);
     }
+    if (viewMode === 'map' && previousViewMode !== 'map') mapEntryFadePending = true;
     renderTree();
     // Spawned AFTER renderTree() so chronoMinYear/chronoRulerLabels already
     // reflect the freshly-rendered chrono layout it's assembling onto.
@@ -1613,6 +1614,15 @@
       // Fit the columns' width only -- see computeFitTransform's own note
       // on why height is deliberately left out here.
       animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'map') {
+      // Fill the screen's height instead of shrinking the whole world
+      // down to also fit its width -- see computeFitTransform's own note
+      // on verticalOnly -- then zoom back out a bit further (MAP_ZOOM_OUT)
+      // so more of the world is visible without panning, now that the
+      // smaller MAP_CARD_SCALE cards need less clearance from each other.
+      // The map still ends up wider than the viewport; panning (already
+      // free-form on this shared canvas) is how the rest of it is reached.
+      animateFitToView({ verticalOnly: true, zoomOut: MAP_ZOOM_OUT });
     } else if (viewMode === 'centric') {
       // renderTree() above already ran renderCentric(), which triggers
       // its own pan/zoom animation (animateCentricZoom) anchored on this
@@ -1654,6 +1664,13 @@
   // columns (a fixed, meaningful count) are what you actually want framed
   // at a glance, while a tall column's card count is open-ended and fine
   // to scroll/pan through rather than shrinking everything to fit it too.
+  // verticalOnly is the mirror image, used by Map View: filling the
+  // screen's height (rather than shrinking the whole world down to fit
+  // its width too) makes cards big enough to read and spreads out
+  // clustered regions, at the cost of the map now being wider than the
+  // viewport -- exactly what panning is for. zoomOut (also Map View) then
+  // dials that back down by a flat multiplier, trading some of that
+  // fill-the-height size for more of the world visible without panning.
   function computeFitTransform(options) {
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
@@ -1662,9 +1679,15 @@
     if (!vw || !vh || !cw || !ch) return null;
     const padding = 24;
     const horizontalOnly = options && options.horizontalOnly;
+    const verticalOnly = options && options.verticalOnly;
+    const zoomOut = (options && options.zoomOut) || 1;
     const scaleX = (vw - padding * 2) / cw;
     const scaleY = (vh - padding * 2) / ch;
-    const scale = Math.max(MIN_ZOOM, Math.min(horizontalOnly ? scaleX : Math.min(scaleX, scaleY), 1));
+    let fitScale;
+    if (horizontalOnly) fitScale = scaleX;
+    else if (verticalOnly) fitScale = scaleY;
+    else fitScale = Math.min(scaleX, scaleY);
+    const scale = Math.max(MIN_ZOOM, Math.min(fitScale, 1)) * zoomOut;
     return {
       scale,
       x: (vw - cw * scale) / 2,
@@ -1720,6 +1743,8 @@
   els.fitViewBtn.addEventListener('click', () => {
     if (viewMode === 'zodiac') {
       animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'map') {
+      animateFitToView({ verticalOnly: true, zoomOut: MAP_ZOOM_OUT });
     } else if (viewMode === 'centric' && prevCentricGrid) {
       // Re-fit around the SAME anchored origin renderCentric() last used
       // -- nothing about the rings changed, just the pan/zoom, so this is
@@ -6297,8 +6322,24 @@
 
   const MAP_W = 1600;
   const MAP_H = 800;
+  // Person cards render at half their usual size on the map (see
+  // renderMapView's use of .map-card) -- full-size cards left little
+  // clearance between nearby cities even after the fill-height fit below.
+  const MAP_CARD_SCALE = 0.5;
+  // Dials the fill-height fit (see computeFitTransform's own note on
+  // verticalOnly) back out a bit further, trading some of that fit's size
+  // for more of the world visible without panning -- reasonable now that
+  // MAP_CARD_SCALE's smaller cards need less clearance from each other.
+  const MAP_ZOOM_OUT = 0.7;
   let mapLibsPromise = null;
   let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
+  // Sequences the land fade-in (10% -> 100% opacity) below to play only
+  // when actually switching INTO Map View, not on every later re-render
+  // triggered while already there (adding a person, resolving a card
+  // overlap, etc.) -- set by the viewModeSelect handler right before
+  // calling renderTree(), consumed (and cleared) the moment the land
+  // path is actually drawn.
+  let mapEntryFadePending = false;
 
   function loadMapScript(src) {
     return new Promise((resolve, reject) => {
@@ -6373,7 +6414,10 @@
 
   function resolveMapCardOverlaps(peopleWithPoints) {
     const used = new Set();
-    const step = CARD_WIDTH + SPOUSE_GAP;
+    // Scaled down to match the cards' own rendered size (see
+    // MAP_CARD_SCALE) -- spacing fanned-out cards by their full,
+    // unscaled width would leave an oversized gap between them.
+    const step = CARD_WIDTH * MAP_CARD_SCALE + SPOUSE_GAP;
     for (let i = 0; i < peopleWithPoints.length; i++) {
       if (used.has(i)) continue;
       const group = [i];
@@ -6428,11 +6472,29 @@
     const projection = d3.geoRobinson().fitSize([MAP_W, MAP_H], mapWorldLand);
     const geoPath = d3.geoPath(projection);
 
+    // Only on an actual switch INTO Map View (see mapEntryFadePending) --
+    // a later re-render triggered while already here (adding a person,
+    // fanning out a newly-overlapping card, etc.) redraws the land
+    // instantly instead of replaying the fade every time.
+    const animateLandIn = mapEntryFadePending;
+    mapEntryFadePending = false;
+
     const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     landPath.setAttribute('d', geoPath(mapWorldLand));
     landPath.setAttribute('fill', 'var(--map-land)');
     landPath.setAttribute('stroke', 'none');
+    if (animateLandIn) {
+      landPath.style.opacity = '0.1';
+      landPath.style.transition = 'opacity 500ms ease-out';
+    }
     els.svg.appendChild(landPath);
+    if (animateLandIn) {
+      // Force the 10% frame to actually paint before releasing to 100% --
+      // without this the two opacity writes coalesce into one and nothing
+      // visibly fades (same technique animateLayoutIn uses for cards).
+      void landPath.getBoundingClientRect();
+      requestAnimationFrame(() => { landPath.style.opacity = '1'; });
+    }
 
     const peopleWithPoints = Object.values(data.people)
       .map(person => {
@@ -6451,6 +6513,12 @@
     const cardEls = {};
     for (const { person, text, point } of peopleWithPoints) {
       const card = buildCard(person, { subtitle: text });
+      // Renders at MAP_CARD_SCALE (see .map-card in style.css) -- a plain
+      // CSS transform, not smaller layout dimensions, so left/top below
+      // still center the card on its projected point exactly the same
+      // way every other view centers a card on its own anchor: scaling
+      // from the box's own center never shifts where that center sits.
+      card.classList.add('map-card');
       card.style.left = `${point.x - CARD_WIDTH / 2}px`;
       els.content.appendChild(card);
       cardEls[person.id] = card;

@@ -84,8 +84,8 @@ try {
   const cityDist = Math.hypot(bostonPos.x - chicagoPos.x, bostonPos.y - chicagoPos.y);
   // The real (correct) projected gap between these two cities is ~68px;
   // the bug this guards against pulled them into the same fan-out row at
-  // a full CARD_WIDTH+SPOUSE_GAP (166px) spacing instead.
-  if (cityDist > 100) throw new Error(`Expected Boston and Chicago to sit at their real ~68px projected gap, not be fanned apart like a shared location -- got ${cityDist.toFixed(1)}px`);
+  // a full CARD_WIDTH*MAP_CARD_SCALE+SPOUSE_GAP (91px) spacing instead.
+  if (cityDist > 80) throw new Error(`Expected Boston and Chicago to sit at their real ~68px projected gap, not be fanned apart like a shared location -- got ${cityDist.toFixed(1)}px`);
   console.log(`Confirmed: Boston and Chicago sit ${cityDist.toFixed(1)}px apart (their real projected gap), not merged into one cluster.`);
 
   console.log('\n=== Each card shows the current-location text as its subtitle ===');
@@ -117,7 +117,9 @@ try {
     return [posOf(tId), posOf(rId)];
   }, [p2, p4]);
   const centerDist = Math.hypot(tomPos.x - raviPos.x, tomPos.y - raviPos.y);
-  if (centerDist < 150) throw new Error(`Expected Tom and Ravi's cards to be spread at least a card-width apart, got ${centerDist}px`);
+  // Fanned by CARD_WIDTH*MAP_CARD_SCALE+SPOUSE_GAP (91px) -- their own
+  // scaled-down width plus a gap, not the full unscaled card width.
+  if (centerDist < 80) throw new Error(`Expected Tom and Ravi's cards to be spread by their scaled card width, got ${centerDist}px`);
   // Both must still be independently clickable -- the actual bug this
   // guards against is a fully-overlapping card intercepting the one
   // beneath it.
@@ -148,6 +150,66 @@ try {
   const cardCountAgain = await page.evaluate(() => document.querySelectorAll('#treeContent .person-card').length);
   if (cardCountAgain !== 5) throw new Error(`Expected 5 cards again after switching back to Map View, got ${cardCountAgain}`);
   console.log('Confirmed: switching away and back still works.');
+
+  console.log('\n=== The map fits to a zoomed-out fraction of the viewport\'s height (MAP_ZOOM_OUT) ===');
+  const fitInfo = await page.evaluate(() => {
+    const m = document.getElementById('treeCanvas').style.transform.match(/scale\(([\d.]+)\)/);
+    const scale = m ? parseFloat(m[1]) : null;
+    return {
+      scale,
+      contentH: document.getElementById('treeContent').offsetHeight,
+      viewportW: document.getElementById('treeViewport').clientWidth,
+      viewportH: document.getElementById('treeViewport').clientHeight,
+    };
+  });
+  const renderedH = fitInfo.contentH * fitInfo.scale;
+  // MAP_ZOOM_OUT (0.7) dials the fill-height fit back down -- see
+  // computeFitTransform's zoomOut option -- so the rendered height should
+  // land at ~70% of the viewport height, not the full height.
+  const MAP_ZOOM_OUT = 0.7;
+  const expectedH = (fitInfo.viewportH - 48) * MAP_ZOOM_OUT;
+  if (Math.abs(renderedH - expectedH) > 40) throw new Error(`Expected the map's rendered height (${renderedH.toFixed(0)}px) to be ~${expectedH.toFixed(0)}px (viewport height * MAP_ZOOM_OUT)`);
+  console.log(`Confirmed: rendered height ${renderedH.toFixed(0)}px against an expected ~${expectedH.toFixed(0)}px (viewport ${fitInfo.viewportH}px * ${MAP_ZOOM_OUT}).`);
+
+  console.log('\n=== Dragging pans the map horizontally ===');
+  const beforeDrag = await page.evaluate(() => document.getElementById('treeCanvas').style.transform);
+  const vpBox = await page.locator('#treeViewport').boundingBox();
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vpBox.x + vpBox.width / 2 - 200, vpBox.y + vpBox.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const afterDrag = await page.evaluate(() => document.getElementById('treeCanvas').style.transform);
+  if (afterDrag === beforeDrag) throw new Error('Expected dragging on Map View to pan the canvas, but the transform never changed');
+  console.log('Confirmed: dragging pans the map.');
+
+  console.log('\n=== Cards render at half their usual size (MAP_CARD_SCALE) ===');
+  const cardScale = await page.evaluate((id) => {
+    const style = getComputedStyle(document.querySelector(`.person-card[data-id="${id}"]`));
+    const m = style.transform.match(/matrix\(([^,]+),/); // matrix(a,b,c,d,tx,ty) -- a is the x-scale
+    return m ? parseFloat(m[1]) : null;
+  }, p1);
+  if (!cardScale || Math.abs(cardScale - 0.5) > 0.01) throw new Error(`Expected Map View cards to render at scale(0.5), got computed scale ${cardScale}`);
+  console.log(`Confirmed: cards render at scale(${cardScale}).`);
+
+  console.log('\n=== The land fades in from 10% to 100% opacity when entering Map View ===');
+  await page.selectOption('#viewModeSelect', 'traditional');
+  await page.waitForTimeout(400);
+  await page.selectOption('#viewModeSelect', 'map');
+  const earlyOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#linesSvg path')).opacity));
+  if (earlyOpacity >= 0.9) throw new Error(`Expected the land to start near 10% opacity right after entering Map View, got ${earlyOpacity}`);
+  await page.waitForTimeout(700);
+  const settledOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#linesSvg path')).opacity));
+  if (Math.abs(settledOpacity - 1) > 0.02) throw new Error(`Expected the land to settle at full opacity, got ${settledOpacity}`);
+  console.log(`Confirmed: land opacity went from ${earlyOpacity.toFixed(2)} right after entry to ${settledOpacity.toFixed(2)} once settled.`);
+
+  console.log('\n=== Leaving and re-entering Map View replays the fade (it\'s per-entry, not one-time) ===');
+  await page.selectOption('#viewModeSelect', 'traditional');
+  await page.waitForTimeout(400);
+  await page.selectOption('#viewModeSelect', 'map');
+  const secondEntryOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#linesSvg path')).opacity));
+  if (secondEntryOpacity >= 0.9) throw new Error(`Expected a fresh entry into Map View to fade in again, got opacity ${secondEntryOpacity}`);
+  console.log(`Confirmed: re-entering Map View starts the fade again (opacity ${secondEntryOpacity.toFixed(2)}).`);
 
   console.log('\nERRORS:', errors);
   if (errors.length) throw new Error('Unexpected page errors: ' + JSON.stringify(errors));
