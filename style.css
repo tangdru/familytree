@@ -38,11 +38,10 @@
   --centric-outer: #c9c9c9;
   /* Globe View's land fill (see renderGlobeFrame in app.js) -- a dedicated
      token for the same reason as --centric-inner/outer above: a dark,
-     mostly-neutral value that doesn't map cleanly onto --surface. */
+     mostly-neutral value that doesn't map cleanly onto --surface. The
+     sphere/water fill reuses --bg directly (no separate token) so the
+     globe's "empty" areas match the page behind it. */
   --map-land: #e4dcc8;
-  /* Globe View's ocean/sphere fill -- a warm, slightly darker neutral than
-     --map-land so the two read as distinct fills against each other. */
-  --globe-ocean: #d3c9ae;
 }
 
 * { box-sizing: border-box; }
@@ -1771,7 +1770,6 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --card-border: #4a4131;
     --shadow: 0 2px 8px rgba(0,0,0,0.4);
     --map-land: #2c2c2c;
-    --globe-ocean: #201f1f;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
   }
@@ -1823,7 +1821,6 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
      dataviz skill's OKLCH contrast check: filled land needs no border at
      this contrast. */
   --map-land: #262626;
-  --globe-ocean: #141414;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same

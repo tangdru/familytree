@@ -1869,7 +1869,7 @@
   window.addEventListener('mousemove', (e) => {
     if (!isPanning) return;
     if (viewMode === 'globe') {
-      rotateGlobeBy(e.clientX - panStart.x, e.clientY - panStart.y, panStart.rotation);
+      rotateGlobeBy(e.clientX - panStart.x, panStart.rotation);
       return;
     }
     view.x = e.clientX - panStart.x;
@@ -1914,7 +1914,7 @@
     e.preventDefault();
     if (touchMode === 'pan' && e.touches.length === 1) {
       if (viewMode === 'globe') {
-        rotateGlobeBy(e.touches[0].clientX - touchPanStart.x, e.touches[0].clientY - touchPanStart.y, touchPanStart.rotation);
+        rotateGlobeBy(e.touches[0].clientX - touchPanStart.x, touchPanStart.rotation);
         return;
       }
       view.x = e.touches[0].clientX - touchPanStart.x;
@@ -6556,7 +6556,7 @@
     els.svg.innerHTML = '';
     const spherePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     spherePath.setAttribute('d', geoPath({ type: 'Sphere' }));
-    spherePath.setAttribute('fill', 'var(--globe-ocean)');
+    spherePath.setAttribute('fill', 'var(--bg)');
     spherePath.setAttribute('stroke', 'none');
     els.svg.appendChild(spherePath);
 
@@ -6631,7 +6631,6 @@
         // member here is already close enough on screen to cluster
         // together, so that edge case can't actually occur in practice.
         const avgLon = group.reduce((sum, idx) => sum + visible[idx].lon, 0) / group.length;
-        const avgLat = group.reduce((sum, idx) => sum + visible[idx].lat, 0) / group.length;
         const badge = document.createElement('div');
         badge.className = 'map-cluster';
         badge.textContent = String(group.length);
@@ -6639,12 +6638,14 @@
         badge.style.setProperty('--map-zoom-scale', zoomScale);
         badge.style.left = `${cx}px`;
         badge.style.top = `${cy}px`;
-        // Rotates to face the cluster head-on and zooms in
+        // Rotates to face the cluster head-on (longitude only -- rotation
+        // is constrained to the north-south axis, see rotateGlobeBy, so
+        // latitude tilt stays whatever it already is) and zooms in
         // GLOBE_CLUSTER_ZOOM_FACTOR closer, capped at the same ceiling
         // the pinch/wheel zoom itself respects.
         badge.addEventListener('click', () => {
           const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * GLOBE_CLUSTER_ZOOM_FACTOR);
-          animateGlobeTo([-avgLon, -avgLat], targetScale);
+          animateGlobeTo([-avgLon, globeRotation[1]], targetScale);
         });
         els.content.appendChild(badge);
       }
@@ -6672,11 +6673,17 @@
   // real-world globe. baseRotation is wherever the drag/touch STARTED
   // (not the live globeRotation), so a fast, jittery gesture still
   // resolves to a smooth net rotation from that fixed reference.
-  function rotateGlobeBy(dx, dy, baseRotation) {
+  //
+  // Constrained to spin only around the north-south (polar) axis, like a
+  // desktop globe on a fixed stand -- vertical drag movement is ignored
+  // entirely rather than tilting the pole toward/away from the viewer, so
+  // baseRotation[1] (latitude tilt) never changes from whatever it was
+  // set to on entry/fit-view.
+  function rotateGlobeBy(dx, baseRotation) {
     const degreesPerPixel = (180 / Math.PI) / globeScale;
     globeRotation = [
       baseRotation[0] + dx * degreesPerPixel,
-      Math.max(-90, Math.min(90, baseRotation[1] - dy * degreesPerPixel)),
+      baseRotation[1],
     ];
     scheduleGlobeRender();
   }
