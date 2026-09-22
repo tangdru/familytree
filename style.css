@@ -375,14 +375,43 @@ body {
 /* ---------- Map View ---------- */
 /* Map View plots real .person-card elements (see buildCard/renderMapView
    in app.js), so it inherits all of .person-card/.person-photo's styling
-   automatically -- .map-card below just scales that same card down. */
+   automatically -- .map-card below just scales that same card down.
+   --map-zoom-scale is set (and kept live as the map zooms) by
+   updateMapZoomLevel in app.js: view.scale up there, this scale down
+   here, always multiplying back out to the same on-screen size -- the
+   whole point being that the map zooms and the people on it don't. */
 .map-card {
-  transform: scale(0.5); /* must match MAP_CARD_SCALE in app.js */
+  transform: scale(var(--map-zoom-scale, 0.3));
 }
 /* Composed with the base hover-lift rather than replacing it, so hovering
    a map card still lifts -- just from its own (smaller) resting scale
    instead of from scale(1). */
-.map-card:hover { transform: scale(0.5) translateY(-3px); }
+.map-card:hover { transform: scale(var(--map-zoom-scale, 0.3)) translateY(-3px); }
+
+/* A cluster badge stands in for 2+ people whose current locations are too
+   close together to tell apart at the map's current zoom -- see
+   renderMapMarkers/clusterMapPoints in app.js. left/top are set to the
+   cluster's exact point; translate(-50%,-50%) centers the badge on that
+   point regardless of its own (zoom-dependent) rendered size, the same
+   way a pin's tip stays anchored on a map regardless of the pin's scale. */
+.map-cluster {
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 2.4rem;
+  cursor: pointer;
+  border: 3px solid var(--surface);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, -50%) scale(var(--map-zoom-scale, 0.3));
+}
+.map-cluster:hover { transform: translate(-50%, -50%) scale(var(--map-zoom-scale, 0.3)) scale(1.08); }
 
 /* One-shot loading message, shown only until the vendored map libraries
    finish their first (lazy) load. */

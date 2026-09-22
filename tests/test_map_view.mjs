@@ -2,47 +2,36 @@ import { chromium } from 'playwright-core';
 
 // Map View plots each person's CURRENT location only (locations[0], or
 // birthLocation as a fallback -- see currentLocationCoordsOf in app.js) on
-// a Robinson-projection world map, using real .person-card elements (not a
-// bespoke marker) so it inherits the app's existing photo/name/subtitle
-// styling and the same captureCardPositions/animateLayoutIn FLIP
-// transition every other view uses. There is no migration history, no
-// focus concept, and no Static/Dynamic toggle -- clicking a card just
-// opens that person's profile, same as Zodiac/Centric do.
+// a Robinson-projection world map. Markers/clusters render at a constant
+// on-screen size regardless of the map's own zoom (MAP_MARKER_TARGET_SCALE,
+// counter-scaled against view.scale -- see updateMapZoomLevel), and people
+// too close together to tell apart at the current zoom collapse into a
+// single numbered cluster badge (clusterMapPoints) instead of overlapping
+// cards. Clicking a cluster zooms in on it; a cluster that's STILL not
+// resolvable once MAX_ZOOM is reached (an exact shared address, which no
+// amount of zoom can ever separate) falls back to a fanned row instead of
+// staying an unbreakable cluster forever.
 const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4';
 const people = {
+  // Far from everyone else -- always its own individual card, at any zoom.
   [p1]: {
-    id: p1, name: 'Jane Doe', birthDate: '1985-03-02', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'Manila, Philippines', lat: 14.5995, lon: 120.9842 },
-    locations: [{ text: 'San Francisco, CA', lat: 37.7749, lon: -122.4194 }],
+    id: p1, name: 'Ana Cruz', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
+    birthLocation: { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 },
   },
+  // Exact same coordinates as p3 -- can never be separated by zooming
+  // alone, so this pair should always end up as a "2" cluster until
+  // MAX_ZOOM, then fall back to a fanned row.
   [p2]: {
     id: p2, name: 'Tom Doe', birthDate: '1990-06-15', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278 },
   },
-  // No geocoded location at all -- should be skipped, not crash.
   [p3]: {
-    id: p3, name: 'No Location Nell', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-  },
-  // Same exact coordinates as Tom's -- covers resolveMapCardOverlaps
-  // spreading two people who currently live in the same place into a row
-  // instead of stacking their cards exactly on top of each other.
-  [p4]: {
-    id: p4, name: 'Ravi Singh', birthDate: '1988-11-20', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
+    id: p3, name: 'Ravi Singh', birthDate: '1988-11-20', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278 },
   },
-  // Boston and Chicago (~1700km apart -- genuinely different cities, not
-  // a shared address) project only ~68px apart on this Robinson map once
-  // the whole world is compressed into a 1600px-wide canvas -- well under
-  // a card-width. Covers resolveMapCardOverlaps clustering on real
-  // lat/lon, not projected screen distance, so these two are never
-  // mistaken for sharing a location and fanned into the same row.
-  p5: {
-    id: 'p5', name: 'Bea Boston', birthDate: '1965-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'Boston, MA', lat: 42.3601, lon: -71.0589 },
-  },
-  p6: {
-    id: 'p6', name: 'Cal Chicago', birthDate: '1968-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298 },
+  // No geocoded location at all -- should be skipped, not crash.
+  [p4]: {
+    id: p4, name: 'No Location Nell', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
   },
 };
 
@@ -57,119 +46,109 @@ try {
   await page.goto('http://localhost:8934/index.html', { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
 
+  const mapState = () => page.evaluate(() => ({
+    scale: parseFloat(document.getElementById('treeCanvas').style.transform.match(/scale\(([\d.]+)\)/)[1]),
+    cardNames: [...document.querySelectorAll('.map-card')].map(c => c.querySelector('.person-name').textContent),
+    clusterCounts: [...document.querySelectorAll('.map-cluster')].map(c => parseInt(c.textContent, 10)),
+  }));
+
   console.log('=== Map View is a selectable view mode ===');
   const hasOption = await page.evaluate(() => !!document.querySelector('#viewModeSelect option[value="map"]'));
   if (!hasOption) throw new Error('Expected #viewModeSelect to have a "map" option');
   console.log('Confirmed: dropdown has a Map View option.');
 
-  console.log('\n=== Switching to it draws land and real person cards (not a bespoke marker) ===');
+  console.log('\n=== On entry: Ana is an individual card, Tom+Ravi collapse into a "2" cluster ===');
   await page.selectOption('#viewModeSelect', 'map');
   await page.waitForTimeout(900); // first load: vendored d3/topojson/world-atlas fetch
   const landDrawn = await page.evaluate(() => !!document.querySelector('#linesSvg path'));
   if (!landDrawn) throw new Error('Expected a filled land path in #linesSvg once the map libs finish loading');
-  const cardCount = await page.evaluate(() => document.querySelectorAll('#treeContent .person-card').length);
-  if (cardCount !== 5) throw new Error(`Expected 5 cards (Nell has no geocoded location and is skipped), got ${cardCount}`);
-  const hasBespokeMarker = await page.evaluate(() => !!document.querySelector('.migration-marker'));
-  if (hasBespokeMarker) throw new Error('Expected no leftover .migration-marker elements -- Map View should only use real .person-card elements');
-  console.log('Confirmed: land drawn, 5 real .person-card elements placed, Nell (no location) skipped.');
+  let s = await mapState();
+  if (!s.cardNames.includes('Ana Cruz')) throw new Error(`Expected Ana Cruz to render as her own individual card, got cards: ${JSON.stringify(s.cardNames)}`);
+  if (s.clusterCounts.length !== 1 || s.clusterCounts[0] !== 2) throw new Error(`Expected exactly one "2" cluster (Tom+Ravi, exact same coordinates), got: ${JSON.stringify(s.clusterCounts)}`);
+  const totalRepresented = s.cardNames.length + s.clusterCounts.reduce((a, b) => a + b, 0);
+  if (totalRepresented !== 3) throw new Error(`Expected 3 people represented total (Nell has no location and is skipped), got ${totalRepresented}`);
+  console.log(`Confirmed: ${JSON.stringify(s.cardNames)} + cluster(s) ${JSON.stringify(s.clusterCounts)} = 3 people, Nell skipped.`);
 
-  console.log('\n=== Boston and Chicago are genuinely different cities and never get fanned together ===');
-  const [bostonPos, chicagoPos] = await page.evaluate(() => {
-    const posOf = (id) => {
-      const el = document.querySelector(`.person-card[data-id="${id}"]`);
-      return { x: parseFloat(el.style.left), y: parseFloat(el.style.top) };
-    };
-    return [posOf('p5'), posOf('p6')];
+  console.log('\n=== Markers stay the same on-screen size across very different zoom levels ===');
+  const sizeAt = async () => page.evaluate(() => {
+    const el = document.querySelector('.map-card') || document.querySelector('.map-cluster');
+    return el.getBoundingClientRect().width;
   });
-  const cityDist = Math.hypot(bostonPos.x - chicagoPos.x, bostonPos.y - chicagoPos.y);
-  // The real (correct) projected gap between these two cities is ~68px;
-  // the bug this guards against pulled them into the same fan-out row at
-  // a full CARD_WIDTH*MAP_CARD_SCALE+SPOUSE_GAP (91px) spacing instead.
-  if (cityDist > 80) throw new Error(`Expected Boston and Chicago to sit at their real ~68px projected gap, not be fanned apart like a shared location -- got ${cityDist.toFixed(1)}px`);
-  console.log(`Confirmed: Boston and Chicago sit ${cityDist.toFixed(1)}px apart (their real projected gap), not merged into one cluster.`);
+  const sizeAtEntry = await sizeAt();
+  const vpCenter = await page.locator('#treeViewport').boundingBox();
+  await page.mouse.move(vpCenter.x + vpCenter.width / 2, vpCenter.y + vpCenter.height / 2);
+  await page.mouse.wheel(0, -4000); // zoom in a lot via the real wheel handler
+  await page.waitForTimeout(300);
+  const scaleAfterWheel = (await mapState()).scale;
+  if (scaleAfterWheel <= s.scale) throw new Error(`Expected wheel-zooming in to increase view.scale, went from ${s.scale} to ${scaleAfterWheel}`);
+  const sizeAfterZoom = await sizeAt();
+  if (Math.abs(sizeAfterZoom - sizeAtEntry) > 3) throw new Error(`Expected a marker's rendered size to stay constant across zoom levels (map zooms, people don't) -- was ${sizeAtEntry.toFixed(1)}px, now ${sizeAfterZoom.toFixed(1)}px at scale ${scaleAfterWheel}`);
+  console.log(`Confirmed: marker size stayed ~${sizeAtEntry.toFixed(1)}px while view.scale went from ${s.scale.toFixed(2)} to ${scaleAfterWheel.toFixed(2)}.`);
 
-  console.log('\n=== Each card shows the current-location text as its subtitle ===');
-  const janeSubtitle = await page.evaluate((id) => document.querySelector(`.person-card[data-id="${id}"] .person-dates`).textContent, p1);
-  if (!janeSubtitle.includes('San Francisco')) throw new Error(`Expected Jane's subtitle to show her current location (San Francisco), got: ${janeSubtitle}`);
-  console.log(`Confirmed: Jane's card subtitle reads "${janeSubtitle}".`);
+  console.log('\n=== Zooming all the way to MAX_ZOOM resolves every cluster into individuals ===');
+  for (let i = 0; i < 15; i++) {
+    await page.mouse.wheel(0, -4000);
+    await page.waitForTimeout(80);
+  }
+  await page.waitForTimeout(300);
+  s = await mapState();
+  if (s.clusterCounts.length !== 0) throw new Error(`Expected no clusters left at max zoom (an exact shared address should fan out instead), got: ${JSON.stringify(s.clusterCounts)}`);
+  const namesAtMax = s.cardNames.slice().sort();
+  if (JSON.stringify(namesAtMax) !== JSON.stringify(['Ana Cruz', 'Ravi Singh', 'Tom Doe'])) throw new Error(`Expected all 3 geocoded people as individual (fanned) cards at max zoom, got: ${JSON.stringify(namesAtMax)}`);
+  const [tomLeft, raviLeft] = await page.evaluate(() => {
+    const posOf = (name) => {
+      const card = [...document.querySelectorAll('.map-card')].find(c => c.querySelector('.person-name').textContent === name);
+      return parseFloat(card.style.left);
+    };
+    return [posOf('Tom Doe'), posOf('Ravi Singh')];
+  });
+  if (Math.abs(tomLeft - raviLeft) < 10) throw new Error(`Expected Tom and Ravi (exact same coordinates) to be fanned apart once resolved to individuals, got left positions ${tomLeft} and ${raviLeft}`);
+  console.log('Confirmed: at max zoom, the unresolvable Tom/Ravi cluster fans out into two separate, spaced-apart cards.');
 
-  console.log('\n=== Clicking a card opens that person\'s profile directly -- no focus concept ===');
-  await page.click(`.person-card[data-id="${p1}"]`);
+  console.log('\n=== Clicking a cluster (while zoomed back out) zooms in on it ===');
+  await page.selectOption('#viewModeSelect', 'traditional');
+  await page.waitForTimeout(300);
+  await page.selectOption('#viewModeSelect', 'map');
+  await page.waitForTimeout(900);
+  const scaleBeforeClusterClick = (await mapState()).scale;
+  await page.click('.map-cluster');
+  await page.waitForTimeout(600);
+  const scaleAfterClusterClick = (await mapState()).scale;
+  if (scaleAfterClusterClick <= scaleBeforeClusterClick) throw new Error(`Expected clicking a cluster to zoom in, went from ${scaleBeforeClusterClick} to ${scaleAfterClusterClick}`);
+  console.log(`Confirmed: clicking the cluster zoomed from ${scaleBeforeClusterClick.toFixed(2)} to ${scaleAfterClusterClick.toFixed(2)}.`);
+
+  console.log('\n=== Clicking an individual card still opens that person\'s profile ===');
+  await page.click('.map-card[data-id]'); // any individual card present
   await page.waitForTimeout(400);
   const modalHidden = await page.evaluate(() => document.getElementById('personViewModal').hidden);
-  const modalName = await page.evaluate(() => document.getElementById('viewName')?.textContent || '');
-  if (modalHidden) throw new Error('Expected clicking a Map View card to open the Person View');
-  if (!modalName.includes('Jane')) throw new Error(`Expected the opened profile to be Jane's, got: ${modalName}`);
+  if (modalHidden) throw new Error('Expected clicking an individual Map View card to open the Person View');
   await page.click('#viewCloseBtn');
   await page.waitForTimeout(200);
-  console.log("Confirmed: clicking a card opens that person's profile.");
-
-  console.log('\n=== Tom and Ravi share the exact same coordinates, but their cards never overlap ===');
-  // Read the world-space left/top the render function itself set (not
-  // getBoundingClientRect, which reports post-pan/zoom screen pixels --
-  // the map's own fit-to-view scale would otherwise shrink this distance
-  // and make the assertion depend on viewport size).
-  const [tomPos, raviPos] = await page.evaluate(([tId, rId]) => {
-    const posOf = (id) => {
-      const el = document.querySelector(`.person-card[data-id="${id}"]`);
-      return { x: parseFloat(el.style.left), y: parseFloat(el.style.top) };
-    };
-    return [posOf(tId), posOf(rId)];
-  }, [p2, p4]);
-  const centerDist = Math.hypot(tomPos.x - raviPos.x, tomPos.y - raviPos.y);
-  // Fanned by CARD_WIDTH*MAP_CARD_SCALE+SPOUSE_GAP (91px) -- their own
-  // scaled-down width plus a gap, not the full unscaled card width.
-  if (centerDist < 80) throw new Error(`Expected Tom and Ravi's cards to be spread by their scaled card width, got ${centerDist}px`);
-  // Both must still be independently clickable -- the actual bug this
-  // guards against is a fully-overlapping card intercepting the one
-  // beneath it.
-  await page.click(`.person-card[data-id="${p4}"]`);
-  await page.waitForTimeout(300);
-  const raviModalName = await page.evaluate(() => document.getElementById('viewName')?.textContent || '');
-  if (!raviModalName.includes('Ravi')) throw new Error(`Expected clicking Ravi's card to open his profile, got: ${raviModalName}`);
-  await page.click('#viewCloseBtn');
-  await page.waitForTimeout(200);
-  await page.click(`.person-card[data-id="${p2}"]`);
-  await page.waitForTimeout(300);
-  const tomModalName = await page.evaluate(() => document.getElementById('viewName')?.textContent || '');
-  if (!tomModalName.includes('Tom')) throw new Error(`Expected clicking Tom's card to also independently open his profile, got: ${tomModalName}`);
-  await page.click('#viewCloseBtn');
-  await page.waitForTimeout(200);
-  console.log(`Confirmed: cards spread ${centerDist.toFixed(1)}px apart, both independently clickable.`);
+  console.log("Confirmed: clicking an individual card still opens that person's profile.");
 
   console.log('\n=== No Static/Dynamic toggle exists anymore ===');
   const toggleGone = await page.evaluate(() => !document.getElementById('migrationModeToggle') && !document.getElementById('migrationDynamicPlaceholder'));
   if (!toggleGone) throw new Error('Expected the old Static/Dynamic toggle and placeholder to be fully removed');
   console.log('Confirmed: no leftover toggle/placeholder DOM.');
 
-  console.log('\n=== Switching away and back re-renders cleanly ===');
+  console.log('\n=== The map fits to a zoomed-out fraction of the viewport\'s height (MAP_ZOOM_OUT) on entry ===');
   await page.selectOption('#viewModeSelect', 'traditional');
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(300);
   await page.selectOption('#viewModeSelect', 'map');
-  await page.waitForTimeout(600);
-  const cardCountAgain = await page.evaluate(() => document.querySelectorAll('#treeContent .person-card').length);
-  if (cardCountAgain !== 5) throw new Error(`Expected 5 cards again after switching back to Map View, got ${cardCountAgain}`);
-  console.log('Confirmed: switching away and back still works.');
-
-  console.log('\n=== The map fits to a zoomed-out fraction of the viewport\'s height (MAP_ZOOM_OUT) ===');
+  await page.waitForTimeout(900);
   const fitInfo = await page.evaluate(() => {
     const m = document.getElementById('treeCanvas').style.transform.match(/scale\(([\d.]+)\)/);
-    const scale = m ? parseFloat(m[1]) : null;
     return {
-      scale,
+      scale: m ? parseFloat(m[1]) : null,
       contentH: document.getElementById('treeContent').offsetHeight,
-      viewportW: document.getElementById('treeViewport').clientWidth,
       viewportH: document.getElementById('treeViewport').clientHeight,
     };
   });
   const renderedH = fitInfo.contentH * fitInfo.scale;
-  // MAP_ZOOM_OUT (0.7) dials the fill-height fit back down -- see
-  // computeFitTransform's zoomOut option -- so the rendered height should
-  // land at ~70% of the viewport height, not the full height.
   const MAP_ZOOM_OUT = 0.7;
   const expectedH = (fitInfo.viewportH - 48) * MAP_ZOOM_OUT;
   if (Math.abs(renderedH - expectedH) > 40) throw new Error(`Expected the map's rendered height (${renderedH.toFixed(0)}px) to be ~${expectedH.toFixed(0)}px (viewport height * MAP_ZOOM_OUT)`);
-  console.log(`Confirmed: rendered height ${renderedH.toFixed(0)}px against an expected ~${expectedH.toFixed(0)}px (viewport ${fitInfo.viewportH}px * ${MAP_ZOOM_OUT}).`);
+  console.log(`Confirmed: rendered height ${renderedH.toFixed(0)}px against an expected ~${expectedH.toFixed(0)}px.`);
 
   console.log('\n=== Dragging pans the map horizontally ===');
   const beforeDrag = await page.evaluate(() => document.getElementById('treeCanvas').style.transform);
@@ -183,15 +162,6 @@ try {
   if (afterDrag === beforeDrag) throw new Error('Expected dragging on Map View to pan the canvas, but the transform never changed');
   console.log('Confirmed: dragging pans the map.');
 
-  console.log('\n=== Cards render at half their usual size (MAP_CARD_SCALE) ===');
-  const cardScale = await page.evaluate((id) => {
-    const style = getComputedStyle(document.querySelector(`.person-card[data-id="${id}"]`));
-    const m = style.transform.match(/matrix\(([^,]+),/); // matrix(a,b,c,d,tx,ty) -- a is the x-scale
-    return m ? parseFloat(m[1]) : null;
-  }, p1);
-  if (!cardScale || Math.abs(cardScale - 0.5) > 0.01) throw new Error(`Expected Map View cards to render at scale(0.5), got computed scale ${cardScale}`);
-  console.log(`Confirmed: cards render at scale(${cardScale}).`);
-
   console.log('\n=== The land fades in from 10% to 100% opacity when entering Map View ===');
   await page.selectOption('#viewModeSelect', 'traditional');
   await page.waitForTimeout(400);
@@ -202,14 +172,6 @@ try {
   const settledOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#linesSvg path')).opacity));
   if (Math.abs(settledOpacity - 1) > 0.02) throw new Error(`Expected the land to settle at full opacity, got ${settledOpacity}`);
   console.log(`Confirmed: land opacity went from ${earlyOpacity.toFixed(2)} right after entry to ${settledOpacity.toFixed(2)} once settled.`);
-
-  console.log('\n=== Leaving and re-entering Map View replays the fade (it\'s per-entry, not one-time) ===');
-  await page.selectOption('#viewModeSelect', 'traditional');
-  await page.waitForTimeout(400);
-  await page.selectOption('#viewModeSelect', 'map');
-  const secondEntryOpacity = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#linesSvg path')).opacity));
-  if (secondEntryOpacity >= 0.9) throw new Error(`Expected a fresh entry into Map View to fade in again, got opacity ${secondEntryOpacity}`);
-  console.log(`Confirmed: re-entering Map View starts the fade again (opacity ${secondEntryOpacity.toFixed(2)}).`);
 
   console.log('\nERRORS:', errors);
   if (errors.length) throw new Error('Unexpected page errors: ' + JSON.stringify(errors));

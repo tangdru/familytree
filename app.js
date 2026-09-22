@@ -1565,6 +1565,10 @@
       els.chronoRulerInner.style.transform = `translateY(${view.y}px)`;
       repositionChronoRulerLabels();
     }
+    // Keeps Map View's markers/clusters a constant on-screen size as the
+    // map itself zooms, and re-clusters once the zoom has moved enough to
+    // matter -- see updateMapZoomLevel's own comment.
+    if (viewMode === 'map') updateMapZoomLevel();
   }
   applyTransform();
 
@@ -6322,21 +6326,46 @@
 
   const MAP_W = 1600;
   const MAP_H = 800;
-  // Person cards render at half their usual size on the map (see
-  // renderMapView's use of .map-card) -- full-size cards left little
-  // clearance between nearby cities even after the fill-height fit below.
-  const MAP_CARD_SCALE = 0.5;
   // Dials the fill-height fit (see computeFitTransform's own note on
   // verticalOnly) back out a bit further, trading some of that fit's size
-  // for more of the world visible without panning -- reasonable now that
-  // MAP_CARD_SCALE's smaller cards need less clearance from each other.
+  // for more of the world visible without panning on first entry --
+  // decluttering itself is clustering's job now (see below), not this.
   const MAP_ZOOM_OUT = 0.7;
+  // Markers/clusters render at this CSS scale when view.scale is 1, and
+  // are counter-scaled against every zoom change (see updateMapZoomLevel)
+  // to stay this same size on screen regardless of how zoomed in or out
+  // the map itself is -- the whole point being that the map zooms and the
+  // people on it don't, same as pins on a real map.
+  const MAP_MARKER_TARGET_SCALE = 0.3;
+  // Two people whose current-location points land within this many
+  // SCREEN pixels of each other (at the map's current zoom) collapse into
+  // one numbered cluster instead of two overlapping cards -- purely a
+  // function of view.scale, recomputed as it changes (see
+  // updateMapZoomLevel), unlike the old fixed-map-space overlap check
+  // this replaces.
+  const MAP_CLUSTER_PIXEL_RADIUS = 50;
+  // How much closer a cluster click zooms in, capped at MAX_ZOOM -- a
+  // cluster whose members are still within MAP_CLUSTER_PIXEL_RADIUS once
+  // that cap is hit (an exact shared address, which no amount of zoom can
+  // ever visually separate) falls back to a fanned row instead of an
+  // unbreakable cluster -- see renderMapMarkers.
+  const MAP_CLUSTER_ZOOM_FACTOR = 3;
   let mapLibsPromise = null;
   let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
+  // Each person's raw, unscaled projected {x,y} (plus their subtitle
+  // text) -- computed once per full renderMapView() call and reused by
+  // every zoom-triggered re-cluster afterward, so panning/zooming never
+  // has to re-run the projection or re-parse the land topology.
+  let mapPeoplePoints = [];
+  // The view.scale clustering was last computed at -- re-clustering only
+  // runs once the zoom has moved far enough from this to plausibly change
+  // any group's membership (see updateMapZoomLevel), not on every single
+  // drag/wheel/animation frame.
+  let mapLastClusterScale = null;
   // Sequences the land fade-in (10% -> 100% opacity) below to play only
   // when actually switching INTO Map View, not on every later re-render
-  // triggered while already there (adding a person, resolving a card
-  // overlap, etc.) -- set by the viewModeSelect handler right before
+  // triggered while already there (adding a person, a zoom-triggered
+  // re-cluster, etc.) -- set by the viewModeSelect handler right before
   // calling renderTree(), consumed (and cleared) the moment the land
   // path is actually drawn.
   let mapEntryFadePending = false;
@@ -6393,56 +6422,144 @@
     return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
   }
 
-  // Two or more people can share the exact same (or a nearly identical)
-  // current location -- a married couple, a whole household -- which
-  // would otherwise stack their full-size cards exactly on top of each
-  // other. Given each person's already-projected point, this mutates
-  // each affected person's point in place, spreading members of the same
-  // cluster into a horizontal row centered on their shared spot -- the
-  // same CARD_WIDTH/SPOUSE_GAP rhythm the tree views already space cards
-  // by, rather than a bespoke spacing constant just for this view.
-  // Clusters on real lat/lon proximity, NOT projected screen distance --
-  // a fixed pixel threshold would also catch two genuinely different
-  // cities that just happen to land close together once the whole world
-  // is compressed onto a 1600px-wide map (e.g. Boston and Chicago, ~1700km
-  // apart, project only ~68px apart at this scale), wrongly treating them
-  // as one shared location. A tight degree threshold instead only matches
-  // an actual shared address/city -- the app's own location autocomplete
-  // returns the same coordinates for the same picked city -- and stays
-  // correct regardless of the map's current zoom or projection.
-  const SAME_LOCATION_DEGREES = 0.05;
-
-  function resolveMapCardOverlaps(peopleWithPoints) {
+  // Groups mapPeoplePoints indices whose projected points land within
+  // MAP_CLUSTER_PIXEL_RADIUS screen pixels of each other AT THE CURRENT
+  // view.scale -- purely a function of zoom, recomputed as it changes
+  // (see updateMapZoomLevel). Deliberately transitive (A near B near C
+  // joins all three even if A and C alone wouldn't) -- that's ordinary,
+  // expected clustering behavior, the same thing map pin clusters
+  // everywhere do, unlike the old fixed-degree "is this the same address"
+  // check this replaces.
+  function clusterMapPoints() {
     const used = new Set();
-    // Scaled down to match the cards' own rendered size (see
-    // MAP_CARD_SCALE) -- spacing fanned-out cards by their full,
-    // unscaled width would leave an oversized gap between them.
-    const step = CARD_WIDTH * MAP_CARD_SCALE + SPOUSE_GAP;
-    for (let i = 0; i < peopleWithPoints.length; i++) {
+    const groups = [];
+    for (let i = 0; i < mapPeoplePoints.length; i++) {
       if (used.has(i)) continue;
       const group = [i];
       used.add(i);
-      const anchor = peopleWithPoints[i];
-      for (let j = i + 1; j < peopleWithPoints.length; j++) {
+      const anchor = mapPeoplePoints[i].point;
+      for (let j = i + 1; j < mapPeoplePoints.length; j++) {
         if (used.has(j)) continue;
-        const other = peopleWithPoints[j];
-        if (Math.hypot(anchor.lat - other.lat, anchor.lon - other.lon) < SAME_LOCATION_DEGREES) {
-          group.push(j);
-          used.add(j);
-        }
+        const other = mapPeoplePoints[j].point;
+        const screenDist = Math.hypot(anchor.x - other.x, anchor.y - other.y) * view.scale;
+        if (screenDist < MAP_CLUSTER_PIXEL_RADIUS) { group.push(j); used.add(j); }
       }
-      if (group.length < 2) continue;
-      const n = group.length;
-      const cx = group.reduce((sum, idx) => sum + peopleWithPoints[idx].point.x, 0) / n;
-      const startX = cx - ((n - 1) * step) / 2;
-      group.forEach((idx, k) => {
-        peopleWithPoints[idx].point = { x: startX + k * step, y: peopleWithPoints[idx].point.y };
-      });
+      groups.push(group);
+    }
+    return groups;
+  }
+
+  // Spreads points that can't be told apart by zooming any further (an
+  // exact shared address -- see renderMapMarkers) into a horizontal row
+  // centered on their shared spot, the same CARD_WIDTH/SPOUSE_GAP rhythm
+  // the tree views already space cards by.
+  function fanOutRow(points, step) {
+    const n = points.length;
+    const cx = points.reduce((sum, p) => sum + p.x, 0) / n;
+    const cy = points.reduce((sum, p) => sum + p.y, 0) / n;
+    const startX = cx - ((n - 1) * step) / 2;
+    return points.map((_, k) => ({ x: startX + k * step, y: cy }));
+  }
+
+  // Rebuilds just the marker/cluster layer from the already-projected
+  // mapPeoplePoints -- called once by renderMapView() itself (with the
+  // FLIP transition, on an actual view entry or data change) and again,
+  // FLIP-free, every time updateMapZoomLevel() decides the zoom has moved
+  // far enough to re-cluster. Never touches the land or re-runs the
+  // projection, so a zoom-triggered re-cluster stays cheap.
+  function renderMapMarkers(options) {
+    const animateFlip = options && options.animateFlip;
+    const oldPositions = animateFlip ? captureCardPositions() : null;
+    els.content.querySelectorAll('.map-card, .map-cluster').forEach(el => el.remove());
+
+    const zoomScale = MAP_MARKER_TARGET_SCALE / view.scale;
+    const cardEls = {};
+    for (const group of clusterMapPoints()) {
+      // A cluster still within MAP_CLUSTER_PIXEL_RADIUS once MAX_ZOOM is
+      // reached can never be broken apart by zooming any further (most
+      // often an exact shared address) -- show it as individuals, fanned
+      // out, rather than an unbreakable cluster badge.
+      const forceIndividuals = group.length === 1 || view.scale >= MAX_ZOOM - 1e-6;
+      if (forceIndividuals) {
+        const rawPoints = group.map(idx => mapPeoplePoints[idx].point);
+        const points = group.length > 1 ? fanOutRow(rawPoints, CARD_WIDTH * MAP_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
+        group.forEach((idx, k) => {
+          const { person, text } = mapPeoplePoints[idx];
+          const card = buildCard(person, { subtitle: text });
+          // A plain CSS transform, not smaller layout dimensions, so
+          // left/top still center the card on its point exactly the same
+          // way every other view centers a card on its own anchor:
+          // scaling from the box's own center never shifts where that
+          // center sits.
+          card.classList.add('map-card');
+          card.style.setProperty('--map-zoom-scale', zoomScale);
+          const pt = points[k];
+          card.style.left = `${pt.x - CARD_WIDTH / 2}px`;
+          els.content.appendChild(card);
+          cardEls[person.id] = card;
+          // Two-phase like every other view: set top only after the card
+          // is in the DOM and its real (name-wrap-dependent) height can
+          // be measured.
+          card.style.top = `${pt.y - card.offsetHeight / 2}px`;
+        });
+      } else {
+        const cx = group.reduce((sum, idx) => sum + mapPeoplePoints[idx].point.x, 0) / group.length;
+        const cy = group.reduce((sum, idx) => sum + mapPeoplePoints[idx].point.y, 0) / group.length;
+        const badge = document.createElement('div');
+        badge.className = 'map-cluster';
+        badge.textContent = String(group.length);
+        badge.title = group.map(idx => mapPeoplePoints[idx].person.name || '(unnamed)').join(', ');
+        badge.style.setProperty('--map-zoom-scale', zoomScale);
+        badge.style.left = `${cx}px`;
+        badge.style.top = `${cy}px`;
+        // Zooms in centered on the cluster -- MAP_CLUSTER_ZOOM_FACTOR
+        // closer, capped at MAX_ZOOM. animateViewTo's own per-frame
+        // applyTransform() call keeps every marker's counter-scale (and,
+        // once the zoom has moved enough, the cluster grouping itself)
+        // updated throughout the animation, not just at the end.
+        badge.addEventListener('click', () => {
+          const targetScale = Math.min(MAX_ZOOM, view.scale * MAP_CLUSTER_ZOOM_FACTOR);
+          const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
+          animateViewTo({ scale: targetScale, x: vw / 2 - cx * targetScale, y: vh / 2 - cy * targetScale });
+        });
+        els.content.appendChild(badge);
+      }
+    }
+
+    if (animateFlip) animateLayoutIn(cardEls, oldPositions);
+  }
+
+  // Runs on every pan/zoom update while Map View is active (see
+  // applyTransform). Updating each marker's own counter-scale is cheap
+  // (just a CSS custom property) and happens every single call, keeping
+  // sizes visually correct even mid-gesture; actually re-clustering can
+  // add or remove elements, so it only re-runs once the zoom has moved
+  // more than 20% from where clustering last ran -- comfortably below
+  // that, no group's membership could plausibly have changed anyway.
+  function updateMapZoomLevel() {
+    const zoomScale = MAP_MARKER_TARGET_SCALE / view.scale;
+    els.content.querySelectorAll('.map-card, .map-cluster').forEach(el => {
+      el.style.setProperty('--map-zoom-scale', zoomScale);
+    });
+    if (mapLastClusterScale === null) {
+      mapLastClusterScale = view.scale;
+      return;
+    }
+    const ratio = view.scale / mapLastClusterScale;
+    // Reaching MAX_ZOOM always re-clusters regardless of the ratio gate --
+    // this is the boundary where an unresolvable cluster (an exact shared
+    // address, no amount of further zoom can ever separate it) gives way
+    // to a fanned row (see renderMapMarkers), and a small final zoom step
+    // that crosses into MAX_ZOOM can otherwise fall under the 20%
+    // threshold and never trigger that fallback.
+    const justReachedMaxZoom = view.scale >= MAX_ZOOM - 1e-6 && mapLastClusterScale < MAX_ZOOM - 1e-6;
+    if (ratio > 1.2 || ratio < 1 / 1.2 || justReachedMaxZoom) {
+      mapLastClusterScale = view.scale;
+      renderMapMarkers();
     }
   }
 
   function renderMapView() {
-    const oldPositions = captureCardPositions();
     els.content.innerHTML = '';
     els.svg.innerHTML = '';
     const hasPeople = Object.keys(data.people).length > 0;
@@ -6474,8 +6591,8 @@
 
     // Only on an actual switch INTO Map View (see mapEntryFadePending) --
     // a later re-render triggered while already here (adding a person,
-    // fanning out a newly-overlapping card, etc.) redraws the land
-    // instantly instead of replaying the fade every time.
+    // etc.) redraws the land instantly instead of replaying the fade
+    // every time.
     const animateLandIn = mapEntryFadePending;
     mapEntryFadePending = false;
 
@@ -6496,44 +6613,27 @@
       requestAnimationFrame(() => { landPath.style.opacity = '1'; });
     }
 
-    const peopleWithPoints = Object.values(data.people)
+    mapPeoplePoints = Object.values(data.people)
       .map(person => {
         const coords = currentLocationCoordsOf(person);
         if (!coords) return null;
         const [x, y] = projection([coords.lon, coords.lat]);
-        return { person, text: coords.text, lat: coords.lat, lon: coords.lon, point: { x, y } };
+        return { person, text: coords.text, point: { x, y } };
       })
       .filter(Boolean);
 
-    // Mutates each affected person's point in place so people who share a
-    // current location fan out into a row instead of stacking their
-    // cards exactly on top of each other.
-    resolveMapCardOverlaps(peopleWithPoints);
+    // Re-established fresh on every full render so the very first
+    // zoom-triggered re-cluster compares against the scale clustering
+    // actually just ran at here, not a stale value from a previous visit
+    // to this view.
+    mapLastClusterScale = view.scale;
 
-    const cardEls = {};
-    for (const { person, text, point } of peopleWithPoints) {
-      const card = buildCard(person, { subtitle: text });
-      // Renders at MAP_CARD_SCALE (see .map-card in style.css) -- a plain
-      // CSS transform, not smaller layout dimensions, so left/top below
-      // still center the card on its projected point exactly the same
-      // way every other view centers a card on its own anchor: scaling
-      // from the box's own center never shifts where that center sits.
-      card.classList.add('map-card');
-      card.style.left = `${point.x - CARD_WIDTH / 2}px`;
-      els.content.appendChild(card);
-      cardEls[person.id] = card;
-      // Two-phase like every other view: set top only after the card is
-      // in the DOM and its real (name-wrap-dependent) height can be
-      // measured.
-      card.style.top = `${point.y - card.offsetHeight / 2}px`;
-    }
-
-    // Same FLIP transition every other view uses -- and since it keys
-    // purely on person id (not on which view produced the old position),
-    // switching straight from Traditional/Chrono/Zodiac/Centric into Map
-    // View (or back) glides every card from its old layout position to
-    // its geographic one for free.
-    animateLayoutIn(cardEls, oldPositions);
+    // Same FLIP transition every other view uses for its cards -- and
+    // since it keys purely on person id (not on which view produced the
+    // old position), switching straight from Traditional/Chrono/Zodiac/
+    // Centric into Map View (or back) glides every card from its old
+    // layout position to its geographic one for free.
+    renderMapMarkers({ animateFlip: true });
   }
 
   // ---------- Seed sample data on first run ----------
