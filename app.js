@@ -1804,7 +1804,14 @@
   }
 
   function setZoom(newScale, anchorClientX, anchorClientY) {
-    newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newScale));
+    // Map View gets a much higher ceiling than the tree views -- MAX_ZOOM
+    // (2x) was tuned for a family-tree diagram, but the whole world only
+    // spans MAP_W (1600) px of map-space to begin with, so 2x is nowhere
+    // near enough to visually separate two real cities that are merely
+    // close together rather than at the exact same address. See
+    // MAP_MAX_ZOOM's own comment.
+    const maxZoom = viewMode === 'map' ? MAP_MAX_ZOOM : MAX_ZOOM;
+    newScale = Math.min(maxZoom, Math.max(MIN_ZOOM, newScale));
     const rect = els.viewport.getBoundingClientRect();
     const ax = anchorClientX !== undefined ? anchorClientX - rect.left : rect.width / 2;
     const ay = anchorClientY !== undefined ? anchorClientY - rect.top : rect.height / 2;
@@ -6344,12 +6351,22 @@
   // updateMapZoomLevel), unlike the old fixed-map-space overlap check
   // this replaces.
   const MAP_CLUSTER_PIXEL_RADIUS = 50;
-  // How much closer a cluster click zooms in, capped at MAX_ZOOM -- a
+  // How much closer a cluster click zooms in, capped at MAP_MAX_ZOOM -- a
   // cluster whose members are still within MAP_CLUSTER_PIXEL_RADIUS once
   // that cap is hit (an exact shared address, which no amount of zoom can
   // ever visually separate) falls back to a fanned row instead of an
   // unbreakable cluster -- see renderMapMarkers.
   const MAP_CLUSTER_ZOOM_FACTOR = 3;
+  // The tree views' shared MAX_ZOOM (2x) makes sense for a family-tree
+  // diagram, but the whole world only spans MAP_W (1600) px of map-space
+  // to begin with, so 2x barely zooms in at all in real terms -- nowhere
+  // near enough to separate two cities that are merely close together
+  // rather than at the exact same address (see setZoom, which picks this
+  // ceiling specifically for Map View). 30x gets a person-width of
+  // separation down to roughly a few km apart at typical latitudes,
+  // comfortably past "different neighborhoods of the same city" -- only
+  // an exact shared address should still need the fan-out fallback.
+  const MAP_MAX_ZOOM = 30;
   let mapLibsPromise = null;
   let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
   // Each person's raw, unscaled projected {x,y} (plus their subtitle
@@ -6475,11 +6492,11 @@
     const zoomScale = MAP_MARKER_TARGET_SCALE / view.scale;
     const cardEls = {};
     for (const group of clusterMapPoints()) {
-      // A cluster still within MAP_CLUSTER_PIXEL_RADIUS once MAX_ZOOM is
-      // reached can never be broken apart by zooming any further (most
+      // A cluster still within MAP_CLUSTER_PIXEL_RADIUS once MAP_MAX_ZOOM
+      // is reached can never be broken apart by zooming any further (most
       // often an exact shared address) -- show it as individuals, fanned
       // out, rather than an unbreakable cluster badge.
-      const forceIndividuals = group.length === 1 || view.scale >= MAX_ZOOM - 1e-6;
+      const forceIndividuals = group.length === 1 || view.scale >= MAP_MAX_ZOOM - 1e-6;
       if (forceIndividuals) {
         const rawPoints = group.map(idx => mapPeoplePoints[idx].point);
         const points = group.length > 1 ? fanOutRow(rawPoints, CARD_WIDTH * MAP_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
@@ -6513,12 +6530,12 @@
         badge.style.left = `${cx}px`;
         badge.style.top = `${cy}px`;
         // Zooms in centered on the cluster -- MAP_CLUSTER_ZOOM_FACTOR
-        // closer, capped at MAX_ZOOM. animateViewTo's own per-frame
+        // closer, capped at MAP_MAX_ZOOM. animateViewTo's own per-frame
         // applyTransform() call keeps every marker's counter-scale (and,
         // once the zoom has moved enough, the cluster grouping itself)
         // updated throughout the animation, not just at the end.
         badge.addEventListener('click', () => {
-          const targetScale = Math.min(MAX_ZOOM, view.scale * MAP_CLUSTER_ZOOM_FACTOR);
+          const targetScale = Math.min(MAP_MAX_ZOOM, view.scale * MAP_CLUSTER_ZOOM_FACTOR);
           const vw = els.viewport.clientWidth, vh = els.viewport.clientHeight;
           animateViewTo({ scale: targetScale, x: vw / 2 - cx * targetScale, y: vh / 2 - cy * targetScale });
         });
@@ -6546,13 +6563,13 @@
       return;
     }
     const ratio = view.scale / mapLastClusterScale;
-    // Reaching MAX_ZOOM always re-clusters regardless of the ratio gate --
-    // this is the boundary where an unresolvable cluster (an exact shared
-    // address, no amount of further zoom can ever separate it) gives way
-    // to a fanned row (see renderMapMarkers), and a small final zoom step
-    // that crosses into MAX_ZOOM can otherwise fall under the 20%
-    // threshold and never trigger that fallback.
-    const justReachedMaxZoom = view.scale >= MAX_ZOOM - 1e-6 && mapLastClusterScale < MAX_ZOOM - 1e-6;
+    // Reaching MAP_MAX_ZOOM always re-clusters regardless of the ratio
+    // gate -- this is the boundary where an unresolvable cluster (an
+    // exact shared address, no amount of further zoom can ever separate
+    // it) gives way to a fanned row (see renderMapMarkers), and a small
+    // final zoom step that crosses into MAP_MAX_ZOOM can otherwise fall
+    // under the 20% threshold and never trigger that fallback.
+    const justReachedMaxZoom = view.scale >= MAP_MAX_ZOOM - 1e-6 && mapLastClusterScale < MAP_MAX_ZOOM - 1e-6;
     if (ratio > 1.2 || ratio < 1 / 1.2 || justReachedMaxZoom) {
       mapLastClusterScale = view.scale;
       renderMapMarkers();

@@ -85,7 +85,20 @@ try {
   if (Math.abs(sizeAfterZoom - sizeAtEntry) > 3) throw new Error(`Expected a marker's rendered size to stay constant across zoom levels (map zooms, people don't) -- was ${sizeAtEntry.toFixed(1)}px, now ${sizeAfterZoom.toFixed(1)}px at scale ${scaleAfterWheel}`);
   console.log(`Confirmed: marker size stayed ~${sizeAtEntry.toFixed(1)}px while view.scale went from ${s.scale.toFixed(2)} to ${scaleAfterWheel.toFixed(2)}.`);
 
-  console.log('\n=== Zooming all the way to MAX_ZOOM resolves every cluster into individuals ===');
+  console.log('\n=== Map View zooms in well past the tree views\' shared 2x ceiling ===');
+  // The whole world only spans MAP_W (1600) px of map-space, so the tree
+  // views' shared MAX_ZOOM (2x) would barely zoom in at all in real terms
+  // -- Map View gets its own, much higher MAP_MAX_ZOOM ceiling (see
+  // setZoom in app.js).
+  for (let i = 0; i < 6; i++) {
+    await page.mouse.wheel(0, -4000);
+    await page.waitForTimeout(80);
+  }
+  const scalePast2x = (await mapState()).scale;
+  if (scalePast2x <= 2) throw new Error(`Expected Map View to zoom in past the tree views' 2x ceiling, got ${scalePast2x}`);
+  console.log(`Confirmed: reached scale ${scalePast2x.toFixed(2)}, well past the 2x ceiling other views are capped at.`);
+
+  console.log('\n=== Zooming all the way to MAP_MAX_ZOOM resolves every cluster into individuals ===');
   for (let i = 0; i < 15; i++) {
     await page.mouse.wheel(0, -4000);
     await page.waitForTimeout(80);
