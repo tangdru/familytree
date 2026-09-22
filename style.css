@@ -389,8 +389,14 @@ body {
 }
 /* Composed with the base hover-lift rather than replacing it, so hovering
    a map card still lifts -- just from its own (smaller) resting scale
-   instead of from scale(1). */
-.map-card:hover { transform: scale(var(--map-zoom-scale, 0.3)) translateY(-3px); }
+   instead of from scale(1). Doubled up as .map-card.person-card:hover (not
+   just .map-card:hover): every .map-card also carries .person-card (see
+   buildCard/renderGlobeFrame), and a bare .person-card:hover below has the
+   SAME specificity (one class + one pseudo-class) but comes later in this
+   file, so without the extra class here it would win the tie and drop the
+   scale entirely -- the exact bug that made a hovered/tapped globe card
+   snap to full, unscaled size and swallow its neighbors. */
+.map-card.person-card:hover { transform: scale(var(--map-zoom-scale, 0.3)) translateY(-3px); }
 
 /* A cluster badge stands in for 2+ people whose current locations are too
    close together to tell apart at the globe's current zoom -- see

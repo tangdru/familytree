@@ -1605,6 +1605,7 @@
     }
     if (previousViewMode === 'globe' && viewMode !== 'globe') {
       stopAllGlobeMotion(); // don't keep spinning a view that's no longer showing
+      globeForceNodesById.clear(); // a fresh re-entry shouldn't spring in from a stale position
     }
     if (viewMode === 'globe' && previousViewMode !== 'globe') {
       // Globe View doesn't use the shared view.x/y/scale canvas transform
@@ -6433,18 +6434,21 @@
   // globeInitialScale * GLOBE_ZOOM_IN_FACTOR -- a cluster whose members
   // are still within GLOBE_CLUSTER_PIXEL_RADIUS once that cap is hit (an
   // exact shared address, which no amount of zoom can ever visually
-  // separate) falls back to packAroundCentroid instead of an unbreakable
-  // cluster -- see renderGlobeFrame.
-  const GLOBE_CLUSTER_ZOOM_FACTOR = 3;
+  // separate) still resolves into individual, decluttered cards via
+  // computeGlobeForceLayout rather than an unbreakable badge -- see
+  // renderGlobeFrame. A single tap jumps in a lot (8x, not a token 3x) so
+  // a cluster of real, merely-nearby people resolves in one or two taps
+  // instead of a long series of small ones.
+  const GLOBE_CLUSTER_ZOOM_FACTOR = 8;
   // globeScale (the projection's own pixel radius) is clamped to this
   // range around globeInitialScale -- a little room to zoom out for
   // context, and a lot of room to zoom in, both for a person-width of
   // separation to resolve down to well past "different neighborhoods of
-  // the same city" (only an exact shared address should still need
-  // packAroundCentroid) and to give someone room to zoom in on an
-  // already-resolved card until its name/location text is comfortably
-  // readable, since card size itself never changes with zoom (see
-  // GLOBE_MARKER_TARGET_SCALE).
+  // the same city" (an exact shared address never resolves by zoom alone
+  // -- computeGlobeForceLayout is what actually keeps those cards apart)
+  // and to give someone room to zoom in on an already-resolved card until
+  // its name/location text is comfortably readable, since card size
+  // itself never changes with zoom (see GLOBE_MARKER_TARGET_SCALE).
   const GLOBE_ZOOM_OUT_FACTOR = 0.4;
   const GLOBE_ZOOM_IN_FACTOR = 150;
   let globeLibsPromise = null;
@@ -6756,57 +6760,78 @@
     return groups;
   }
 
-  // Spreads points that can't be told apart by zooming any further (an
-  // exact, or near-exact, shared address -- see renderGlobeFrame) around
-  // their shared spot instead of overlapping there, the same "spiderfy"
-  // technique map-pin clusters everywhere use once you click into an
-  // unresolvable cluster: a single ring if everyone fits on one without
-  // crowding, otherwise an outward spiral, so however many people share
-  // this spot, none of their cards ever overlap and every one of them
-  // stays as close as possible to the real coordinate rather than sliding
-  // off in one arbitrary direction (a straight row visibly drifts the far
-  // end of the line away from the pin; a ring/spiral keeps everyone
-  // clustered tight around it).
-  function packAroundCentroid(points, spacing) {
-    const n = points.length;
-    const cx = points.reduce((sum, p) => sum + p.x, 0) / n;
-    const cy = points.reduce((sum, p) => sum + p.y, 0) / n;
-    if (n === 1) return [{ x: cx, y: cy }];
-    // For n points evenly spaced on a circle of radius r, the STRAIGHT-LINE
-    // distance between adjacent points is 2r*sin(pi/n) -- not the arc
-    // length between them (2*pi*r/n), which is what naively dividing the
-    // circumference by n would give. Those two only converge for large n;
-    // for a small n (2 or 3 people, the common case here) solving by arc
-    // length badly undershoots the true separation -- for a pair (n=2) it
-    // places them barely more than half of `spacing` apart, since a
-    // diameter is 2/pi (~64%) of a semicircle's arc length, which is
-    // exactly the overlap this replaced fanOutRow's straight line to fix
-    // in the first place. Solving by chord distance instead is exact at
-    // any n.
-    const ringRadius = spacing / (2 * Math.sin(Math.PI / n));
-    // Beyond ~13-14 people a single ring would have to grow so large it
-    // stops reading as "one cluster", so switch to a spiral that winds
-    // outward instead.
-    if (ringRadius <= spacing * 2.2) {
-      const out = [];
-      for (let i = 0; i < n; i++) {
-        const angle = (2 * Math.PI * i) / n - Math.PI / 2; // first card straight up from center
-        out.push({ x: cx + ringRadius * Math.cos(angle), y: cy + ringRadius * Math.sin(angle) });
+  // ---------- Globe force layout (declutters overlapping cards) ----------
+  // Two people whose REAL coordinates are merely close (not identical) can
+  // resolve out of a cluster badge into their own separate groups -- their
+  // projected points are more than GLOBE_CLUSTER_PIXEL_RADIUS apart, so
+  // clusterGlobePoints doesn't merge them -- while their actual card
+  // FOOTPRINTS (wider than that radius, especially once
+  // GLOBE_MARKER_TARGET_SCALE was raised for legibility) still overlap on
+  // screen. A light, persistent force simulation (d3-force, bundled in
+  // d3.min.js) declutters every individually-shown card at once,
+  // regardless of which cluster group it came from: each card is anchored
+  // to its own true projected point by a spring (not a hard lock, so it
+  // can still be nudged aside) while a collision force keeps any two cards
+  // from overlapping. This also fully replaces the old dedicated ring/
+  // spiral arrangement this function used to compute for an exact shared
+  // address -- with every anchor at the identical point, the very same
+  // spring+collision equilibrium settles them into a tidy ring on its own,
+  // so one mechanism now covers both cases.
+  //
+  // Nodes persist across frames (keyed by person id, in globeForceNodesById)
+  // so the simulation carries real position/velocity from one frame to the
+  // next instead of restarting from scratch -- only a few ticks run per
+  // frame, converging smoothly over consecutive frames as the anchors
+  // themselves keep moving with rotation, rather than fully re-solving
+  // (many more ticks, in one frame) 60 times a second.
+  const GLOBE_CARD_COLLIDE_RADIUS = CARD_WIDTH * GLOBE_MARKER_TARGET_SCALE * 0.7;
+  const GLOBE_FORCE_ANCHOR_STRENGTH = 0.2; // how strongly a card springs back toward its true point
+  // Each frame gets a brand-new simulation object (see below) whose own
+  // alpha always starts back at 1 rather than decaying across frames like
+  // a normal one-shot d3-force simulation would -- so what actually
+  // determines how fast an overlap resolves is ticks-per-frame together
+  // with how many frames actually get rendered while it's happening, not
+  // alpha decay. A cluster click's own ~380ms zoom animation only produces
+  // ~23 frames, and nothing else re-renders once it ends until idle
+  // auto-spin kicks back in several seconds later -- so this needs to
+  // fully settle within that one short animation, not finish the job
+  // later. Measured empirically (see the many-people-at-one-exact-point
+  // stress case, the hardest to converge): ticks-per-frame barely matters
+  // once collision iterations are high enough, but forceCollide's own
+  // internal iteration count (not the same as ticking the simulation
+  // itself more) is what actually determines whether it reaches TRUE
+  // non-overlap or asymptotically approaches it and stalls just short --
+  // d3-force's own default of 1 stalls noticeably; 20 reliably reaches
+  // exact separation even for 15+ people sharing one exact coordinate.
+  const GLOBE_FORCE_TICKS_PER_FRAME = 8;
+  const GLOBE_FORCE_COLLIDE_ITERATIONS = 20;
+  let globeForceNodesById = new Map();
+
+  function computeGlobeForceLayout(individuals) {
+    const idsThisFrame = new Set(individuals.map(p => p.id));
+    for (const id of [...globeForceNodesById.keys()]) {
+      if (!idsThisFrame.has(id)) globeForceNodesById.delete(id);
+    }
+    const nodes = individuals.map(p => {
+      let node = globeForceNodesById.get(p.id);
+      if (!node) {
+        node = { x: p.x, y: p.y, vx: 0, vy: 0 }; // a brand-new node starts exactly at its true point
+        globeForceNodesById.set(p.id, node);
       }
-      return out;
-    }
-    const out = [];
-    let angle = 0;
-    let radius = spacing;
-    for (let i = 0; i < n; i++) {
-      out.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-      // Advances along the spiral by roughly `spacing` of arc length at the
-      // CURRENT radius, then grows the radius by the same amount per full
-      // turn -- keeps successive coils spaced apart by ~spacing too.
-      angle += spacing / radius;
-      radius += spacing / (2 * Math.PI);
-    }
-    return out;
+      node.id = p.id;
+      node.targetX = p.x;
+      node.targetY = p.y;
+      return node;
+    });
+    const sim = d3.forceSimulation(nodes)
+      .force('x', d3.forceX(d => d.targetX).strength(GLOBE_FORCE_ANCHOR_STRENGTH))
+      .force('y', d3.forceY(d => d.targetY).strength(GLOBE_FORCE_ANCHOR_STRENGTH))
+      .force('collide', d3.forceCollide(GLOBE_CARD_COLLIDE_RADIUS).iterations(GLOBE_FORCE_COLLIDE_ITERATIONS))
+      .stop(); // ticked manually below -- d3-force's own timer would run outside our render loop
+    for (let i = 0; i < GLOBE_FORCE_TICKS_PER_FRAME; i++) sim.tick();
+    const result = new Map();
+    for (const node of nodes) result.set(node.id, { x: node.x, y: node.y });
+    return result;
   }
 
   // The one real per-frame render: reprojects the land and every visible
@@ -6884,34 +6909,21 @@
 
     const zoomScale = GLOBE_MARKER_TARGET_SCALE;
     const atMaxZoom = globeScale >= globeInitialScale * GLOBE_ZOOM_IN_FACTOR - 1e-6;
-    const cardEls = {};
+    // Collected across EVERY group before placing anything, so the force
+    // layout below declutters overlaps between different cluster groups
+    // too, not just within one -- see computeGlobeForceLayout.
+    const individualsToPlace = [];
+    const badgeSpecs = [];
     for (const group of clusterGlobePoints(visible)) {
       // A cluster still within GLOBE_CLUSTER_PIXEL_RADIUS once fully
       // zoomed in can never be broken apart by zooming any further (most
-      // often an exact shared address) -- show it as individuals, packed
-      // around their shared spot, rather than an unbreakable cluster badge.
+      // often an exact shared address) -- show it as individuals rather
+      // than an unbreakable cluster badge.
       if (group.length === 1 || atMaxZoom) {
-        const rawPoints = group.map(idx => visible[idx].point);
-        const points = group.length > 1 ? packAroundCentroid(rawPoints, CARD_WIDTH * GLOBE_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
-        group.forEach((idx, k) => {
-          const { person, text } = visible[idx];
-          const card = buildCard(person, { subtitle: text });
-          // A plain CSS transform, not smaller layout dimensions, so
-          // left/top still center the card on its point exactly the same
-          // way every other view centers a card on its own anchor:
-          // scaling from the box's own center never shifts where that
-          // center sits.
-          card.classList.add('map-card');
-          card.style.setProperty('--map-zoom-scale', zoomScale);
-          const pt = points[k];
-          card.style.left = `${pt.x - CARD_WIDTH / 2}px`;
-          els.content.appendChild(card);
-          cardEls[person.id] = card;
-          // Two-phase like every other view: set top only after the card
-          // is in the DOM and its real (name-wrap-dependent) height can
-          // be measured.
-          card.style.top = `${pt.y - card.offsetHeight / 2}px`;
-        });
+        for (const idx of group) {
+          const { person, text, point } = visible[idx];
+          individualsToPlace.push({ id: person.id, person, text, x: point.x, y: point.y });
+        }
       } else {
         const cx = group.reduce((sum, idx) => sum + visible[idx].point.x, 0) / group.length;
         const cy = group.reduce((sum, idx) => sum + visible[idx].point.y, 0) / group.length;
@@ -6922,22 +6934,46 @@
         // together, so that edge case can't actually occur in practice.
         const avgLon = group.reduce((sum, idx) => sum + visible[idx].lon, 0) / group.length;
         const avgLat = group.reduce((sum, idx) => sum + visible[idx].lat, 0) / group.length;
-        const badge = document.createElement('div');
-        badge.className = 'map-cluster';
-        badge.textContent = String(group.length);
-        badge.title = group.map(idx => visible[idx].person.name || '(unnamed)').join(', ');
-        badge.style.setProperty('--map-zoom-scale', zoomScale);
-        badge.style.left = `${cx}px`;
-        badge.style.top = `${cy}px`;
-        // Rotates to face the cluster head-on and zooms in
-        // GLOBE_CLUSTER_ZOOM_FACTOR closer, capped at the same ceiling
-        // the pinch/wheel zoom itself respects.
-        badge.addEventListener('click', () => {
-          const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * GLOBE_CLUSTER_ZOOM_FACTOR);
-          animateGlobeTo([-avgLon, -avgLat], targetScale);
-        });
-        els.content.appendChild(badge);
+        badgeSpecs.push({ cx, cy, avgLon, avgLat, count: group.length, names: group.map(idx => visible[idx].person.name || '(unnamed)') });
       }
+    }
+
+    const cardEls = {};
+    const placed = computeGlobeForceLayout(individualsToPlace);
+    for (const { id, person, text } of individualsToPlace) {
+      const card = buildCard(person, { subtitle: text });
+      // A plain CSS transform, not smaller layout dimensions, so left/top
+      // still center the card on its point exactly the same way every
+      // other view centers a card on its own anchor: scaling from the
+      // box's own center never shifts where that center sits.
+      card.classList.add('map-card');
+      card.style.setProperty('--map-zoom-scale', zoomScale);
+      const pt = placed.get(id);
+      card.style.left = `${pt.x - CARD_WIDTH / 2}px`;
+      els.content.appendChild(card);
+      cardEls[id] = card;
+      // Two-phase like every other view: set top only after the card is
+      // in the DOM and its real (name-wrap-dependent) height can be
+      // measured.
+      card.style.top = `${pt.y - card.offsetHeight / 2}px`;
+    }
+
+    for (const { cx, cy, avgLon, avgLat, count, names } of badgeSpecs) {
+      const badge = document.createElement('div');
+      badge.className = 'map-cluster';
+      badge.textContent = String(count);
+      badge.title = names.join(', ');
+      badge.style.setProperty('--map-zoom-scale', zoomScale);
+      badge.style.left = `${cx}px`;
+      badge.style.top = `${cy}px`;
+      // Rotates to face the cluster head-on and zooms in
+      // GLOBE_CLUSTER_ZOOM_FACTOR closer, capped at the same ceiling the
+      // pinch/wheel zoom itself respects.
+      badge.addEventListener('click', () => {
+        const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * GLOBE_CLUSTER_ZOOM_FACTOR);
+        animateGlobeTo([-avgLon, -avgLat], targetScale);
+      });
+      els.content.appendChild(badge);
     }
 
     if (animateFlip) animateLayoutIn(cardEls, oldPositions);
