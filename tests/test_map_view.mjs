@@ -149,6 +149,36 @@ try {
   if (cardCountAgain !== 5) throw new Error(`Expected 5 cards again after switching back to Map View, got ${cardCountAgain}`);
   console.log('Confirmed: switching away and back still works.');
 
+  console.log('\n=== The map fills the viewport\'s height (not shrunk to also fit its width) ===');
+  const fitInfo = await page.evaluate(() => {
+    const m = document.getElementById('treeCanvas').style.transform.match(/scale\(([\d.]+)\)/);
+    const scale = m ? parseFloat(m[1]) : null;
+    return {
+      scale,
+      contentW: document.getElementById('treeContent').offsetWidth,
+      contentH: document.getElementById('treeContent').offsetHeight,
+      viewportW: document.getElementById('treeViewport').clientWidth,
+      viewportH: document.getElementById('treeViewport').clientHeight,
+    };
+  });
+  const renderedH = fitInfo.contentH * fitInfo.scale;
+  const renderedW = fitInfo.contentW * fitInfo.scale;
+  if (Math.abs(renderedH - fitInfo.viewportH) > 60) throw new Error(`Expected the map's rendered height (${renderedH.toFixed(0)}px) to fill the viewport height (${fitInfo.viewportH}px)`);
+  if (renderedW <= fitInfo.viewportW) throw new Error(`Expected the map's rendered width (${renderedW.toFixed(0)}px) to exceed the viewport width (${fitInfo.viewportW}px), requiring pan to see the rest of the world`);
+  console.log(`Confirmed: rendered ${renderedW.toFixed(0)}x${renderedH.toFixed(0)} against a ${fitInfo.viewportW}x${fitInfo.viewportH} viewport -- fills height, wider than the viewport.`);
+
+  console.log('\n=== Dragging pans the map horizontally ===');
+  const beforeDrag = await page.evaluate(() => document.getElementById('treeCanvas').style.transform);
+  const vpBox = await page.locator('#treeViewport').boundingBox();
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vpBox.x + vpBox.width / 2 - 200, vpBox.y + vpBox.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const afterDrag = await page.evaluate(() => document.getElementById('treeCanvas').style.transform);
+  if (afterDrag === beforeDrag) throw new Error('Expected dragging on Map View to pan the canvas, but the transform never changed');
+  console.log('Confirmed: dragging pans the map.');
+
   console.log('\nERRORS:', errors);
   if (errors.length) throw new Error('Unexpected page errors: ' + JSON.stringify(errors));
   console.log('\nALL PASSED');

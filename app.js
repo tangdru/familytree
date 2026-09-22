@@ -1613,6 +1613,13 @@
       // Fit the columns' width only -- see computeFitTransform's own note
       // on why height is deliberately left out here.
       animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'map') {
+      // Fill the screen's height instead of shrinking the whole world
+      // down to also fit its width -- see computeFitTransform's own note
+      // on verticalOnly. The map ends up wider than the viewport; panning
+      // (already free-form on this shared canvas) is how the rest of it
+      // is reached.
+      animateFitToView({ verticalOnly: true });
     } else if (viewMode === 'centric') {
       // renderTree() above already ran renderCentric(), which triggers
       // its own pan/zoom animation (animateCentricZoom) anchored on this
@@ -1654,6 +1661,11 @@
   // columns (a fixed, meaningful count) are what you actually want framed
   // at a glance, while a tall column's card count is open-ended and fine
   // to scroll/pan through rather than shrinking everything to fit it too.
+  // verticalOnly is the mirror image, used by Map View: filling the
+  // screen's height (rather than shrinking the whole world down to fit
+  // its width too) makes cards big enough to read and spreads out
+  // clustered regions, at the cost of the map now being wider than the
+  // viewport -- exactly what panning is for.
   function computeFitTransform(options) {
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
@@ -1662,9 +1674,14 @@
     if (!vw || !vh || !cw || !ch) return null;
     const padding = 24;
     const horizontalOnly = options && options.horizontalOnly;
+    const verticalOnly = options && options.verticalOnly;
     const scaleX = (vw - padding * 2) / cw;
     const scaleY = (vh - padding * 2) / ch;
-    const scale = Math.max(MIN_ZOOM, Math.min(horizontalOnly ? scaleX : Math.min(scaleX, scaleY), 1));
+    let fitScale;
+    if (horizontalOnly) fitScale = scaleX;
+    else if (verticalOnly) fitScale = scaleY;
+    else fitScale = Math.min(scaleX, scaleY);
+    const scale = Math.max(MIN_ZOOM, Math.min(fitScale, 1));
     return {
       scale,
       x: (vw - cw * scale) / 2,
@@ -1720,6 +1737,8 @@
   els.fitViewBtn.addEventListener('click', () => {
     if (viewMode === 'zodiac') {
       animateFitToView({ horizontalOnly: true });
+    } else if (viewMode === 'map') {
+      animateFitToView({ verticalOnly: true });
     } else if (viewMode === 'centric' && prevCentricGrid) {
       // Re-fit around the SAME anchored origin renderCentric() last used
       // -- nothing about the rings changed, just the pan/zoom, so this is
