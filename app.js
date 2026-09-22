@@ -6322,7 +6322,15 @@
         const res = await fetch('countries-110m.json');
         const topo = await res.json();
         mapWorldLand = topojson.feature(topo, topo.objects.land);
-      })();
+      })().catch(err => {
+        // Reset so a later call (the background preload below, or
+        // renderMapView's own on-demand call) gets a fresh attempt instead
+        // of permanently replaying this one failure -- a transient network
+        // blip during the background preload shouldn't mean Map View can
+        // never load for the rest of the session.
+        mapLibsPromise = null;
+        throw err;
+      });
     }
     return mapLibsPromise;
   }
@@ -6739,6 +6747,18 @@
 
     renderTree();
     fitToView();
+
+    // Preload Map View's own vendored libraries (see ensureMapLibs) in the
+    // background so the first time someone actually switches to that view
+    // doesn't have to wait on ~450KB of JS/JSON -- deferred via
+    // requestIdleCallback (falling back to a plain timeout on Safari,
+    // which doesn't implement it) so this never competes with the page's
+    // own initial paint/interactivity for bandwidth or CPU. Silently
+    // ignores failure (e.g. offline): renderMapView's own on-demand call
+    // still tries again the moment someone actually opens that view.
+    const preloadMapLibs = () => ensureMapLibs().catch(() => {});
+    if (window.requestIdleCallback) requestIdleCallback(preloadMapLibs);
+    else setTimeout(preloadMapLibs, 2000);
 
     // navigator.webdriver is true for automation-controlled browsers
     // (Playwright, Selenium, etc.) and false for a real visitor -- skips
