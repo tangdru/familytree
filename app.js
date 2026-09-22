@@ -6511,12 +6511,29 @@
   function seedSampleData() {
     const gp1 = uid(), gp2 = uid(), parent1 = uid(), parent2 = uid(), child1 = uid(), child2 = uid();
     data.people = {
-      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2] },
-      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', photo: '', notes: '', parents: [], spouses: [gp1] },
-      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2] },
-      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', photo: '', notes: '', parents: [], spouses: [parent1] },
-      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
-      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [] },
+      // Geocoded birthLocation/locations below double as Migration Map's
+      // own demo data -- a believable spread (a transatlantic move each
+      // for the grandparents, domestic moves for their grandchildren, and
+      // Michael staying put in Chicago his whole life, so the map shows
+      // both arc trails and a plain single-stop marker) rather than
+      // leaving it to look empty the first time someone opens that view.
+      [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2],
+        birthLocation: { text: 'Dublin, Ireland', lat: 53.3498, lon: -6.2603, startDate: '1938-03-12', endDate: '1958-06-01' },
+        locations: [{ text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1958-06-01', endDate: '2015-11-02' }] },
+      [gp2]: { id: gp2, name: 'Walter Hart', birthDate: '1935-07-04', deathDate: '2012-01-20', photo: '', notes: '', parents: [], spouses: [gp1],
+        birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278, startDate: '1935-07-04', endDate: '1958-06-01' },
+        locations: [{ text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1958-06-01', endDate: '2012-01-20' }] },
+      [parent1]: { id: parent1, name: 'Susan Hart', birthDate: '1962-05-18', deathDate: '', photo: '', notes: '', parents: [gp1, gp2], spouses: [parent2],
+        birthLocation: { text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1962-05-18', endDate: '1985-09-01' },
+        locations: [{ text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1985-09-01', endDate: null }] },
+      [parent2]: { id: parent2, name: 'Michael Doe', birthDate: '1960-09-09', deathDate: '', photo: '', notes: '', parents: [], spouses: [parent1],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1960-09-09', endDate: null } },
+      [child1]: { id: child1, name: 'Jane Doe', birthDate: '1990-02-14', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1990-02-14', endDate: '2015-08-01' },
+        locations: [{ text: 'Seattle, WA', lat: 47.6062, lon: -122.3321, startDate: '2015-08-01', endDate: null }] },
+      [child2]: { id: child2, name: 'Tom Doe', birthDate: '1993-08-30', deathDate: '', photo: '', notes: '', parents: [parent1, parent2], spouses: [],
+        birthLocation: { text: 'Chicago, IL', lat: 41.8781, lon: -87.6298, startDate: '1993-08-30', endDate: '2018-03-01' },
+        locations: [{ text: 'San Francisco, CA', lat: 37.7749, lon: -122.4194, startDate: '2018-03-01', endDate: null }] },
     };
   }
 
