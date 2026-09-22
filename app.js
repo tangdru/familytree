@@ -1603,6 +1603,9 @@
     if (previousViewMode === 'chronological' && viewMode === 'traditional') {
       playChronoDotAssemble(false);
     }
+    if (previousViewMode === 'globe' && viewMode !== 'globe') {
+      stopGlobeInertia(); // don't keep spinning a view that's no longer showing
+    }
     if (viewMode === 'globe' && previousViewMode !== 'globe') {
       // Globe View doesn't use the shared view.x/y/scale canvas transform
       // at all -- its own projection outputs viewport-space coordinates
@@ -1859,16 +1862,23 @@
   // than keeping two entirely separate drag-tracking systems side by side.
   let isPanning = false, panStart = null;
   els.viewport.addEventListener('mousedown', (e) => {
+    // Grabbing the globe anywhere in the viewport -- even a mousedown that
+    // lands on a card, since a card's own click still needs to fire below
+    // -- stops any free-spin in progress (see startGlobeInertia), same as
+    // catching a real spinning globe with your hand.
+    if (viewMode === 'globe') stopGlobeInertia();
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) return;
     isPanning = true;
     panStart = viewMode === 'globe'
       ? { x: e.clientX, y: e.clientY, rotation: globeRotation.slice() }
       : { x: e.clientX - view.x, y: e.clientY - view.y };
+    if (viewMode === 'globe') resetGlobeDragVelocity();
     els.viewport.classList.add('grabbing');
   });
   window.addEventListener('mousemove', (e) => {
     if (!isPanning) return;
     if (viewMode === 'globe') {
+      trackGlobeDragVelocity(e.clientX, e.clientY);
       rotateGlobeBy(e.clientX - panStart.x, e.clientY - panStart.y, panStart.rotation);
       return;
     }
@@ -1877,6 +1887,7 @@
     applyTransform();
   });
   window.addEventListener('mouseup', () => {
+    if (viewMode === 'globe' && isPanning) startGlobeInertia();
     isPanning = false;
     els.viewport.classList.remove('grabbing');
   });
@@ -1896,12 +1907,14 @@
   let pinchStartScale = 1;
 
   els.viewport.addEventListener('touchstart', (e) => {
+    if (viewMode === 'globe') stopGlobeInertia();
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
       touchPanStart = viewMode === 'globe'
         ? { x: e.touches[0].clientX, y: e.touches[0].clientY, rotation: globeRotation.slice() }
         : { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+      if (viewMode === 'globe') resetGlobeDragVelocity();
     } else if (e.touches.length === 2) {
       touchMode = 'pinch';
       pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
@@ -1914,6 +1927,7 @@
     e.preventDefault();
     if (touchMode === 'pan' && e.touches.length === 1) {
       if (viewMode === 'globe') {
+        trackGlobeDragVelocity(e.touches[0].clientX, e.touches[0].clientY);
         rotateGlobeBy(e.touches[0].clientX - touchPanStart.x, e.touches[0].clientY - touchPanStart.y, touchPanStart.rotation);
         return;
       }
@@ -1937,7 +1951,9 @@
       touchPanStart = viewMode === 'globe'
         ? { x: e.touches[0].clientX, y: e.touches[0].clientY, rotation: globeRotation.slice() }
         : { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
+      if (viewMode === 'globe') resetGlobeDragVelocity();
     } else {
+      if (viewMode === 'globe' && touchMode === 'pan') startGlobeInertia();
       touchMode = null;
     }
   });
@@ -6434,6 +6450,77 @@
   // renderTree(), consumed (and cleared) the moment the first frame is
   // actually drawn.
   let globeEntryFadePending = false;
+  // Free-spin after releasing a drag (see startGlobeInertia below), same
+  // idea as flicking a real desktop globe: the drag's own recent speed
+  // carries the rotation onward, decaying under simulated friction until
+  // it settles, rather than stopping dead the instant the pointer lifts.
+  const GLOBE_INERTIA_FRICTION_PER_SEC = 0.05; // fraction of speed retained after a full second
+  const GLOBE_INERTIA_MIN_SPEED = 0.02; // px/ms -- below this, just stop rather than crawl forever
+  let globeDragLastT = 0, globeDragLastX = 0, globeDragLastY = 0;
+  let globeDragVX = 0, globeDragVY = 0; // px/ms, the most recent drag speed
+  let globeInertiaFrame = null;
+
+  // Called on every mousedown/touchstart that starts a new globe drag, so
+  // the first movement of a fresh gesture doesn't compute a bogus "instant
+  // velocity" against a stale timestamp/position left over from whatever
+  // drag (or inertia spin) came before it.
+  function resetGlobeDragVelocity() {
+    globeDragLastT = 0;
+    globeDragVX = 0;
+    globeDragVY = 0;
+  }
+
+  // Called on every globe mousemove/touchmove while dragging -- tracks
+  // the instantaneous speed between this move and the last one, which is
+  // all startGlobeInertia needs once the pointer lifts (the drag's overall
+  // average speed would feel muted next to how fast the gesture actually
+  // ended).
+  function trackGlobeDragVelocity(x, y) {
+    const now = performance.now();
+    if (globeDragLastT) {
+      const dt = now - globeDragLastT;
+      if (dt > 0) {
+        globeDragVX = (x - globeDragLastX) / dt;
+        globeDragVY = (y - globeDragLastY) / dt;
+      }
+    }
+    globeDragLastT = now;
+    globeDragLastX = x;
+    globeDragLastY = y;
+  }
+
+  function stopGlobeInertia() {
+    if (globeInertiaFrame !== null) {
+      cancelAnimationFrame(globeInertiaFrame);
+      globeInertiaFrame = null;
+    }
+  }
+
+  // Kicks off the free-spin using whatever speed trackGlobeDragVelocity
+  // last measured. Reuses rotateGlobeBy exactly as a live drag would --
+  // each frame's baseRotation is the CURRENT globeRotation (not the
+  // gesture's original start), so this is a chain of small incremental
+  // rotations, not one continuous formula -- and decays that speed by
+  // GLOBE_INERTIA_FRICTION_PER_SEC every second (time-based, not a flat
+  // per-frame multiplier, so it decays at the same real-world rate
+  // regardless of the display's actual frame rate).
+  function startGlobeInertia() {
+    let vx = globeDragVX, vy = globeDragVY;
+    if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) return; // a slow drag or a tap -- no spin
+    let lastTime = performance.now();
+    function step(now) {
+      if (viewMode !== 'globe') { globeInertiaFrame = null; return; }
+      const dt = now - lastTime;
+      lastTime = now;
+      rotateGlobeBy(vx * dt, vy * dt, globeRotation);
+      const decay = Math.pow(GLOBE_INERTIA_FRICTION_PER_SEC, dt / 1000);
+      vx *= decay;
+      vy *= decay;
+      if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) { globeInertiaFrame = null; return; }
+      globeInertiaFrame = requestAnimationFrame(step);
+    }
+    globeInertiaFrame = requestAnimationFrame(step);
+  }
 
   function loadGlobeScript(src) {
     return new Promise((resolve, reject) => {
@@ -6697,6 +6784,7 @@
   // hemisphere, so the interpolated path never has to cross the far side
   // of the globe.
   function animateGlobeTo(targetRotation, targetScale) {
+    stopGlobeInertia(); // a scripted rotation always wins over a leftover free-spin
     const startRotation = globeRotation.slice();
     const startScale = globeScale;
     const startTime = performance.now();

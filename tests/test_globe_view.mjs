@@ -2,16 +2,19 @@ import { chromium } from 'playwright-core';
 
 // Globe View plots each person's CURRENT location only (locations[0], or
 // birthLocation as a fallback -- see currentLocationCoordsOf in app.js) on a
-// spinning orthographic globe (renderGlobeFrame). Markers/clusters render at
-// a constant on-screen size regardless of the globe's own zoom
-// (GLOBE_MARKER_TARGET_SCALE, counter-scaled against globeScale), and people
-// too close together to tell apart at the current zoom collapse into a
-// single numbered cluster badge (clusterGlobePoints) instead of overlapping
-// cards. Clicking a cluster rotates+zooms in on it; a cluster that's STILL
-// not resolvable once fully zoomed in (an exact shared address, which no
-// amount of zoom can ever separate) falls back to a fanned row instead of
-// staying an unbreakable cluster forever. A person on the far side of the
-// globe from the current rotation isn't rendered at all.
+// spinning orthographic globe (renderGlobeFrame). Markers/clusters always
+// render at the same flat CSS scale (GLOBE_MARKER_TARGET_SCALE) regardless
+// of the globe's own zoom, and people too close together to tell apart at
+// the current zoom collapse into a single numbered cluster badge
+// (clusterGlobePoints) instead of overlapping cards. Clicking a cluster
+// rotates+zooms in on it; a cluster that's STILL not resolvable once fully
+// zoomed in (an exact shared address, which no amount of zoom can ever
+// separate) falls back to a fanned row instead of staying an unbreakable
+// cluster forever. A person on the far side of the globe from the current
+// rotation isn't rendered at all. Releasing a drag carries the rotation on
+// under inertia (startGlobeInertia), decaying under simulated friction
+// until it settles, rather than stopping dead the instant the pointer
+// lifts; grabbing the globe again cancels the spin immediately.
 const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4';
 const people = {
   // Sydney sits on the far side of the globe from the default rotation
@@ -133,6 +136,60 @@ try {
   const moved = Math.hypot(clusterAfter.left - clusterBefore.left, clusterAfter.top - clusterBefore.top);
   if (moved < 20) throw new Error(`Expected dragging to noticeably rotate the globe and move the cluster's screen position, moved only ${moved.toFixed(1)}px`);
   console.log(`Confirmed: dragging rotated the globe, moving the cluster ${moved.toFixed(1)}px on screen.`);
+
+  console.log('\n=== Releasing a fast drag keeps the globe spinning under inertia, then settles ===');
+  await page.click('#fitViewBtn');
+  await page.waitForTimeout(600);
+  const posOfCluster = () => page.evaluate(() => {
+    const el = document.querySelector('.map-cluster');
+    return el ? { left: parseFloat(el.style.left), top: parseFloat(el.style.top) } : null;
+  });
+  const beforeFlick = await posOfCluster();
+  // A fast flick (a big move in few steps, i.e. a short elapsed time) --
+  // trackGlobeDragVelocity measures speed between the last two move events,
+  // so what matters is how fast the FINAL movement was, not the gesture's
+  // overall average.
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vpBox.x + vpBox.width / 2 - 300, vpBox.y + vpBox.height / 2, { steps: 3 });
+  await page.mouse.up();
+  const rightAfterRelease = await posOfCluster();
+  await page.waitForTimeout(150);
+  const shortlyAfter = await posOfCluster();
+  if (!rightAfterRelease || !shortlyAfter) throw new Error('Expected the cluster to still be present through the flick');
+  const driftedAfterRelease = Math.hypot(shortlyAfter.left - rightAfterRelease.left, shortlyAfter.top - rightAfterRelease.top);
+  if (driftedAfterRelease < 5) throw new Error(`Expected the globe to keep spinning under inertia right after releasing a fast flick, but it barely moved (${driftedAfterRelease.toFixed(1)}px) in the 150ms after release`);
+  console.log(`Confirmed: the globe kept spinning ${driftedAfterRelease.toFixed(1)}px in the 150ms right after releasing a fast flick.`);
+  await page.waitForTimeout(2500); // friction should have long since brought it to a stop
+  const settledA = await posOfCluster();
+  await page.waitForTimeout(300);
+  const settledB = await posOfCluster();
+  if (!settledA || !settledB) throw new Error('Expected the cluster to still be present once the spin settles');
+  const stillDrifting = Math.hypot(settledB.left - settledA.left, settledB.top - settledA.top);
+  if (stillDrifting > 2) throw new Error(`Expected the inertia spin to have settled to a stop after 2.5s, but it's still drifting ${stillDrifting.toFixed(1)}px per 300ms`);
+  console.log('Confirmed: the free-spin decays under friction and comes to a stop rather than spinning forever.');
+  const totalDrift = Math.hypot(settledA.left - beforeFlick.left, settledA.top - beforeFlick.top);
+  if (totalDrift < 40) throw new Error(`Expected the flick's total rotation (drag + inertia) to clearly exceed a plain drag's own movement, got only ${totalDrift.toFixed(1)}px total`);
+
+  console.log('\n=== Grabbing the globe again stops an in-progress free-spin immediately ===');
+  await page.click('#fitViewBtn');
+  await page.waitForTimeout(600);
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vpBox.x + vpBox.width / 2 - 300, vpBox.y + vpBox.height / 2, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(50); // let inertia actually pick up before grabbing it again
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(50);
+  const grabbed = await posOfCluster();
+  await page.waitForTimeout(200);
+  const stillGrabbed = await posOfCluster();
+  await page.mouse.up();
+  if (!grabbed || !stillGrabbed) throw new Error('Expected the cluster to still be present after re-grabbing mid-spin');
+  const driftedWhileHeld = Math.hypot(stillGrabbed.left - grabbed.left, stillGrabbed.top - grabbed.top);
+  if (driftedWhileHeld > 3) throw new Error(`Expected grabbing the globe to immediately cancel its free-spin, but it kept drifting ${driftedWhileHeld.toFixed(1)}px while held (not dragged)`);
+  console.log('Confirmed: grabbing the globe mid-spin stops the free-spin immediately.');
 
   console.log('\n=== Clicking a cluster rotates+zooms in on it, eventually resolving it into individuals ===');
   await page.click('#fitViewBtn');
