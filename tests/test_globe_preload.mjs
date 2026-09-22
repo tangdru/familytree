@@ -1,11 +1,13 @@
 import { chromium } from 'playwright-core';
 
-// Globe View's vendored libraries (d3, topojson-client, countries-110m.json
+// Globe View's vendored libraries (d3, topojson-client, countries-50m.json
 // -- see ensureGlobeLibs in app.js) are preloaded in the background right
 // after the initial render, via requestIdleCallback, so the first time
-// someone actually opens Globe View doesn't have to wait on ~400KB of
-// JS/JSON. This test never touches #viewModeSelect at all -- it's checking
-// that the preload fires purely from a normal page load.
+// someone actually opens Globe View doesn't have to wait on ~1MB of JS/JSON
+// (countries-50m.json alone is ~750KB -- the 1:50m world-atlas resolution
+// tier, crisper than 110m without the 10m tier's much bigger path data).
+// This test never touches #viewModeSelect at all -- it's checking that the
+// preload fires purely from a normal page load.
 const p1 = 'p1';
 const people = {
   // New York sits well within the default rotation's front-facing
@@ -25,7 +27,7 @@ try {
   const globeLibRequests = [];
   page.on('request', (r) => {
     const u = r.url();
-    if (/\/(d3\.min\.js|topojson-client\.min\.js|countries-110m\.json)(\?|$)/.test(u)) {
+    if (/\/(d3\.min\.js|topojson-client\.min\.js|countries-50m\.json)(\?|$)/.test(u)) {
       globeLibRequests.push(u);
     }
   });
@@ -39,7 +41,7 @@ try {
     () => typeof window.d3 !== 'undefined' && typeof window.d3.geoOrthographic === 'function' && typeof window.topojson !== 'undefined',
     { timeout: 5000 },
   );
-  const expectedFiles = ['d3.min.js', 'topojson-client.min.js', 'countries-110m.json'];
+  const expectedFiles = ['d3.min.js', 'topojson-client.min.js', 'countries-50m.json'];
   for (const file of expectedFiles) {
     if (!globeLibRequests.some(u => u.includes(file))) throw new Error(`Expected ${file} to have been requested during background preload, but it wasn't`);
   }
@@ -50,7 +52,7 @@ try {
   await page.selectOption('#viewModeSelect', 'globe');
   await page.waitForFunction(() => document.querySelectorAll('#treeContent .map-card').length > 0, { timeout: 2000 });
   const elapsed = Date.now() - start;
-  // A cold (non-preloaded) load of these ~400KB of vendored files plus a
+  // A cold (non-preloaded) load of these ~1MB of vendored files plus a
   // country-topology parse reliably takes several hundred ms+ on top of
   // the render itself -- a generous 800ms ceiling still clearly
   // distinguishes "libs were already warm" from "loading from scratch".
