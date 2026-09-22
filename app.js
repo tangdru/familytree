@@ -441,8 +441,6 @@
     chronoRulerInner: document.getElementById('chronoRulerInner'),
     fitViewBtn: document.getElementById('fitViewBtn'),
     centricMetricToggle: document.getElementById('centricMetricToggle'),
-    migrationModeToggle: document.getElementById('migrationModeToggle'),
-    migrationDynamicPlaceholder: document.getElementById('migrationDynamicPlaceholder'),
     searchInput: document.getElementById('searchInput'),
     searchWrap: document.getElementById('searchWrap'),
     searchToggleBtn: document.getElementById('searchToggleBtn'),
@@ -1481,7 +1479,7 @@
   // pinch would ever be allowed to.
   const MAX_ZOOM = 2;
   const view = { x: 40, y: 20, scale: 1 };
-  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'migration'
+  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'map'
 
   // Centric view's own state: which person is at the center, and which
   // proximity metric currently decides ring placement -- see
@@ -1502,15 +1500,6 @@
   // same render used (chronoYToPixel needs it to place a given year).
   let chronoRulerLabels = [];
   let chronoMinYear = 0;
-
-  // Migration Map's own state -- which person's path is highlighted (null
-  // = everyone shown, dimmed equally) and Static vs Dynamic mode, same
-  // persists-across-renders treatment as Centric's centricCenterId/
-  // centricMetric above. Dynamic (timeline scrubbing) isn't built yet --
-  // migrationDynamicMode just swaps in an explanatory placeholder for now,
-  // see renderMigrationMap.
-  let migrationFocusId = null;
-  let migrationDynamicMode = false;
 
   // Below this vertical gap (px) between two labels, the later one starts
   // reading as overlapping text rather than two distinct ticks -- so one
@@ -1586,8 +1575,6 @@
     // in style.css) rather than the hidden attribute, which can't animate.
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
-    els.migrationModeToggle.classList.toggle('visible', viewMode === 'migration');
-    if (viewMode !== 'migration') els.migrationDynamicPlaceholder.hidden = true;
     if (previousViewMode === 'centric' && viewMode !== 'centric' && prevCentricGrid) {
       // Play the collapse over whatever renderTree() is about to build
       // underneath, rather than just letting the grid vanish the instant
@@ -1751,14 +1738,6 @@
     els.centricMetricToggle.querySelectorAll('.centric-metric-btn').forEach(b => b.classList.toggle('active', b === btn));
     // Switching metric reshuffles who's in which ring entirely -- renderTree()
     // (via renderCentric()) reframes itself every time, same as recentering.
-    renderTree();
-  });
-
-  els.migrationModeToggle.addEventListener('click', (e) => {
-    const btn = e.target.closest('.centric-metric-btn');
-    if (!btn || btn.classList.contains('active')) return;
-    migrationDynamicMode = btn.dataset.mode === 'dynamic';
-    els.migrationModeToggle.querySelectorAll('.centric-metric-btn').forEach(b => b.classList.toggle('active', b === btn));
     renderTree();
   });
 
@@ -2769,39 +2748,24 @@
     });
   }
 
-  // A person's geocoded location history, oldest first, for Migration Map
-  // (see renderMigrationMap) -- birthLocation plus every locations[] entry
-  // that actually has coordinates (an entry saved before the location
-  // autocomplete existed, or a manually-typed one, has none and can't be
-  // placed on the map, so it's skipped rather than guessed at). Sorted by
-  // startDate/endDate where a stop has one; a stop with neither sorts as
-  // if it were "now" (locations[] has no reliable chronological field of
-  // its own -- only its order, and index 0 means "current", not "oldest"),
-  // which keeps undated stops from being mistaken for early history.
-  function migrationStopsFor(person) {
-    if (!person) return [];
-    const stops = [];
+  // A person's current-location coordinates for Map View (see
+  // renderMapView) -- locations[0] (the app's own "current" convention,
+  // see locationEntriesOf) if it has coordinates, else birthLocation as a
+  // fallback for someone with no locations[] entries at all. Returns null
+  // (skipped on the map) when neither has coordinates -- an entry saved
+  // before the location autocomplete existed, or a manually-typed one,
+  // can't be placed on the map.
+  function currentLocationCoordsOf(person) {
+    if (!person) return null;
+    const current = locationEntriesOf(person)[0];
+    if (current && Number.isFinite(current.lat) && Number.isFinite(current.lon)) {
+      return { lat: current.lat, lon: current.lon, text: current.text };
+    }
     const bl = person.birthLocation;
     if (bl && typeof bl === 'object' && Number.isFinite(bl.lat) && Number.isFinite(bl.lon)) {
-      const birthYear = effectiveBirthYear(person);
-      stops.push({
-        lat: bl.lat,
-        lon: bl.lon,
-        text: shortenLocationText(bl.text || ''),
-        sortKey: bl.startDate || bl.endDate || (birthYear ? `${birthYear}-01-01` : ''),
-      });
+      return { lat: bl.lat, lon: bl.lon, text: shortenLocationText(bl.text || '') };
     }
-    for (const entry of locationEntriesOf(person)) {
-      if (!Number.isFinite(entry.lat) || !Number.isFinite(entry.lon)) continue;
-      stops.push({
-        lat: entry.lat,
-        lon: entry.lon,
-        text: entry.text,
-        sortKey: entry.startDate || entry.endDate || '9999-99-99',
-      });
-    }
-    stops.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-    return stops;
+    return null;
   }
 
   // A person's contact entries (phone/email, in whatever order they were
@@ -4593,7 +4557,7 @@
     if (viewMode === 'chronological') renderChronological();
     else if (viewMode === 'zodiac') renderZodiac();
     else if (viewMode === 'centric') renderCentric();
-    else if (viewMode === 'migration') renderMigrationMap();
+    else if (viewMode === 'map') renderMapView();
     else renderTraditional();
   }
 
@@ -4784,11 +4748,12 @@
         // touching the user's own pan/zoom.
         renderTree();
       } else {
-        // Zodiac/Centric cards are shown as individuals, regrouped by sign
-        // or proximity rather than by relationship -- opening straight
-        // into a spouse-paired Couple View would cut against that, so
-        // force the single Person View for just the clicked card instead.
-        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric';
+        // Zodiac/Centric/Map cards are shown as individuals, regrouped by
+        // sign, proximity, or location rather than by relationship --
+        // opening straight into a spouse-paired Couple View would cut
+        // against that, so force the single Person View for just the
+        // clicked card instead.
+        const forceSingle = viewMode === 'zodiac' || viewMode === 'centric' || viewMode === 'map';
         openViewModal(person.id, { forceSingle });
       }
     });
@@ -6311,34 +6276,31 @@
     });
   }
 
-  // ---------- Migration Map ----------
-  // A Robinson-projection world map plotting each person's geocoded
-  // location history (birthLocation + locations[], see migrationStopsFor)
-  // as an arc trail -- drawn straight into the same #linesSvg/#treeContent
-  // pair every other view mode uses, so it gets the app's existing pan/
-  // zoom and fit-to-view for free instead of needing its own.
+  // ---------- Map View ----------
+  // Plots each person's CURRENT location (no history, no migration -- see
+  // currentLocationCoordsOf) on a Robinson-projection world map. Cards are
+  // real buildCard() person cards, positioned by projected lat/lon instead
+  // of tree/ring math, and carried in and out by the exact same
+  // captureCardPositions()/animateLayoutIn() FLIP transition every other
+  // view uses -- no separate marker element, no separate click handling,
+  // no separate move animation to maintain. Land is drawn as backdrop
+  // straight into the shared #linesSvg, same as Chrono's gridlines or
+  // Centric's ring circles are backdrop drawn into that same SVG.
   //
   // d3, d3-geo-projection (for geoRobinson) and topojson-client, plus
   // world-atlas's countries-110m.json, are vendored locally rather than
   // loaded from a CDN -- same reasoning as driver.iife.js (see its own
-  // comment in index.html): a map view has no graceful degradation
-  // without them, unlike e.g. libphonenumber-js. Unlike driver.iife.js
-  // though, these are ~450KB combined and most sessions never open this
-  // view, so they're only injected the first time someone actually
-  // switches to Migration Map -- see ensureMigrationLibs.
+  // comment in index.html): this view has no graceful degradation without
+  // them, unlike e.g. libphonenumber-js. They're ~450KB combined and most
+  // sessions never open this view, so they're only injected the first
+  // time someone actually switches to Map View -- see ensureMapLibs.
 
-  const MIGRATION_MAP_W = 1600;
-  const MIGRATION_MAP_H = 800;
-  // Matches .migration-marker's own width/height in style.css -- used to
-  // detect when two people's current-location markers would overlap (see
-  // resolveMigrationMarkerOverlaps) and to space fanned-out markers apart
-  // by at least this much plus a small gap.
-  const MIGRATION_MARKER_SIZE = 30;
-  const MIGRATION_MARKER_GAP = 4;
-  let migrationLibsPromise = null;
-  let migrationWorldLand = null; // GeoJSON, set once loadMigrationLibs resolves
+  const MAP_W = 1600;
+  const MAP_H = 800;
+  let mapLibsPromise = null;
+  let mapWorldLand = null; // GeoJSON, set once ensureMapLibs resolves
 
-  function loadMigrationScript(src) {
+  function loadMapScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
@@ -6348,28 +6310,30 @@
     });
   }
 
-  function ensureMigrationLibs() {
-    if (!migrationLibsPromise) {
+  function ensureMapLibs() {
+    if (!mapLibsPromise) {
       // d3-geo-projection extends the global d3 object it expects to
       // already exist (adding geoRobinson), so it must load strictly
       // after d3.min.js, not just alongside it.
-      migrationLibsPromise = (async () => {
-        await loadMigrationScript('d3.min.js');
-        await loadMigrationScript('d3-geo-projection.min.js');
-        await loadMigrationScript('topojson-client.min.js');
+      mapLibsPromise = (async () => {
+        await loadMapScript('d3.min.js');
+        await loadMapScript('d3-geo-projection.min.js');
+        await loadMapScript('topojson-client.min.js');
         const res = await fetch('countries-110m.json');
         const topo = await res.json();
-        migrationWorldLand = topojson.feature(topo, topo.objects.land);
+        mapWorldLand = topojson.feature(topo, topo.objects.land);
       })();
     }
-    return migrationLibsPromise;
+    return mapLibsPromise;
   }
 
-  // Quadratic-bezier control point that always bows the arc upward on
-  // screen (toward smaller Y) regardless of which way the person actually
-  // traveled -- with many overlapping paths on one map, an arc that
-  // sometimes bows up and sometimes down reads as noise rather than a
-  // consistent "arc = movement" visual language.
+  // Reserved for a future migration-trails feature (tracing a person's
+  // full location history over time as an arc, not just their current
+  // dot) -- not called anywhere yet. Quadratic-bezier control point that
+  // always bows the arc upward on screen (toward smaller Y) regardless of
+  // which way the person actually traveled, so many overlapping paths on
+  // one map read as a consistent "arc = movement" visual language rather
+  // than noise.
   function migrationArcPath(a, b, curvature = 0.16) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = Math.hypot(dx, dy) || 1;
@@ -6382,184 +6346,118 @@
 
   // Two or more people can share the exact same (or a nearly identical)
   // current location -- a married couple, a whole household -- which
-  // would otherwise stack their circular markers exactly on top of each
-  // other, making every marker but the topmost unclickable. Given each
-  // person's already-projected stop points, this mutates each affected
-  // person's FINAL point in place, fanning members of the same cluster
-  // out evenly around their shared spot on a small ring sized so the
-  // markers never touch. Arcs are drawn from these same mutated points
-  // (see renderMigrationMap), so a focused person's path still visibly
-  // ends exactly on their (now offset) marker.
-  function resolveMigrationMarkerOverlaps(projectedPeople) {
+  // would otherwise stack their full-size cards exactly on top of each
+  // other. Given each person's already-projected point, this mutates
+  // each affected person's point in place, spreading members of the same
+  // cluster into a horizontal row centered on their shared spot -- the
+  // same CARD_WIDTH/SPOUSE_GAP rhythm the tree views already space cards
+  // by, rather than a bespoke spacing constant just for this view.
+  // Clusters on real lat/lon proximity, NOT projected screen distance --
+  // a fixed pixel threshold would also catch two genuinely different
+  // cities that just happen to land close together once the whole world
+  // is compressed onto a 1600px-wide map (e.g. Boston and Chicago, ~1700km
+  // apart, project only ~68px apart at this scale), wrongly treating them
+  // as one shared location. A tight degree threshold instead only matches
+  // an actual shared address/city -- the app's own location autocomplete
+  // returns the same coordinates for the same picked city -- and stays
+  // correct regardless of the map's current zoom or projection.
+  const SAME_LOCATION_DEGREES = 0.05;
+
+  function resolveMapCardOverlaps(peopleWithPoints) {
     const used = new Set();
-    const minCenterDist = MIGRATION_MARKER_SIZE + MIGRATION_MARKER_GAP;
-    for (let i = 0; i < projectedPeople.length; i++) {
+    const step = CARD_WIDTH + SPOUSE_GAP;
+    for (let i = 0; i < peopleWithPoints.length; i++) {
       if (used.has(i)) continue;
       const group = [i];
       used.add(i);
-      const anchor = projectedPeople[i].points[projectedPeople[i].points.length - 1];
-      for (let j = i + 1; j < projectedPeople.length; j++) {
+      const anchor = peopleWithPoints[i];
+      for (let j = i + 1; j < peopleWithPoints.length; j++) {
         if (used.has(j)) continue;
-        const other = projectedPeople[j].points[projectedPeople[j].points.length - 1];
-        if (Math.hypot(anchor.x - other.x, anchor.y - other.y) < MIGRATION_MARKER_SIZE) {
+        const other = peopleWithPoints[j];
+        if (Math.hypot(anchor.lat - other.lat, anchor.lon - other.lon) < SAME_LOCATION_DEGREES) {
           group.push(j);
           used.add(j);
         }
       }
       if (group.length < 2) continue;
       const n = group.length;
-      const cx = group.reduce((sum, idx) => sum + projectedPeople[idx].points[projectedPeople[idx].points.length - 1].x, 0) / n;
-      const cy = group.reduce((sum, idx) => sum + projectedPeople[idx].points[projectedPeople[idx].points.length - 1].y, 0) / n;
-      // Evenly spaced on a ring whose radius is exactly big enough that
-      // adjacent points are minCenterDist apart -- the chord length for N
-      // points spaced 2*pi/N apart on a circle of radius r is
-      // 2*r*sin(pi/N), solved here for r.
-      const radius = minCenterDist / (2 * Math.sin(Math.PI / n));
+      const cx = group.reduce((sum, idx) => sum + peopleWithPoints[idx].point.x, 0) / n;
+      const startX = cx - ((n - 1) * step) / 2;
       group.forEach((idx, k) => {
-        const theta = -Math.PI / 2 + (2 * Math.PI * k) / n;
-        const pts = projectedPeople[idx].points;
-        pts[pts.length - 1] = { x: cx + radius * Math.cos(theta), y: cy + radius * Math.sin(theta) };
+        peopleWithPoints[idx].point = { x: startX + k * step, y: peopleWithPoints[idx].point.y };
       });
     }
   }
 
-  function renderMigrationMap() {
+  function renderMapView() {
+    const oldPositions = captureCardPositions();
     els.content.innerHTML = '';
     els.svg.innerHTML = '';
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
-    els.migrationDynamicPlaceholder.hidden = !(migrationDynamicMode && hasPeople);
     if (!hasPeople) return;
 
     // A fixed-size world canvas (rather than sizing to the viewport) so
     // the Robinson projection's own aspect ratio is never stretched --
     // computeFitTransform() then scales/pans this into view exactly like
     // every other view's own content size.
-    els.content.style.width = `${MIGRATION_MAP_W}px`;
-    els.content.style.height = `${MIGRATION_MAP_H}px`;
-    els.svg.setAttribute('width', MIGRATION_MAP_W);
-    els.svg.setAttribute('height', MIGRATION_MAP_H);
-    els.svg.style.width = `${MIGRATION_MAP_W}px`;
-    els.svg.style.height = `${MIGRATION_MAP_H}px`;
+    els.content.style.width = `${MAP_W}px`;
+    els.content.style.height = `${MAP_H}px`;
+    els.svg.setAttribute('width', MAP_W);
+    els.svg.setAttribute('height', MAP_H);
+    els.svg.style.width = `${MAP_W}px`;
+    els.svg.style.height = `${MAP_H}px`;
 
-    // Dynamic (timeline scrubbing) isn't built yet -- the placeholder
-    // toggled above explains that; nothing else to draw in this mode.
-    if (migrationDynamicMode) return;
-
-    if (!migrationWorldLand) {
-      ensureMigrationLibs().then(() => { if (viewMode === 'migration') renderMigrationMap(); });
+    if (!mapWorldLand) {
+      ensureMapLibs().then(() => { if (viewMode === 'map') renderMapView(); });
       const loading = document.createElement('div');
-      loading.className = 'migration-dynamic-placeholder';
+      loading.className = 'map-loading-placeholder';
       loading.textContent = 'Loading world map…';
       els.content.appendChild(loading);
       return;
     }
 
-    const projection = d3.geoRobinson().fitSize([MIGRATION_MAP_W, MIGRATION_MAP_H], migrationWorldLand);
+    const projection = d3.geoRobinson().fitSize([MAP_W, MAP_H], mapWorldLand);
     const geoPath = d3.geoPath(projection);
 
     const landPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    landPath.setAttribute('d', geoPath(migrationWorldLand));
-    landPath.setAttribute('fill', 'var(--migration-land)');
+    landPath.setAttribute('d', geoPath(mapWorldLand));
+    landPath.setAttribute('fill', 'var(--map-land)');
     landPath.setAttribute('stroke', 'none');
     els.svg.appendChild(landPath);
 
     const peopleWithPoints = Object.values(data.people)
-      .map(person => ({
-        person,
-        points: migrationStopsFor(person).map(s => {
-          const [x, y] = projection([s.lon, s.lat]);
-          return { x, y };
-        }),
-      }))
-      .filter(({ points }) => points.length > 0);
+      .map(person => {
+        const coords = currentLocationCoordsOf(person);
+        if (!coords) return null;
+        const [x, y] = projection([coords.lon, coords.lat]);
+        return { person, text: coords.text, lat: coords.lat, lon: coords.lon, point: { x, y } };
+      })
+      .filter(Boolean);
 
-    // Mutates each affected person's final point in place so overlapping
-    // current-location markers fan out instead of stacking -- must run
-    // before arcs are drawn below, since a focused arc's last segment
-    // needs to end on the same (possibly offset) point the marker uses.
-    resolveMigrationMarkerOverlaps(peopleWithPoints);
+    // Mutates each affected person's point in place so people who share a
+    // current location fan out into a row instead of stacking their
+    // cards exactly on top of each other.
+    resolveMapCardOverlaps(peopleWithPoints);
 
-    // Draw non-focused arcs first so the focused person's own arc always
-    // ends up on top of everyone else's.
-    const drawOrder = [...peopleWithPoints].sort((a, b) =>
-      (a.person.id === migrationFocusId ? 1 : 0) - (b.person.id === migrationFocusId ? 1 : 0));
-
-    for (const { person, points } of drawOrder) {
-      if (points.length < 2) continue;
-      const isFocused = person.id === migrationFocusId;
-      const segments = points.length - 1;
-      for (let i = 0; i < segments; i++) {
-        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        arc.setAttribute('d', migrationArcPath(points[i], points[i + 1]));
-        arc.setAttribute('fill', 'none');
-        arc.setAttribute('stroke-linecap', 'round');
-        if (isFocused) {
-          // Sequential (one-hue) time encoding: each segment fades from
-          // 25% opacity at its older end toward 100% at its newer end, so
-          // the whole path reads oldest-to-newest without ever changing
-          // hue -- see the validated Migration Map color preview.
-          const gradId = `migration-grad-${person.id}-${i}`;
-          const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-          gradient.setAttribute('id', gradId);
-          gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-          gradient.setAttribute('x1', points[i].x);
-          gradient.setAttribute('y1', points[i].y);
-          gradient.setAttribute('x2', points[i + 1].x);
-          gradient.setAttribute('y2', points[i + 1].y);
-          const opacityAt = (idx) => 0.25 + 0.75 * (idx / segments);
-          const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-          stop1.setAttribute('offset', '0%');
-          stop1.setAttribute('stop-color', 'var(--accent)');
-          stop1.setAttribute('stop-opacity', String(opacityAt(i)));
-          const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-          stop2.setAttribute('offset', '100%');
-          stop2.setAttribute('stop-color', 'var(--accent)');
-          stop2.setAttribute('stop-opacity', String(opacityAt(i + 1)));
-          gradient.appendChild(stop1);
-          gradient.appendChild(stop2);
-          els.svg.appendChild(gradient);
-          arc.setAttribute('stroke', `url(#${gradId})`);
-          arc.setAttribute('stroke-width', '2');
-        } else {
-          arc.setAttribute('stroke', 'var(--migration-dim)');
-          arc.setAttribute('stroke-width', '1.5');
-        }
-        els.svg.appendChild(arc);
-      }
+    const cardEls = {};
+    for (const { person, text, point } of peopleWithPoints) {
+      const card = buildCard(person, { subtitle: text });
+      card.style.left = `${point.x - CARD_WIDTH / 2}px`;
+      els.content.appendChild(card);
+      cardEls[person.id] = card;
+      // Two-phase like every other view: set top only after the card is
+      // in the DOM and its real (name-wrap-dependent) height can be
+      // measured.
+      card.style.top = `${point.y - card.offsetHeight / 2}px`;
     }
 
-    for (const { person, points } of peopleWithPoints) {
-      const { x, y } = points[points.length - 1];
-      const marker = document.createElement('div');
-      marker.className = 'migration-marker' + (person.id === migrationFocusId ? ' focused' : '');
-      marker.dataset.id = person.id;
-      marker.style.left = `${x}px`;
-      marker.style.top = `${y}px`;
-      marker.title = person.name || '(unnamed)';
-      if (person.photo) {
-        const img = document.createElement('img');
-        img.src = person.photo;
-        img.alt = person.name || '';
-        marker.appendChild(img);
-      } else {
-        marker.textContent = '🧑';
-      }
-      // Same click convention as Centric view (see buildCard): clicking
-      // anyone other than the currently-focused person focuses them
-      // instead of opening their profile; clicking the already-focused
-      // marker falls through to the normal open-profile behavior, since
-      // focusing them again would be a no-op.
-      marker.addEventListener('click', () => {
-        if (person.id !== migrationFocusId) {
-          migrationFocusId = person.id;
-          renderMigrationMap();
-        } else {
-          openViewModal(person.id, { forceSingle: true });
-        }
-      });
-      els.content.appendChild(marker);
-    }
+    // Same FLIP transition every other view uses -- and since it keys
+    // purely on person id (not on which view produced the old position),
+    // switching straight from Traditional/Chrono/Zodiac/Centric into Map
+    // View (or back) glides every card from its old layout position to
+    // its geographic one for free.
+    animateLayoutIn(cardEls, oldPositions);
   }
 
   // ---------- Seed sample data on first run ----------
@@ -6567,12 +6465,13 @@
   function seedSampleData() {
     const gp1 = uid(), gp2 = uid(), parent1 = uid(), parent2 = uid(), child1 = uid(), child2 = uid();
     data.people = {
-      // Geocoded birthLocation/locations below double as Migration Map's
-      // own demo data -- a believable spread (a transatlantic move each
-      // for the grandparents, domestic moves for their grandchildren, and
-      // Michael staying put in Chicago his whole life, so the map shows
-      // both arc trails and a plain single-stop marker) rather than
-      // leaving it to look empty the first time someone opens that view.
+      // Geocoded birthLocation/locations below double as Map View's own
+      // demo data -- a believable spread across several cities rather
+      // than leaving it empty the first time someone opens that view.
+      // Map View only ever plots the CURRENT location (locations[0], or
+      // birthLocation if that's all someone has -- see
+      // currentLocationCoordsOf), but the full history is still real,
+      // meaningful data worth keeping for a future migration-trails view.
       [gp1]: { id: gp1, name: 'Eleanor Hart', birthDate: '1938-03-12', deathDate: '2015-11-02', photo: '', notes: '', parents: [], spouses: [gp2],
         birthLocation: { text: 'Dublin, Ireland', lat: 53.3498, lon: -6.2603, startDate: '1938-03-12', endDate: '1958-06-01' },
         locations: [{ text: 'Boston, MA', lat: 42.3601, lon: -71.0589, startDate: '1958-06-01', endDate: '2015-11-02' }] },

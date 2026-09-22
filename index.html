@@ -24,7 +24,7 @@
      never depends on a third party being reachable -- see driver.iife.js's
      own comment in the body for why Driver.js replaced a hand-rolled tour. -->
 <link rel="stylesheet" href="driver.css?v=1">
-<link rel="stylesheet" href="style.css?v=202609210">
+<link rel="stylesheet" href="style.css?v=202609220">
 </head>
 <body>
   <header class="toolbar">
@@ -35,7 +35,7 @@
       <option value="chronological">Chronological Tree</option>
       <option value="zodiac">Zodiac Tree</option>
       <option value="centric">Centric View</option>
-      <option value="migration">Migration Map</option>
+      <option value="map">Map View</option>
     </select>
     <span id="syncStatus" class="sync-dot local" title="Local only"></span>
     <button id="exportBtn" class="btn" hidden>Export JSON</button>
@@ -56,14 +56,6 @@
       <button type="button" class="centric-metric-btn active" data-metric="age">Age</button>
       <button type="button" class="centric-metric-btn" data-metric="location">Location</button>
     </div>
-    <div id="migrationModeToggle" class="centric-metric-toggle">
-      <button type="button" class="centric-metric-btn active" data-mode="static">Static</button>
-      <button type="button" class="centric-metric-btn" data-mode="dynamic">Dynamic</button>
-    </div>
-    <div id="migrationDynamicPlaceholder" class="migration-dynamic-placeholder" hidden>
-      <p>Timeline scrubbing is coming soon. Switch back to Static to see everyone's migration paths.</p>
-    </div>
-
     <!-- Floating action stack, top to bottom: add person, search,
          fit-to-view, help -- see .quick-actions in style.css. -->
     <div class="quick-actions" id="quickActions">
@@ -516,6 +508,6 @@
        rather than loaded from a CDN, same as every other local file here. -->
   <script src="driver.iife.js?v=1"></script>
   <script src="config.js?v=202609154"></script>
-  <script src="app.js?v=202609210"></script>
+  <script src="app.js?v=202609220"></script>
 </body>
 </html>

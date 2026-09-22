@@ -36,14 +36,10 @@
      step is a subtle shade change rather than a bold color jump. */
   --centric-inner: #f4f1ea;
   --centric-outer: #c9c9c9;
-  /* Migration Map's land fill and non-focused migration path color (see
-     renderMigrationMap in app.js) -- dedicated tokens for the same reason
-     as --centric-inner/outer above: dark, mostly-neutral values that don't
-     map cleanly onto --surface/--ink-soft. The focused person's path
-     reuses --accent directly instead (it's already this app's one
-     identity color, and already themed magenta in Midnight Magenta). */
-  --migration-land: #e4dcc8;
-  --migration-dim: #b7ab95;
+  /* Map View's land fill (see renderMapView in app.js) -- a dedicated
+     token for the same reason as --centric-inner/outer above: a dark,
+     mostly-neutral value that doesn't map cleanly onto --surface. */
+  --map-land: #e4dcc8;
 }
 
 * { box-sizing: border-box; }
@@ -376,40 +372,13 @@ body {
   box-shadow: 0 6px 18px rgba(60,45,20,0.28);
 }
 
-/* ---------- Migration Map view ---------- */
-/* A small circular marker (not a full .person-card) at each person's
-   current location on the Robinson projection -- see renderMigrationMap
-   in app.js. Deliberately smaller than .person-photo since a world map
-   can be showing every person in the tree at once. */
-.migration-marker {
-  position: absolute;
-  width: 30px;
-  height: 30px;
-  margin: -15px 0 0 -15px; /* center on its lat/lon projected point */
-  border-radius: 50%;
-  border: 2px solid var(--migration-dim);
-  background: var(--surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  overflow: hidden;
-  cursor: pointer;
-  z-index: 2;
-  transition: border-color .15s, transform .15s;
-}
-.migration-marker:hover { transform: scale(1.12); }
-.migration-marker img { width: 100%; height: 100%; object-fit: cover; }
-.migration-marker.focused {
-  border-color: var(--accent);
-  z-index: 3;
-}
-
-/* Static/Dynamic toggle -- visually identical to Centric's Age/Location
-   toggle (same .centric-metric-toggle/.centric-metric-btn classes), just a
-   second instance so both views can keep their own independent state and
-   .visible flag without one clobbering the other's DOM. */
-.migration-dynamic-placeholder {
+/* ---------- Map View ---------- */
+/* Map View has no marker/toggle CSS of its own -- it plots real
+   .person-card elements (see buildCard/renderMapView in app.js), so it
+   inherits all of .person-card/.person-photo's styling automatically.
+   The only view-specific rule is this one-shot loading message, shown
+   only until the vendored map libraries finish their first (lazy) load. */
+.map-loading-placeholder {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -418,7 +387,6 @@ body {
   text-align: center;
   color: var(--ink-soft);
   font-size: 0.9rem;
-  z-index: 2;
 }
 
 .empty-state {
@@ -1760,8 +1728,7 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --ink-soft: #b3a892;
     --card-border: #4a4131;
     --shadow: 0 2px 8px rgba(0,0,0,0.4);
-    --migration-land: #2c2c2c;
-    --migration-dim: #6f6650;
+    --map-land: #2c2c2c;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
   }
@@ -1810,12 +1777,9 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
   --centric-inner: #6a6a6a;
   --centric-outer: #2c2c2c;
   /* Validated against this theme's own --surface (#363636) with the
-     dataviz skill's OKLCH contrast/CVD checks: filled land needs no
-     border at this contrast, non-focused paths clear 3:1 against both the
-     land fill and the surface, and --accent (the focused path/marker
-     color) stays comfortably distinct from both greys. */
-  --migration-land: #262626;
-  --migration-dim: #9a9a9a;
+     dataviz skill's OKLCH contrast check: filled land needs no border at
+     this contrast. */
+  --map-land: #262626;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same
