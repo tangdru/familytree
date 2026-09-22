@@ -6420,8 +6420,11 @@
   // outputs real viewport pixels -- so nothing further needs counteracting.
   // Distances between markers still grow as globeScale increases (that IS
   // "zooming in"); it's each marker's own rendered size that stays fixed,
-  // same as pins on a real map.
-  const GLOBE_MARKER_TARGET_SCALE = 0.3;
+  // same as pins on a real map -- so this is the one number that actually
+  // controls whether a card's name/location text is legible; raising the
+  // zoom ceiling alone (GLOBE_ZOOM_IN_FACTOR) only buys more room between
+  // markers, not bigger text.
+  const GLOBE_MARKER_TARGET_SCALE = 0.4;
   // Two people whose current-location points land within this many SCREEN
   // pixels of each other (at the globe's current rotation and zoom)
   // collapse into one numbered cluster instead of two overlapping cards.
@@ -6430,18 +6433,20 @@
   // globeInitialScale * GLOBE_ZOOM_IN_FACTOR -- a cluster whose members
   // are still within GLOBE_CLUSTER_PIXEL_RADIUS once that cap is hit (an
   // exact shared address, which no amount of zoom can ever visually
-  // separate) falls back to a fanned row instead of an unbreakable
+  // separate) falls back to packAroundCentroid instead of an unbreakable
   // cluster -- see renderGlobeFrame.
   const GLOBE_CLUSTER_ZOOM_FACTOR = 3;
   // globeScale (the projection's own pixel radius) is clamped to this
   // range around globeInitialScale -- a little room to zoom out for
-  // context, and a lot of room to zoom in: at GLOBE_ZOOM_IN_FACTOR (40x)
-  // a person-width of separation resolves down to roughly a few km apart
-  // at typical latitudes, comfortably past "different neighborhoods of
-  // the same city" -- only an exact shared address should still need the
-  // fan-out fallback.
+  // context, and a lot of room to zoom in, both for a person-width of
+  // separation to resolve down to well past "different neighborhoods of
+  // the same city" (only an exact shared address should still need
+  // packAroundCentroid) and to give someone room to zoom in on an
+  // already-resolved card until its name/location text is comfortably
+  // readable, since card size itself never changes with zoom (see
+  // GLOBE_MARKER_TARGET_SCALE).
   const GLOBE_ZOOM_OUT_FACTOR = 0.4;
-  const GLOBE_ZOOM_IN_FACTOR = 40;
+  const GLOBE_ZOOM_IN_FACTOR = 150;
   let globeLibsPromise = null;
   let globeWorldLand = null; // GeoJSON, set once ensureGlobeLibs resolves
   // Each person's raw {lon, lat} (plus their subtitle text) -- computed
@@ -6572,20 +6577,25 @@
   // longitude only, same as a real desktop globe someone gave a push --
   // that runs whenever nothing else has claimed the rotation: not while
   // dragging, not while inertia or a scripted animateGlobeTo is still
-  // playing out, and not for a short grace period after any of those end
-  // (see GLOBE_AUTOSPIN_IDLE_DELAY_MS) so a flurry of quick interactions
-  // doesn't fight the globe settling back down between each one.
+  // playing out, and not for a longer grace period after any of those end
+  // (see GLOBE_AUTOSPIN_IDLE_DELAY_MS) so someone still looking at what
+  // they just rotated to isn't interrupted.
   //
   // If a drag left the globe tilted away from its home latitude
-  // (GLOBE_DEFAULT_ROTATION's 0, i.e. the equator), the globe eases back
-  // to that tilt first (startGlobeLeveling) -- longitude is left exactly
-  // where the user put it, only the tilt "returns to the vertical axis"
-  // -- and only then does auto-spin actually start.
+  // (GLOBE_DEFAULT_ROTATION's 0, i.e. the equator), coming back out of
+  // idle eases the tilt back to that home latitude AND ramps the
+  // longitude rotation speed up from zero to full, TOGETHER, on the same
+  // eased curve over the same GLOBE_AUTOSPIN_RAMP_MS window (see
+  // startGlobeSpinUp) -- one continuous "spring back into spinning"
+  // motion rather than leveling first, then separately snapping straight
+  // to full auto-spin speed. Longitude's actual position is never reset,
+  // only its speed ramps -- wherever the user left it stays put.
   const GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION = 90; // the "rotation time" -- tune this
   const GLOBE_AUTOSPIN_DEGREES_PER_SEC = 360 / GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION;
-  const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 1200;
+  const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 4000;
+  const GLOBE_AUTOSPIN_RAMP_MS = 3000;
   let globeAutoSpinFrame = null;
-  let globeLevelingFrame = null;
+  let globeSpinUpFrame = null;
   let globeIdleTimer = null;
 
   function stopGlobeAutoSpin() {
@@ -6595,21 +6605,21 @@
     }
   }
 
-  function stopGlobeLeveling() {
-    if (globeLevelingFrame !== null) {
-      cancelAnimationFrame(globeLevelingFrame);
-      globeLevelingFrame = null;
+  function stopGlobeSpinUp() {
+    if (globeSpinUpFrame !== null) {
+      cancelAnimationFrame(globeSpinUpFrame);
+      globeSpinUpFrame = null;
     }
   }
 
   // Cancels every rotation driver at once (inertia, auto-spin, the
-  // leveling ease, and any pending idle timer waiting to start one of
+  // spin-up ramp, and any pending idle timer waiting to start one of
   // them) -- called the instant something else claims the rotation: a
   // fresh drag, a scripted animateGlobeTo, or leaving Globe View entirely.
   function stopAllGlobeMotion() {
     stopGlobeInertia();
     stopGlobeAutoSpin();
-    stopGlobeLeveling();
+    stopGlobeSpinUp();
     if (globeIdleTimer !== null) {
       clearTimeout(globeIdleTimer);
       globeIdleTimer = null;
@@ -6629,42 +6639,48 @@
     globeAutoSpinFrame = requestAnimationFrame(step);
   }
 
-  // Eases latitude only back to the home tilt (longitude untouched, so
-  // this never undoes a user's own rotation) before handing off to
-  // startGlobeAutoSpin -- skips straight to auto-spin if already home.
-  function startGlobeLeveling() {
+  // Coming back from idle: eases latitude back to the home tilt and ramps
+  // the auto-spin rotation speed up from zero, both on the SAME eased
+  // curve over the SAME GLOBE_AUTOSPIN_RAMP_MS window, so they visibly
+  // move together rather than one finishing before the other starts.
+  // Longitude only ever advances (by the ramped-up speed each frame), so
+  // it's a genuine acceleration, not an interpolation toward some target
+  // -- there isn't a target, auto-spin just continues indefinitely once
+  // this hands off to startGlobeAutoSpin at full speed.
+  function startGlobeSpinUp() {
     const startLat = globeRotation[1];
     const targetLat = GLOBE_DEFAULT_ROTATION[1];
-    if (Math.abs(startLat - targetLat) < 0.05) {
-      startGlobeAutoSpin();
-      return;
-    }
     const startTime = performance.now();
+    let lastTime = startTime;
     function step(now) {
-      if (viewMode !== 'globe') { globeLevelingFrame = null; return; }
-      const t = Math.min(1, (now - startTime) / FIT_VIEW_MS);
-      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
-      globeRotation = [globeRotation[0], startLat + (targetLat - startLat) * eased];
+      if (viewMode !== 'globe') { globeSpinUpFrame = null; return; }
+      const dt = now - lastTime;
+      lastTime = now;
+      const t = Math.min(1, (now - startTime) / GLOBE_AUTOSPIN_RAMP_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic -- drives both the tilt and the speed ramp
+      const lat = startLat + (targetLat - startLat) * eased;
+      const lon = globeRotation[0] + GLOBE_AUTOSPIN_DEGREES_PER_SEC * eased * (dt / 1000);
+      globeRotation = [lon, lat];
       scheduleGlobeRender();
       if (t < 1) {
-        globeLevelingFrame = requestAnimationFrame(step);
+        globeSpinUpFrame = requestAnimationFrame(step);
       } else {
-        globeLevelingFrame = null;
-        startGlobeAutoSpin();
+        globeSpinUpFrame = null;
+        startGlobeAutoSpin(); // already at full speed -- continues seamlessly
       }
     }
-    globeLevelingFrame = requestAnimationFrame(step);
+    globeSpinUpFrame = requestAnimationFrame(step);
   }
 
   // The single entry point for "something just stopped touching the
   // globe" -- (re)arms the idle grace period, after which the globe
-  // levels back to its home tilt and resumes auto-spinning. Safe to call
-  // repeatedly (a new call simply restarts the wait).
+  // spins back up (see startGlobeSpinUp). Safe to call repeatedly (a new
+  // call simply restarts the wait).
   function scheduleGlobeAutoSpinResume() {
     if (globeIdleTimer !== null) clearTimeout(globeIdleTimer);
     globeIdleTimer = setTimeout(() => {
       globeIdleTimer = null;
-      if (viewMode === 'globe') startGlobeLeveling();
+      if (viewMode === 'globe') startGlobeSpinUp();
     }, GLOBE_AUTOSPIN_IDLE_DELAY_MS);
   }
 
@@ -6741,15 +6757,56 @@
   }
 
   // Spreads points that can't be told apart by zooming any further (an
-  // exact shared address -- see renderGlobeFrame) into a horizontal row
-  // centered on their shared spot, the same CARD_WIDTH/SPOUSE_GAP rhythm
-  // the tree views already space cards by.
-  function fanOutRow(points, step) {
+  // exact, or near-exact, shared address -- see renderGlobeFrame) around
+  // their shared spot instead of overlapping there, the same "spiderfy"
+  // technique map-pin clusters everywhere use once you click into an
+  // unresolvable cluster: a single ring if everyone fits on one without
+  // crowding, otherwise an outward spiral, so however many people share
+  // this spot, none of their cards ever overlap and every one of them
+  // stays as close as possible to the real coordinate rather than sliding
+  // off in one arbitrary direction (a straight row visibly drifts the far
+  // end of the line away from the pin; a ring/spiral keeps everyone
+  // clustered tight around it).
+  function packAroundCentroid(points, spacing) {
     const n = points.length;
     const cx = points.reduce((sum, p) => sum + p.x, 0) / n;
     const cy = points.reduce((sum, p) => sum + p.y, 0) / n;
-    const startX = cx - ((n - 1) * step) / 2;
-    return points.map((_, k) => ({ x: startX + k * step, y: cy }));
+    if (n === 1) return [{ x: cx, y: cy }];
+    // For n points evenly spaced on a circle of radius r, the STRAIGHT-LINE
+    // distance between adjacent points is 2r*sin(pi/n) -- not the arc
+    // length between them (2*pi*r/n), which is what naively dividing the
+    // circumference by n would give. Those two only converge for large n;
+    // for a small n (2 or 3 people, the common case here) solving by arc
+    // length badly undershoots the true separation -- for a pair (n=2) it
+    // places them barely more than half of `spacing` apart, since a
+    // diameter is 2/pi (~64%) of a semicircle's arc length, which is
+    // exactly the overlap this replaced fanOutRow's straight line to fix
+    // in the first place. Solving by chord distance instead is exact at
+    // any n.
+    const ringRadius = spacing / (2 * Math.sin(Math.PI / n));
+    // Beyond ~13-14 people a single ring would have to grow so large it
+    // stops reading as "one cluster", so switch to a spiral that winds
+    // outward instead.
+    if (ringRadius <= spacing * 2.2) {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2; // first card straight up from center
+        out.push({ x: cx + ringRadius * Math.cos(angle), y: cy + ringRadius * Math.sin(angle) });
+      }
+      return out;
+    }
+    const out = [];
+    let angle = 0;
+    let radius = spacing;
+    for (let i = 0; i < n; i++) {
+      out.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+      // Advances along the spiral by roughly `spacing` of arc length at the
+      // CURRENT radius, then grows the radius by the same amount per full
+      // turn -- keeps successive coils spaced apart by ~spacing too.
+      angle += spacing / radius;
+      radius += spacing / (2 * Math.PI);
+    }
+    return out;
   }
 
   // The one real per-frame render: reprojects the land and every visible
@@ -6831,11 +6888,11 @@
     for (const group of clusterGlobePoints(visible)) {
       // A cluster still within GLOBE_CLUSTER_PIXEL_RADIUS once fully
       // zoomed in can never be broken apart by zooming any further (most
-      // often an exact shared address) -- show it as individuals, fanned
-      // out, rather than an unbreakable cluster badge.
+      // often an exact shared address) -- show it as individuals, packed
+      // around their shared spot, rather than an unbreakable cluster badge.
       if (group.length === 1 || atMaxZoom) {
         const rawPoints = group.map(idx => visible[idx].point);
-        const points = group.length > 1 ? fanOutRow(rawPoints, CARD_WIDTH * GLOBE_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
+        const points = group.length > 1 ? packAroundCentroid(rawPoints, CARD_WIDTH * GLOBE_MARKER_TARGET_SCALE + SPOUSE_GAP) : rawPoints;
         group.forEach((idx, k) => {
           const { person, text } = visible[idx];
           const card = buildCard(person, { subtitle: text });
