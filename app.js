@@ -1604,7 +1604,7 @@
       playChronoDotAssemble(false);
     }
     if (previousViewMode === 'globe' && viewMode !== 'globe') {
-      stopGlobeInertia(); // don't keep spinning a view that's no longer showing
+      stopAllGlobeMotion(); // don't keep spinning a view that's no longer showing
     }
     if (viewMode === 'globe' && previousViewMode !== 'globe') {
       // Globe View doesn't use the shared view.x/y/scale canvas transform
@@ -1864,9 +1864,10 @@
   els.viewport.addEventListener('mousedown', (e) => {
     // Grabbing the globe anywhere in the viewport -- even a mousedown that
     // lands on a card, since a card's own click still needs to fire below
-    // -- stops any free-spin in progress (see startGlobeInertia), same as
-    // catching a real spinning globe with your hand.
-    if (viewMode === 'globe') stopGlobeInertia();
+    // -- stops any free-spin or auto-spin in progress (see
+    // stopAllGlobeMotion), same as catching a real spinning globe with
+    // your hand.
+    if (viewMode === 'globe') stopAllGlobeMotion();
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) return;
     isPanning = true;
     panStart = viewMode === 'globe'
@@ -1887,7 +1888,15 @@
     applyTransform();
   });
   window.addEventListener('mouseup', () => {
-    if (viewMode === 'globe' && isPanning) startGlobeInertia();
+    if (viewMode === 'globe') {
+      // startGlobeInertia itself schedules the idle-then-auto-spin resume
+      // once it's done (whether it actually coasted or not) -- a plain
+      // click that never dragged (isPanning still true, no card/cluster
+      // under the pointer) still needs that same resume, since
+      // stopAllGlobeMotion above already cancelled anything pending.
+      if (isPanning) startGlobeInertia();
+      else scheduleGlobeAutoSpinResume();
+    }
     isPanning = false;
     els.viewport.classList.remove('grabbing');
   });
@@ -1907,7 +1916,7 @@
   let pinchStartScale = 1;
 
   els.viewport.addEventListener('touchstart', (e) => {
-    if (viewMode === 'globe') stopGlobeInertia();
+    if (viewMode === 'globe') stopAllGlobeMotion();
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
@@ -1953,11 +1962,22 @@
         : { x: e.touches[0].clientX - view.x, y: e.touches[0].clientY - view.y };
       if (viewMode === 'globe') resetGlobeDragVelocity();
     } else {
-      if (viewMode === 'globe' && touchMode === 'pan') startGlobeInertia();
+      if (viewMode === 'globe') {
+        // Same reasoning as the mouseup handler: a pan release coasts
+        // through startGlobeInertia (which schedules the resume itself);
+        // a pinch release, or a tap that landed on a card/cluster
+        // (touchMode never left null), has nothing to coast through, so
+        // schedule the idle-then-auto-spin resume directly.
+        if (touchMode === 'pan') startGlobeInertia();
+        else scheduleGlobeAutoSpinResume();
+      }
       touchMode = null;
     }
   });
-  els.viewport.addEventListener('touchcancel', () => { touchMode = null; });
+  els.viewport.addEventListener('touchcancel', () => {
+    if (viewMode === 'globe') scheduleGlobeAutoSpinResume();
+    touchMode = null;
+  });
 
   // ---------- Photo handling ----------
 
@@ -6456,6 +6476,13 @@
   // it settles, rather than stopping dead the instant the pointer lifts.
   const GLOBE_INERTIA_FRICTION_PER_SEC = 0.05; // fraction of speed retained after a full second
   const GLOBE_INERTIA_MIN_SPEED = 0.02; // px/ms -- below this, just stop rather than crawl forever
+  // A real flick's peak instantaneous speed is bounded by how fast a human
+  // hand moves; this caps against the OS/browser (or a synthetic/automated
+  // input source) ever delivering two mousemove/touchmove events close
+  // enough together in time that a tiny dt blows the computed px/ms speed
+  // up to something absurd -- without this, one such event pair could spin
+  // the globe many times over before friction ever got a chance to work.
+  const GLOBE_INERTIA_MAX_SPEED = 3; // px/ms
   let globeDragLastT = 0, globeDragLastX = 0, globeDragLastY = 0;
   let globeDragVX = 0, globeDragVY = 0; // px/ms, the most recent drag speed
   let globeInertiaFrame = null;
@@ -6480,8 +6507,16 @@
     if (globeDragLastT) {
       const dt = now - globeDragLastT;
       if (dt > 0) {
-        globeDragVX = (x - globeDragLastX) / dt;
-        globeDragVY = (y - globeDragLastY) / dt;
+        let vx = (x - globeDragLastX) / dt;
+        let vy = (y - globeDragLastY) / dt;
+        const speed = Math.hypot(vx, vy);
+        if (speed > GLOBE_INERTIA_MAX_SPEED) {
+          const scale = GLOBE_INERTIA_MAX_SPEED / speed;
+          vx *= scale;
+          vy *= scale;
+        }
+        globeDragVX = vx;
+        globeDragVY = vy;
       }
     }
     globeDragLastT = now;
@@ -6506,7 +6541,10 @@
   // regardless of the display's actual frame rate).
   function startGlobeInertia() {
     let vx = globeDragVX, vy = globeDragVY;
-    if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) return; // a slow drag or a tap -- no spin
+    if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) {
+      scheduleGlobeAutoSpinResume(); // no flick -- nothing to coast through, go straight to idle
+      return;
+    }
     let lastTime = performance.now();
     function step(now) {
       if (viewMode !== 'globe') { globeInertiaFrame = null; return; }
@@ -6516,10 +6554,115 @@
       const decay = Math.pow(GLOBE_INERTIA_FRICTION_PER_SEC, dt / 1000);
       vx *= decay;
       vy *= decay;
-      if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) { globeInertiaFrame = null; return; }
+      if (Math.hypot(vx, vy) < GLOBE_INERTIA_MIN_SPEED) {
+        globeInertiaFrame = null;
+        scheduleGlobeAutoSpinResume();
+        return;
+      }
       globeInertiaFrame = requestAnimationFrame(step);
     }
     globeInertiaFrame = requestAnimationFrame(step);
+  }
+
+  // ---------- Globe auto-spin (idle animation) ----------
+  // A slow, continuous rotation around the vertical (polar) axis --
+  // longitude only, same as a real desktop globe someone gave a push --
+  // that runs whenever nothing else has claimed the rotation: not while
+  // dragging, not while inertia or a scripted animateGlobeTo is still
+  // playing out, and not for a short grace period after any of those end
+  // (see GLOBE_AUTOSPIN_IDLE_DELAY_MS) so a flurry of quick interactions
+  // doesn't fight the globe settling back down between each one.
+  //
+  // If a drag left the globe tilted away from its home latitude
+  // (GLOBE_DEFAULT_ROTATION's -38), the globe eases back to that tilt
+  // first (startGlobeLeveling) -- longitude is left exactly where the
+  // user put it, only the tilt "returns to the vertical axis" -- and only
+  // then does auto-spin actually start.
+  const GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION = 90; // the "rotation time" -- tune this
+  const GLOBE_AUTOSPIN_DEGREES_PER_SEC = 360 / GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION;
+  const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 1200;
+  let globeAutoSpinFrame = null;
+  let globeLevelingFrame = null;
+  let globeIdleTimer = null;
+
+  function stopGlobeAutoSpin() {
+    if (globeAutoSpinFrame !== null) {
+      cancelAnimationFrame(globeAutoSpinFrame);
+      globeAutoSpinFrame = null;
+    }
+  }
+
+  function stopGlobeLeveling() {
+    if (globeLevelingFrame !== null) {
+      cancelAnimationFrame(globeLevelingFrame);
+      globeLevelingFrame = null;
+    }
+  }
+
+  // Cancels every rotation driver at once (inertia, auto-spin, the
+  // leveling ease, and any pending idle timer waiting to start one of
+  // them) -- called the instant something else claims the rotation: a
+  // fresh drag, a scripted animateGlobeTo, or leaving Globe View entirely.
+  function stopAllGlobeMotion() {
+    stopGlobeInertia();
+    stopGlobeAutoSpin();
+    stopGlobeLeveling();
+    if (globeIdleTimer !== null) {
+      clearTimeout(globeIdleTimer);
+      globeIdleTimer = null;
+    }
+  }
+
+  function startGlobeAutoSpin() {
+    let lastTime = performance.now();
+    function step(now) {
+      if (viewMode !== 'globe') { globeAutoSpinFrame = null; return; }
+      const dt = now - lastTime;
+      lastTime = now;
+      globeRotation = [globeRotation[0] + GLOBE_AUTOSPIN_DEGREES_PER_SEC * (dt / 1000), globeRotation[1]];
+      scheduleGlobeRender();
+      globeAutoSpinFrame = requestAnimationFrame(step);
+    }
+    globeAutoSpinFrame = requestAnimationFrame(step);
+  }
+
+  // Eases latitude only back to the home tilt (longitude untouched, so
+  // this never undoes a user's own rotation) before handing off to
+  // startGlobeAutoSpin -- skips straight to auto-spin if already home.
+  function startGlobeLeveling() {
+    const startLat = globeRotation[1];
+    const targetLat = GLOBE_DEFAULT_ROTATION[1];
+    if (Math.abs(startLat - targetLat) < 0.05) {
+      startGlobeAutoSpin();
+      return;
+    }
+    const startTime = performance.now();
+    function step(now) {
+      if (viewMode !== 'globe') { globeLevelingFrame = null; return; }
+      const t = Math.min(1, (now - startTime) / FIT_VIEW_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      globeRotation = [globeRotation[0], startLat + (targetLat - startLat) * eased];
+      scheduleGlobeRender();
+      if (t < 1) {
+        globeLevelingFrame = requestAnimationFrame(step);
+      } else {
+        globeLevelingFrame = null;
+        startGlobeAutoSpin();
+      }
+    }
+    globeLevelingFrame = requestAnimationFrame(step);
+  }
+
+  // The single entry point for "something just stopped touching the
+  // globe" -- (re)arms the idle grace period, after which the globe
+  // levels back to its home tilt and resumes auto-spinning. Safe to call
+  // repeatedly (a new call simply restarts the wait).
+  function scheduleGlobeAutoSpinResume() {
+    if (globeIdleTimer !== null) clearTimeout(globeIdleTimer);
+    globeIdleTimer = setTimeout(() => {
+      globeIdleTimer = null;
+      if (viewMode === 'globe') startGlobeLeveling();
+    }, GLOBE_AUTOSPIN_IDLE_DELAY_MS);
   }
 
   function loadGlobeScript(src) {
@@ -6784,7 +6927,7 @@
   // hemisphere, so the interpolated path never has to cross the far side
   // of the globe.
   function animateGlobeTo(targetRotation, targetScale) {
-    stopGlobeInertia(); // a scripted rotation always wins over a leftover free-spin
+    stopAllGlobeMotion(); // a scripted rotation always wins over a leftover free-spin or auto-spin
     const startRotation = globeRotation.slice();
     const startScale = globeScale;
     const startTime = performance.now();
@@ -6798,6 +6941,7 @@
       globeScale = startScale + (targetScale - startScale) * eased;
       renderGlobeFrame();
       if (t < 1) requestAnimationFrame(step);
+      else scheduleGlobeAutoSpinResume(); // idle again once the scripted rotation finishes
     }
     requestAnimationFrame(step);
   }
@@ -6835,6 +6979,7 @@
       globeInitialScale = Math.min(vw, vh) / 2 * 0.85;
       globeScale = globeInitialScale;
       globeRotation = GLOBE_DEFAULT_ROTATION.slice();
+      scheduleGlobeAutoSpinResume(); // start the idle-then-auto-spin cycle on this fresh entry
     }
 
     // Same FLIP transition every other view uses for its cards -- and

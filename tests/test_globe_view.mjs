@@ -160,16 +160,83 @@ try {
   const driftedAfterRelease = Math.hypot(shortlyAfter.left - rightAfterRelease.left, shortlyAfter.top - rightAfterRelease.top);
   if (driftedAfterRelease < 5) throw new Error(`Expected the globe to keep spinning under inertia right after releasing a fast flick, but it barely moved (${driftedAfterRelease.toFixed(1)}px) in the 150ms after release`);
   console.log(`Confirmed: the globe kept spinning ${driftedAfterRelease.toFixed(1)}px in the 150ms right after releasing a fast flick.`);
-  await page.waitForTimeout(2500); // friction should have long since brought it to a stop
-  const settledA = await posOfCluster();
+  // Poll for the drift-per-interval to drop below a small threshold,
+  // rather than waiting a single fixed duration -- the exact instant
+  // inertia decays below GLOBE_INERTIA_MIN_SPEED depends on exactly how
+  // fast Playwright's synthetic flick came in, and (now that auto-spin
+  // exists) settling is a moving target: the globe legitimately starts
+  // moving again on its own GLOBE_AUTOSPIN_IDLE_DELAY_MS after it settles,
+  // so a fixed wait risks sampling right as that resume kicks in.
+  let settled = shortlyAfter;
+  let foundSettle = false;
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(150);
+    const cur = await posOfCluster();
+    if (!cur) throw new Error('Expected the cluster to still be present while the spin decays');
+    const stepMoved = Math.hypot(cur.left - settled.left, cur.top - settled.top);
+    settled = cur;
+    if (stepMoved < 3) { foundSettle = true; break; }
+  }
+  if (!foundSettle) throw new Error('Expected the inertia spin to decay to a stop within ~4.5s, but it never settled');
+  // Confirm that was a real settle, not one still sample mid-decay, by
+  // re-checking well within the idle window before auto-spin could
+  // plausibly have resumed yet.
   await page.waitForTimeout(300);
-  const settledB = await posOfCluster();
-  if (!settledA || !settledB) throw new Error('Expected the cluster to still be present once the spin settles');
-  const stillDrifting = Math.hypot(settledB.left - settledA.left, settledB.top - settledA.top);
-  if (stillDrifting > 2) throw new Error(`Expected the inertia spin to have settled to a stop after 2.5s, but it's still drifting ${stillDrifting.toFixed(1)}px per 300ms`);
+  const stillSettled = await posOfCluster();
+  const driftAfterSettle = Math.hypot(stillSettled.left - settled.left, stillSettled.top - settled.top);
+  if (driftAfterSettle > 3) throw new Error(`Expected the inertia spin to stay stopped immediately after settling, but it drifted ${driftAfterSettle.toFixed(1)}px in the next 300ms`);
   console.log('Confirmed: the free-spin decays under friction and comes to a stop rather than spinning forever.');
-  const totalDrift = Math.hypot(settledA.left - beforeFlick.left, settledA.top - beforeFlick.top);
+  const totalDrift = Math.hypot(settled.left - beforeFlick.left, settled.top - beforeFlick.top);
   if (totalDrift < 40) throw new Error(`Expected the flick's total rotation (drag + inertia) to clearly exceed a plain drag's own movement, got only ${totalDrift.toFixed(1)}px total`);
+
+  console.log('\n=== After a short idle period, the globe resumes auto-spinning on its own ===');
+  // GLOBE_AUTOSPIN_IDLE_DELAY_MS (1200ms) after settling, plus up to
+  // FIT_VIEW_MS (380ms) if it also had to level back to its home tilt --
+  // it didn't here (the flick above was purely horizontal), but the
+  // margin costs nothing.
+  await page.waitForTimeout(1200 + 380 + 500);
+  const afterIdle = await posOfCluster();
+  if (!afterIdle) throw new Error('Expected the cluster to still be present once auto-spin resumes');
+  const autoSpinDrift = Math.hypot(afterIdle.left - stillSettled.left, afterIdle.top - stillSettled.top);
+  if (autoSpinDrift < 5) throw new Error(`Expected the globe to resume auto-spinning on its own after the idle delay, but it's still sitting still (${autoSpinDrift.toFixed(1)}px drift)`);
+  console.log(`Confirmed: the globe resumed auto-spinning on its own (~${autoSpinDrift.toFixed(1)}px drift after the idle delay).`);
+
+  console.log('\n=== A tilted drag eases back to the home tilt once idle ===');
+  await page.click('#fitViewBtn');
+  await page.waitForTimeout(600);
+  const beforeTilt = await posOfCluster();
+  // Purely vertical (dx = 0) so this isolates the tilt cleanly: for an
+  // off-center point like this cluster, its projected Y depends on BOTH
+  // longitude and latitude jointly, not latitude alone, so a drag that also
+  // moved longitude wouldn't let a simple before/after Y comparison prove
+  // the tilt specifically recovered. Longitude staying untouched by
+  // leveling is instead a property of the code, not something this pixel
+  // check needs to prove: startGlobeLeveling only ever writes
+  // globeRotation[1] (see its definition), so it structurally cannot
+  // touch [0] regardless of what a drag or auto-spin did to it.
+  // Paused, then finished with one tiny final move, so the released
+  // velocity is near zero and no inertia carries it further -- isolates
+  // the leveling ease from the free-spin tested above.
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2 - 148, { steps: 20 });
+  await page.waitForTimeout(200);
+  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2 - 150, { steps: 1 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const afterTiltDrag = await posOfCluster();
+  if (!afterTiltDrag) throw new Error('Expected the cluster to still be present after the tilt drag');
+  const tiltedVertically = Math.abs(afterTiltDrag.top - beforeTilt.top);
+  if (tiltedVertically < 20) throw new Error(`Expected the vertical drag component to visibly tilt the globe, top only moved ${tiltedVertically.toFixed(0)}px (from ${beforeTilt.top.toFixed(0)} to ${afterTiltDrag.top.toFixed(0)})`);
+  // Wait through the idle delay and the leveling ease, but check before
+  // auto-spin (longitude-only, so it shouldn't move the vertical position
+  // much on its own) has had long to run.
+  await page.waitForTimeout(1200 + 380 + 100);
+  const afterLeveling = await posOfCluster();
+  if (!afterLeveling) throw new Error('Expected the cluster to still be present after leveling');
+  const remainingTilt = Math.abs(afterLeveling.top - beforeTilt.top);
+  if (remainingTilt > 20) throw new Error(`Expected the globe to ease its tilt back to the home axis once idle (vertical position back near ${beforeTilt.top.toFixed(0)}px), but it's still ${afterLeveling.top.toFixed(0)}px, ${remainingTilt.toFixed(0)}px of tilt remaining`);
+  console.log('Confirmed: the globe eased its tilt back to the home axis once idle, without needing to touch longitude.');
 
   console.log('\n=== Grabbing the globe again stops an in-progress free-spin immediately ===');
   await page.click('#fitViewBtn');
