@@ -6407,7 +6407,10 @@
   // Centers the initial view on the Americas/Atlantic, where this app's
   // own data tends to cluster -- rotate([lambda, phi]) brings the point
   // at geographic (-lambda, -phi) to the center of the visible hemisphere.
-  const GLOBE_DEFAULT_ROTATION = [90, -38];
+  // phi = 0 keeps the front-facing point on the equator, so the equator
+  // runs horizontally through the center of the globe rather than tilting
+  // the view toward one pole.
+  const GLOBE_DEFAULT_ROTATION = [90, 0];
   // Markers/clusters always render at this flat CSS scale, at any zoom
   // level -- unlike the old flat map (where this same constant had to be
   // divided by view.scale to counteract the shared canvas's own ancestor
@@ -6574,10 +6577,10 @@
   // doesn't fight the globe settling back down between each one.
   //
   // If a drag left the globe tilted away from its home latitude
-  // (GLOBE_DEFAULT_ROTATION's -38), the globe eases back to that tilt
-  // first (startGlobeLeveling) -- longitude is left exactly where the
-  // user put it, only the tilt "returns to the vertical axis" -- and only
-  // then does auto-spin actually start.
+  // (GLOBE_DEFAULT_ROTATION's 0, i.e. the equator), the globe eases back
+  // to that tilt first (startGlobeLeveling) -- longitude is left exactly
+  // where the user put it, only the tilt "returns to the vertical axis"
+  // -- and only then does auto-spin actually start.
   const GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION = 90; // the "rotation time" -- tune this
   const GLOBE_AUTOSPIN_DEGREES_PER_SEC = 360 / GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION;
   const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 1200;

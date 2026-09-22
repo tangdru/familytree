@@ -24,17 +24,20 @@ const people = {
     id: p1, name: 'Ana Cruz', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     birthLocation: { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 },
   },
-  // Exact same coordinates as p3, and on the front-facing hemisphere by
-  // default -- can never be separated by zooming alone, so this pair should
-  // always end up as a "2" cluster until fully zoomed in, then fall back to
-  // a fanned row.
+  // Exact same coordinates as p3, and comfortably on the front-facing
+  // hemisphere by default (New York, not London -- London sits at almost
+  // exactly 90 degrees from the default rotation's front-facing point now
+  // that GLOBE_DEFAULT_ROTATION centers the equator, which is too close to
+  // the visibility cutoff to be a reliable test fixture) -- can never be
+  // separated by zooming alone, so this pair should always end up as a "2"
+  // cluster until fully zoomed in, then fall back to a fanned row.
   [p2]: {
     id: p2, name: 'Tom Doe', birthDate: '1990-06-15', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278 },
+    birthLocation: { text: 'New York, USA', lat: 40.7128, lon: -74.006 },
   },
   [p3]: {
     id: p3, name: 'Ravi Singh', birthDate: '1988-11-20', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'London, UK', lat: 51.5074, lon: -0.1278 },
+    birthLocation: { text: 'New York, USA', lat: 40.7128, lon: -74.006 },
   },
   // No geocoded location at all -- should be skipped, not crash.
   [p4]: {
@@ -144,15 +147,27 @@ try {
     const el = document.querySelector('.map-cluster');
     return el ? { left: parseFloat(el.style.left), top: parseFloat(el.style.top) } : null;
   });
+  // A moderate, controlled flick: most of the drag happens quickly (it
+  // doesn't matter how fast -- trackGlobeDragVelocity only cares about the
+  // FINAL movement before release), then a small last segment is spaced
+  // out over an explicit wait so its measured speed lands well under
+  // GLOBE_INERTIA_MAX_SPEED. An UNcapped-feeling flick (the whole move in
+  // one burst) instead gets clamped to that same max speed regardless of
+  // distance, which makes its total coast-to-a-stop distance an
+  // (essentially fixed) ~1000px-equivalent of rotation -- enough to swing
+  // a marker on the front hemisphere onto the back for a while, which is
+  // correct behavior but an unhelpfully unpredictable one to assert on.
+  async function flickGlobe(dx) {
+    const cx = vpBox.x + vpBox.width / 2, cy = vpBox.y + vpBox.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + dx * 0.85, cy, { steps: 10 });
+    await page.waitForTimeout(60);
+    await page.mouse.move(cx + dx, cy, { steps: 1 });
+    await page.mouse.up();
+  }
   const beforeFlick = await posOfCluster();
-  // A fast flick (a big move in few steps, i.e. a short elapsed time) --
-  // trackGlobeDragVelocity measures speed between the last two move events,
-  // so what matters is how fast the FINAL movement was, not the gesture's
-  // overall average.
-  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(vpBox.x + vpBox.width / 2 - 300, vpBox.y + vpBox.height / 2, { steps: 3 });
-  await page.mouse.up();
+  await flickGlobe(-180);
   const rightAfterRelease = await posOfCluster();
   await page.waitForTimeout(150);
   const shortlyAfter = await posOfCluster();
@@ -241,10 +256,7 @@ try {
   console.log('\n=== Grabbing the globe again stops an in-progress free-spin immediately ===');
   await page.click('#fitViewBtn');
   await page.waitForTimeout(600);
-  await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(vpBox.x + vpBox.width / 2 - 300, vpBox.y + vpBox.height / 2, { steps: 3 });
-  await page.mouse.up();
+  await flickGlobe(-180);
   await page.waitForTimeout(50); // let inertia actually pick up before grabbing it again
   await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
   await page.mouse.down();
