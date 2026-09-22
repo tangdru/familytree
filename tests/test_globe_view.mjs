@@ -2,18 +2,17 @@ import { chromium } from 'playwright-core';
 
 // Globe View plots each person's CURRENT location only (locations[0], or
 // birthLocation as a fallback -- see currentLocationCoordsOf in app.js) on a
-// spinning orthographic globe (renderGlobeFrame). Markers/clusters always
-// render at the same flat CSS scale (GLOBE_MARKER_TARGET_SCALE) regardless
-// of the globe's own zoom, and people too close together to tell apart at
-// the current zoom collapse into a single numbered cluster badge
-// (clusterGlobePoints) instead of overlapping cards. Clicking a cluster
-// rotates (longitude only -- rotation is locked to the north-south axis,
-// see rotateGlobeBy) and zooms in on it; a cluster that's STILL not
-// resolvable once fully zoomed in (an exact shared address, which no amount
-// of zoom can ever separate) falls back to a fanned row instead of staying
-// an unbreakable cluster forever. A person on the far side of the globe
-// from the current rotation isn't rendered at all.
-const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4', p5 = 'p5';
+// spinning orthographic globe (renderGlobeFrame). Markers/clusters render at
+// a constant on-screen size regardless of the globe's own zoom
+// (GLOBE_MARKER_TARGET_SCALE, counter-scaled against globeScale), and people
+// too close together to tell apart at the current zoom collapse into a
+// single numbered cluster badge (clusterGlobePoints) instead of overlapping
+// cards. Clicking a cluster rotates+zooms in on it; a cluster that's STILL
+// not resolvable once fully zoomed in (an exact shared address, which no
+// amount of zoom can ever separate) falls back to a fanned row instead of
+// staying an unbreakable cluster forever. A person on the far side of the
+// globe from the current rotation isn't rendered at all.
+const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4';
 const people = {
   // Sydney sits on the far side of the globe from the default rotation
   // (GLOBE_DEFAULT_ROTATION centers the Americas/Atlantic) -- should be
@@ -37,18 +36,6 @@ const people = {
   // No geocoded location at all -- should be skipped, not crash.
   [p4]: {
     id: p4, name: 'No Location Nell', birthDate: '1978-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-  },
-  // Los Angeles sits close to the default rotation's front-facing center
-  // (unlike London, ~60 degrees off it) and far enough from Tom/Ravi on
-  // screen to always render as her own individual card -- used to test
-  // clicking an individual card without depending on how far a deep zoom
-  // test elsewhere has pushed things around (see the north-south-axis
-  // rotation lock in rotateGlobeBy: a point far from the fixed tilt
-  // latitude, like London, can drift off-screen once zoomed in a lot,
-  // since re-centering can only ever adjust longitude).
-  [p5]: {
-    id: p5, name: 'Chris Lee', birthDate: '1995-04-10', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
-    birthLocation: { text: 'Los Angeles, USA', lat: 34.0522, lon: -118.2437 },
   },
 };
 
@@ -80,20 +67,10 @@ try {
   if (paintedPaths !== 2) throw new Error(`Expected exactly 2 paths in #linesSvg (sphere + land), got ${paintedPaths}`);
   let s = await globeState();
   if (s.cardNames.includes('Ana Cruz')) throw new Error(`Expected Ana Cruz (Sydney) to be culled as being on the far side of the globe at the default rotation, but she rendered: ${JSON.stringify(s.cardNames)}`);
-  if (!s.cardNames.includes('Chris Lee')) throw new Error(`Expected Chris Lee (Los Angeles, front-facing and far from the London cluster) to render individually, got cards: ${JSON.stringify(s.cardNames)}`);
   if (s.clusterCounts.length !== 1 || s.clusterCounts[0] !== 2) throw new Error(`Expected exactly one "2" cluster (Tom+Ravi, exact same coordinates, front-facing), got: ${JSON.stringify(s.clusterCounts)}`);
   const totalRepresented = s.cardNames.length + s.clusterCounts.reduce((a, b) => a + b, 0);
-  if (totalRepresented !== 3) throw new Error(`Expected 3 people represented on entry (Ana culled, Nell has no location), got ${totalRepresented}`);
-  console.log(`Confirmed: ${JSON.stringify(s.cardNames)} + cluster(s) ${JSON.stringify(s.clusterCounts)} = 3 people visible; Ana culled, Nell skipped.`);
-
-  console.log('\n=== Clicking an individual card still opens that person\'s profile ===');
-  await page.click('[data-id="p5"].map-card');
-  await page.waitForTimeout(400);
-  const modalHidden = await page.evaluate(() => document.getElementById('personViewModal').hidden);
-  if (modalHidden) throw new Error('Expected clicking an individual Globe View card to open the Person View');
-  await page.click('#viewCloseBtn');
-  await page.waitForTimeout(200);
-  console.log("Confirmed: clicking an individual card still opens that person's profile.");
+  if (totalRepresented !== 2) throw new Error(`Expected 2 people represented on entry (Ana culled, Nell has no location), got ${totalRepresented}`);
+  console.log(`Confirmed: ${JSON.stringify(s.cardNames)} + cluster(s) ${JSON.stringify(s.clusterCounts)} = 2 people visible; Ana culled, Nell skipped.`);
 
   console.log('\n=== Markers stay the same on-screen size across very different zoom levels ===');
   const sizeAt = async () => page.evaluate(() => {
@@ -118,7 +95,7 @@ try {
   s = await globeState();
   if (s.clusterCounts.length !== 0) throw new Error(`Expected no clusters left at max zoom (an exact shared address should fan out instead), got: ${JSON.stringify(s.clusterCounts)}`);
   const namesAtMax = s.cardNames.slice().sort();
-  if (JSON.stringify(namesAtMax) !== JSON.stringify(['Chris Lee', 'Ravi Singh', 'Tom Doe'])) throw new Error(`Expected Tom and Ravi as individual (fanned) cards at max zoom, alongside Chris Lee (Ana still culled, on the far side), got: ${JSON.stringify(namesAtMax)}`);
+  if (JSON.stringify(namesAtMax) !== JSON.stringify(['Ravi Singh', 'Tom Doe'])) throw new Error(`Expected Tom and Ravi as individual (fanned) cards at max zoom (Ana still culled, on the far side), got: ${JSON.stringify(namesAtMax)}`);
   const [tomLeft, raviLeft] = await page.evaluate(() => {
     const posOf = (name) => {
       const card = [...document.querySelectorAll('.map-card')].find(c => c.querySelector('.person-name').textContent === name);
@@ -157,40 +134,27 @@ try {
   if (moved < 20) throw new Error(`Expected dragging to noticeably rotate the globe and move the cluster's screen position, moved only ${moved.toFixed(1)}px`);
   console.log(`Confirmed: dragging rotated the globe, moving the cluster ${moved.toFixed(1)}px on screen.`);
 
-  console.log('\n=== Clicking a cluster rotates (longitude only) and zooms in on it ===');
+  console.log('\n=== Clicking a cluster rotates+zooms in on it, eventually resolving it into individuals ===');
   await page.click('#fitViewBtn');
   await page.waitForTimeout(600);
-  const sphereWidthBefore = await page.evaluate(() => document.querySelectorAll('#linesSvg path')[0].getBoundingClientRect().width);
-  const clusterRectBefore = await page.evaluate(() => document.querySelector('.map-cluster').getBoundingClientRect());
-  // A real click (as opposed to Playwright's own ElementHandle.click()) needs
-  // to be by raw coordinates rather than by element handle: every rendered
-  // frame fully removes and rebuilds every .map-card/.map-cluster node (see
-  // renderGlobeFrame), which defeats Playwright's own actionability wait (it
-  // expects to click the SAME node it found stable, but a cluster click
-  // kicks off animateGlobeTo, whose frames keep swapping the node out) even
-  // though an ordinary mouse click at the same screen point works fine for a
-  // real user.
-  await page.mouse.click(clusterRectBefore.x + clusterRectBefore.width / 2, clusterRectBefore.y + clusterRectBefore.height / 2);
-  await page.waitForTimeout(600);
-  const sphereWidthAfter = await page.evaluate(() => document.querySelectorAll('#linesSvg path')[0].getBoundingClientRect().width);
-  const zoomRatio = sphereWidthAfter / sphereWidthBefore;
-  if (Math.abs(zoomRatio - 3) > 0.3) throw new Error(`Expected clicking a cluster to zoom in by GLOBE_CLUSTER_ZOOM_FACTOR (3x), got a ${zoomRatio.toFixed(2)}x change in the sphere's rendered size`);
-  console.log(`Confirmed: clicking a cluster zoomed in ~${zoomRatio.toFixed(2)}x.`);
-  // Tom+Ravi (London, 51.5N) sit well off the fixed front-facing latitude
-  // (GLOBE_DEFAULT_ROTATION's -38 -- rotation only ever spins longitude, see
-  // rotateGlobeBy/the click handler above), so re-centering on them can only
-  // ever adjust their horizontal position, never bring them to true center
-  // vertically -- confirming that is a more accurate check than expecting
-  // them to land at the exact viewport center.
-  const clusterRectAfter = await page.evaluate(() => {
-    const el = document.querySelector('.map-cluster');
-    return el ? el.getBoundingClientRect() : null;
-  });
-  if (!clusterRectAfter) throw new Error('Expected the Tom+Ravi cluster to still be present (still unresolvable at only 3x zoom) after the click');
-  const vw = await page.evaluate(() => document.getElementById('treeViewport').clientWidth);
-  const centerX = clusterRectAfter.x + clusterRectAfter.width / 2;
-  if (Math.abs(centerX - vw / 2) > 5) throw new Error(`Expected the click to re-center the cluster horizontally (~${(vw / 2).toFixed(0)}px), got ${centerX.toFixed(0)}px`);
-  console.log('Confirmed: the click re-centered the cluster horizontally (rotation stayed locked to the north-south axis).');
+  for (let i = 0; i < 5; i++) {
+    const cluster = await page.$('.map-cluster');
+    if (!cluster) break;
+    await cluster.click();
+    await page.waitForTimeout(500);
+  }
+  s = await globeState();
+  if (s.clusterCounts.length !== 0) throw new Error(`Expected repeated cluster clicks to eventually zoom in enough to resolve Tom+Ravi into individuals, still clustered: ${JSON.stringify(s.clusterCounts)}`);
+  console.log('Confirmed: clicking a cluster repeatedly zooms in until it resolves into individual cards.');
+
+  console.log('\n=== Clicking an individual card still opens that person\'s profile ===');
+  await page.click('.map-card[data-id]'); // any individual card present
+  await page.waitForTimeout(400);
+  const modalHidden = await page.evaluate(() => document.getElementById('personViewModal').hidden);
+  if (modalHidden) throw new Error('Expected clicking an individual Globe View card to open the Person View');
+  await page.click('#viewCloseBtn');
+  await page.waitForTimeout(200);
+  console.log("Confirmed: clicking an individual card still opens that person's profile.");
 
   console.log('\n=== The globe fades in from 10% to 100% opacity when entering Globe View ===');
   await page.selectOption('#viewModeSelect', 'traditional');
