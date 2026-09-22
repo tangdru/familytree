@@ -9,12 +9,14 @@ import { chromium } from 'playwright-core';
 // (clusterGlobePoints) instead of overlapping cards. Clicking a cluster
 // rotates+zooms in on it; a cluster that's STILL not resolvable once fully
 // zoomed in (an exact shared address, which no amount of zoom can ever
-// separate) falls back to a fanned row instead of staying an unbreakable
-// cluster forever. A person on the far side of the globe from the current
-// rotation isn't rendered at all. Releasing a drag carries the rotation on
-// under inertia (startGlobeInertia), decaying under simulated friction
-// until it settles, rather than stopping dead the instant the pointer
-// lifts; grabbing the globe again cancels the spin immediately.
+// separate) falls back to packAroundCentroid -- a ring, or an outward
+// spiral for larger groups -- centered on their shared spot, instead of
+// staying an unbreakable cluster forever. A person on the far side of the
+// globe from the current rotation isn't rendered at all. Releasing a drag
+// carries the rotation on under inertia (startGlobeInertia), decaying
+// under simulated friction until it settles, rather than stopping dead
+// the instant the pointer lifts; grabbing the globe again cancels the
+// spin immediately.
 const p1 = 'p1', p2 = 'p2', p3 = 'p3', p4 = 'p4';
 const people = {
   // Sydney sits on the far side of the globe from the default rotation
@@ -30,7 +32,8 @@ const people = {
   // that GLOBE_DEFAULT_ROTATION centers the equator, which is too close to
   // the visibility cutoff to be a reliable test fixture) -- can never be
   // separated by zooming alone, so this pair should always end up as a "2"
-  // cluster until fully zoomed in, then fall back to a fanned row.
+  // cluster until fully zoomed in, then fall back to being packed apart
+  // around their shared spot.
   [p2]: {
     id: p2, name: 'Tom Doe', birthDate: '1990-06-15', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     birthLocation: { text: 'New York, USA', lat: 40.7128, lon: -74.006 },
@@ -92,25 +95,30 @@ try {
   if (Math.abs(sizeAfterZoom - sizeAtEntry) > 3) throw new Error(`Expected a marker's rendered size to stay constant across zoom levels (globe zooms, people don't) -- was ${sizeAtEntry.toFixed(1)}px, now ${sizeAfterZoom.toFixed(1)}px`);
   console.log(`Confirmed: marker size stayed ~${sizeAtEntry.toFixed(1)}px across a large wheel-zoom.`);
 
-  console.log('\n=== Zooming all the way in resolves the Tom/Ravi cluster into fanned individuals ===');
+  console.log('\n=== Zooming all the way in resolves the Tom/Ravi cluster into individuals packed around their shared spot ===');
   for (let i = 0; i < 20; i++) {
     await page.mouse.wheel(0, -4000);
     await page.waitForTimeout(80);
   }
   await page.waitForTimeout(300);
   s = await globeState();
-  if (s.clusterCounts.length !== 0) throw new Error(`Expected no clusters left at max zoom (an exact shared address should fan out instead), got: ${JSON.stringify(s.clusterCounts)}`);
+  if (s.clusterCounts.length !== 0) throw new Error(`Expected no clusters left at max zoom (an exact shared address should pack apart instead), got: ${JSON.stringify(s.clusterCounts)}`);
   const namesAtMax = s.cardNames.slice().sort();
-  if (JSON.stringify(namesAtMax) !== JSON.stringify(['Ravi Singh', 'Tom Doe'])) throw new Error(`Expected Tom and Ravi as individual (fanned) cards at max zoom (Ana still culled, on the far side), got: ${JSON.stringify(namesAtMax)}`);
-  const [tomLeft, raviLeft] = await page.evaluate(() => {
+  if (JSON.stringify(namesAtMax) !== JSON.stringify(['Ravi Singh', 'Tom Doe'])) throw new Error(`Expected Tom and Ravi as individual (packed) cards at max zoom (Ana still culled, on the far side), got: ${JSON.stringify(namesAtMax)}`);
+  const [tomPos, raviPos] = await page.evaluate(() => {
     const posOf = (name) => {
       const card = [...document.querySelectorAll('.map-card')].find(c => c.querySelector('.person-name').textContent === name);
-      return parseFloat(card.style.left);
+      return { left: parseFloat(card.style.left), top: parseFloat(card.style.top) };
     };
     return [posOf('Tom Doe'), posOf('Ravi Singh')];
   });
-  if (Math.abs(tomLeft - raviLeft) < 10) throw new Error(`Expected Tom and Ravi (exact same coordinates) to be fanned apart once resolved to individuals, got left positions ${tomLeft} and ${raviLeft}`);
-  console.log('Confirmed: at max zoom, the unresolvable Tom/Ravi cluster fans out into two separate, spaced-apart cards.');
+  // packAroundCentroid arranges a pair on a ring around their shared point
+  // (not necessarily side by side horizontally, unlike the old straight-row
+  // fan-out), so check total separation rather than assuming which axis it
+  // falls on.
+  const packedApart = Math.hypot(tomPos.left - raviPos.left, tomPos.top - raviPos.top);
+  if (packedApart < 10) throw new Error(`Expected Tom and Ravi (exact same coordinates) to be packed apart once resolved to individuals, got positions ${JSON.stringify(tomPos)} and ${JSON.stringify(raviPos)}`);
+  console.log('Confirmed: at max zoom, the unresolvable Tom/Ravi cluster packs apart into two separate, spaced-apart cards.');
 
   console.log('\n=== The fit-view button resets zoom back to the default (markers return to entry size) ===');
   await page.click('#fitViewBtn');
@@ -205,11 +213,11 @@ try {
   if (totalDrift < 40) throw new Error(`Expected the flick's total rotation (drag + inertia) to clearly exceed a plain drag's own movement, got only ${totalDrift.toFixed(1)}px total`);
 
   console.log('\n=== After a short idle period, the globe resumes auto-spinning on its own ===');
-  // GLOBE_AUTOSPIN_IDLE_DELAY_MS (1200ms) after settling, plus up to
-  // FIT_VIEW_MS (380ms) if it also had to level back to its home tilt --
-  // it didn't here (the flick above was purely horizontal), but the
-  // margin costs nothing.
-  await page.waitForTimeout(1200 + 380 + 500);
+  // GLOBE_AUTOSPIN_IDLE_DELAY_MS (4000ms) after settling, plus
+  // GLOBE_AUTOSPIN_RAMP_MS (3000ms) for the combined tilt/speed ramp --
+  // the flick above was purely horizontal so there's no tilt to recover,
+  // but the ramp still takes just as long to reach full spin speed.
+  await page.waitForTimeout(4000 + 3000 + 500);
   const afterIdle = await posOfCluster();
   if (!afterIdle) throw new Error('Expected the cluster to still be present once auto-spin resumes');
   const autoSpinDrift = Math.hypot(afterIdle.left - stillSettled.left, afterIdle.top - stillSettled.top);
@@ -220,18 +228,18 @@ try {
   await page.click('#fitViewBtn');
   await page.waitForTimeout(600);
   const beforeTilt = await posOfCluster();
-  // Purely vertical (dx = 0) so this isolates the tilt cleanly: for an
-  // off-center point like this cluster, its projected Y depends on BOTH
-  // longitude and latitude jointly, not latitude alone, so a drag that also
-  // moved longitude wouldn't let a simple before/after Y comparison prove
-  // the tilt specifically recovered. Longitude staying untouched by
-  // leveling is instead a property of the code, not something this pixel
-  // check needs to prove: startGlobeLeveling only ever writes
-  // globeRotation[1] (see its definition), so it structurally cannot
-  // touch [0] regardless of what a drag or auto-spin did to it.
+  // Purely vertical (dx = 0) so the DRAG itself only ever changes latitude
+  // -- for an off-center point like this cluster, its projected Y depends
+  // on both longitude and latitude jointly, so a drag that also moved
+  // longitude wouldn't let a simple before/after Y comparison prove the
+  // tilt specifically recovered. (Coming back from idle still nudges
+  // longitude a little of its own accord, since startGlobeSpinUp ramps up
+  // toward auto-spin DURING the same window it eases latitude home -- see
+  // its definition -- but that's a small fraction of a full auto-spin
+  // second and the tolerance below allows for it.)
   // Paused, then finished with one tiny final move, so the released
   // velocity is near zero and no inertia carries it further -- isolates
-  // the leveling ease from the free-spin tested above.
+  // the spin-up ramp from the free-spin tested above.
   await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(vpBox.x + vpBox.width / 2, vpBox.y + vpBox.height / 2 - 148, { steps: 20 });
@@ -243,10 +251,10 @@ try {
   if (!afterTiltDrag) throw new Error('Expected the cluster to still be present after the tilt drag');
   const tiltedVertically = Math.abs(afterTiltDrag.top - beforeTilt.top);
   if (tiltedVertically < 20) throw new Error(`Expected the vertical drag component to visibly tilt the globe, top only moved ${tiltedVertically.toFixed(0)}px (from ${beforeTilt.top.toFixed(0)} to ${afterTiltDrag.top.toFixed(0)})`);
-  // Wait through the idle delay and the leveling ease, but check before
-  // auto-spin (longitude-only, so it shouldn't move the vertical position
-  // much on its own) has had long to run.
-  await page.waitForTimeout(1200 + 380 + 100);
+  // Wait through the idle delay and the combined tilt/speed ramp, checked
+  // right as it finishes (before full-speed auto-spin has had long to run
+  // on its own).
+  await page.waitForTimeout(4000 + 3000 + 100);
   const afterLeveling = await posOfCluster();
   if (!afterLeveling) throw new Error('Expected the cluster to still be present after leveling');
   const remainingTilt = Math.abs(afterLeveling.top - beforeTilt.top);
