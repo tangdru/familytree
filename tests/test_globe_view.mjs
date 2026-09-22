@@ -278,18 +278,19 @@ try {
   if (driftedWhileHeld > 3) throw new Error(`Expected grabbing the globe to immediately cancel its free-spin, but it kept drifting ${driftedWhileHeld.toFixed(1)}px while held (not dragged)`);
   console.log('Confirmed: grabbing the globe mid-spin stops the free-spin immediately.');
 
-  console.log('\n=== Clicking a cluster rotates+zooms in on it, eventually resolving it into individuals ===');
+  console.log('\n=== Clicking a cluster zooms in enough to resolve it in ONE tap ===');
   await page.click('#fitViewBtn');
   await page.waitForTimeout(600);
-  for (let i = 0; i < 5; i++) {
-    const cluster = await page.$('.map-cluster');
-    if (!cluster) break;
-    await cluster.click();
-    await page.waitForTimeout(500);
-  }
+  // Tom+Ravi share an exact coordinate (minPairDist = 0), so the per-cluster
+  // zoom-to-fit math (see the badge click handler in renderGlobeFrame)
+  // computes an infinite needed multiplier and saturates straight at
+  // GLOBE_ZOOM_IN_FACTOR on the very first tap -- no repeated clicking
+  // required, unlike the old flat-multiplier behavior this replaced.
+  await page.click('.map-cluster');
+  await page.waitForTimeout(600);
   s = await globeState();
-  if (s.clusterCounts.length !== 0) throw new Error(`Expected repeated cluster clicks to eventually zoom in enough to resolve Tom+Ravi into individuals, still clustered: ${JSON.stringify(s.clusterCounts)}`);
-  console.log('Confirmed: clicking a cluster repeatedly zooms in until it resolves into individual cards.');
+  if (s.clusterCounts.length !== 0) throw new Error(`Expected a single cluster click to fully resolve Tom+Ravi (exact shared coordinate) into individuals, still clustered: ${JSON.stringify(s.clusterCounts)}`);
+  console.log('Confirmed: a single cluster click zoomed in enough to resolve it into individual cards.');
 
   console.log('\n=== Clicking an individual card still opens that person\'s profile ===');
   await page.click('.map-card[data-id]'); // any individual card present

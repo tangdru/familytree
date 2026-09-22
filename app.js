@@ -6398,12 +6398,16 @@
   // d3 (bundled with the core geoOrthographic/geoPath/geoDistance this
   // view needs -- no extra d3-geo-projection required, unlike the old
   // Robinson-projection flat map) and topojson-client, plus world-atlas's
-  // countries-110m.json, are vendored locally rather than loaded from a
-  // CDN -- same reasoning as driver.iife.js (see its own comment in
-  // index.html): this view has no graceful degradation without them,
-  // unlike e.g. libphonenumber-js. They're ~400KB combined and most
-  // sessions never open this view, so they're only injected the first
-  // time someone actually switches to Globe View -- see ensureGlobeLibs.
+  // countries-50m.json (the 1:50m resolution tier -- noticeably crisper
+  // coastlines than the 110m tier once zoomed in, without the 10m tier's
+  // ~5x bigger path data, which would cost real per-frame work re-drawing
+  // the land outline during every drag/rotate/auto-spin step), are
+  // vendored locally rather than loaded from a CDN -- same reasoning as
+  // driver.iife.js (see its own comment in index.html): this view has no
+  // graceful degradation without them, unlike e.g. libphonenumber-js.
+  // Most sessions never open this view, so they're only injected the
+  // first time someone actually switches to Globe View -- see
+  // ensureGlobeLibs.
 
   // Centers the initial view on the Americas/Atlantic, where this app's
   // own data tends to cluster -- rotate([lambda, phi]) brings the point
@@ -6430,16 +6434,21 @@
   // pixels of each other (at the globe's current rotation and zoom)
   // collapse into one numbered cluster instead of two overlapping cards.
   const GLOBE_CLUSTER_PIXEL_RADIUS = 50;
-  // How much closer a cluster click zooms in, capped at
-  // globeInitialScale * GLOBE_ZOOM_IN_FACTOR -- a cluster whose members
-  // are still within GLOBE_CLUSTER_PIXEL_RADIUS once that cap is hit (an
-  // exact shared address, which no amount of zoom can ever visually
-  // separate) still resolves into individual, decluttered cards via
-  // computeGlobeForceLayout rather than an unbreakable badge -- see
-  // renderGlobeFrame. A single tap jumps in a lot (8x, not a token 3x) so
-  // a cluster of real, merely-nearby people resolves in one or two taps
-  // instead of a long series of small ones.
+  // A cluster click's own zoom-in is computed per-cluster (see
+  // renderGlobeFrame's badge click handler) to resolve THAT cluster in one
+  // tap, rather than guessed with one flat multiplier -- these two
+  // constants are its floor and its target margin. GLOBE_CLUSTER_ZOOM_FACTOR
+  // is the minimum zoom-in even a nearly-resolved cluster still gets (feels
+  // inert otherwise); GLOBE_CLUSTER_RESOLVE_MARGIN is how far past the bare
+  // cluster-merge threshold (GLOBE_CLUSTER_PIXEL_RADIUS) the computed zoom
+  // aims to carry the group's closest pair, so it reads as clearly resolved
+  // rather than barely. Capped at globeInitialScale * GLOBE_ZOOM_IN_FACTOR
+  // -- a cluster whose members are still within GLOBE_CLUSTER_PIXEL_RADIUS
+  // once that cap is hit (an exact shared address, which no amount of zoom
+  // can ever visually separate) still resolves into individual, decluttered
+  // cards via computeGlobeForceLayout rather than an unbreakable badge.
   const GLOBE_CLUSTER_ZOOM_FACTOR = 8;
+  const GLOBE_CLUSTER_RESOLVE_MARGIN = 1.8;
   // globeScale (the projection's own pixel radius) is clamped to this
   // range around globeInitialScale -- a little room to zoom out for
   // context, and a lot of room to zoom in, both for a person-width of
@@ -6703,7 +6712,7 @@
       globeLibsPromise = (async () => {
         await loadGlobeScript('d3.min.js');
         await loadGlobeScript('topojson-client.min.js');
-        const res = await fetch('countries-110m.json');
+        const res = await fetch('countries-50m.json');
         const topo = await res.json();
         globeWorldLand = topojson.feature(topo, topo.objects.land);
       })().catch(err => {
@@ -6934,7 +6943,20 @@
         // together, so that edge case can't actually occur in practice.
         const avgLon = group.reduce((sum, idx) => sum + visible[idx].lon, 0) / group.length;
         const avgLat = group.reduce((sum, idx) => sum + visible[idx].lat, 0) / group.length;
-        badgeSpecs.push({ cx, cy, avgLon, avgLat, count: group.length, names: group.map(idx => visible[idx].person.name || '(unnamed)') });
+        // The closest pair in the group, at the CURRENT zoom -- lets a
+        // click compute exactly how much further zoom this specific
+        // cluster needs to resolve, instead of guessing with one flat
+        // multiplier for every cluster regardless of how close its
+        // members actually are (see the click handler below).
+        let minPairDist = Infinity;
+        for (let a = 0; a < group.length; a++) {
+          for (let b = a + 1; b < group.length; b++) {
+            const pa = visible[group[a]].point, pb = visible[group[b]].point;
+            const d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+            if (d < minPairDist) minPairDist = d;
+          }
+        }
+        badgeSpecs.push({ cx, cy, avgLon, avgLat, minPairDist, count: group.length, names: group.map(idx => visible[idx].person.name || '(unnamed)') });
       }
     }
 
@@ -6958,7 +6980,7 @@
       card.style.top = `${pt.y - card.offsetHeight / 2}px`;
     }
 
-    for (const { cx, cy, avgLon, avgLat, count, names } of badgeSpecs) {
+    for (const { cx, cy, avgLon, avgLat, minPairDist, count, names } of badgeSpecs) {
       const badge = document.createElement('div');
       badge.className = 'map-cluster';
       badge.textContent = String(count);
@@ -6966,11 +6988,22 @@
       badge.style.setProperty('--map-zoom-scale', zoomScale);
       badge.style.left = `${cx}px`;
       badge.style.top = `${cy}px`;
-      // Rotates to face the cluster head-on and zooms in
-      // GLOBE_CLUSTER_ZOOM_FACTOR closer, capped at the same ceiling the
-      // pinch/wheel zoom itself respects.
+      // Rotates to face the cluster head-on and zooms in enough to
+      // actually resolve THIS cluster in one tap, rather than a flat
+      // multiplier that leaves a widely-spread cluster still clumped (too
+      // many taps needed) or overshoots a nearly-resolved one. Screen
+      // distance between two points scales ~linearly with globeScale for
+      // a cluster this close to the center of the visible disc (which
+      // centering on click already ensures), so the multiplier that would
+      // carry the group's own closest pair out past the cluster-merge
+      // radius, with a comfortable margin, resolves it directly. An exact
+      // (or extremely close) shared address makes that multiplier huge,
+      // which simply saturates at GLOBE_ZOOM_IN_FACTOR -- exactly the
+      // "jump straight to max zoom" behavior that case needs anyway, to
+      // trigger the atMaxZoom fallback above.
+      const neededMultiplier = minPairDist > 0 ? (GLOBE_CLUSTER_PIXEL_RADIUS * GLOBE_CLUSTER_RESOLVE_MARGIN) / minPairDist : Infinity;
       badge.addEventListener('click', () => {
-        const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * GLOBE_CLUSTER_ZOOM_FACTOR);
+        const targetScale = Math.min(globeInitialScale * GLOBE_ZOOM_IN_FACTOR, globeScale * Math.max(GLOBE_CLUSTER_ZOOM_FACTOR, neededMultiplier));
         animateGlobeTo([-avgLon, -avgLat], targetScale);
       });
       els.content.appendChild(badge);
@@ -7376,7 +7409,7 @@
 
     // Preload Globe View's own vendored libraries (see ensureGlobeLibs) in
     // the background so the first time someone actually switches to that
-    // view doesn't have to wait on ~400KB of JS/JSON -- deferred via
+    // view doesn't have to wait on ~1MB of JS/JSON -- deferred via
     // requestIdleCallback (falling back to a plain timeout on Safari,
     // which doesn't implement it) so this never competes with the page's
     // own initial paint/interactivity for bandwidth or CPU. Silently

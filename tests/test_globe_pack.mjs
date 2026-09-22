@@ -40,14 +40,18 @@ async function loadPeopleIntoGlobe(page, people) {
 async function resolveClusterFully(page, maxClicks = 8) {
   // Rotate+zoom onto the shared cluster via its own badge, exactly the way
   // a real user would resolve it, until every member renders individually.
+  // Returns how many clicks it actually took.
+  let clicksUsed = 0;
   for (let i = 0; i < maxClicks; i++) {
     const badge = await page.$('.map-cluster');
     if (!badge) break;
     const box = await badge.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    clicksUsed++;
     await page.waitForTimeout(600);
   }
   await page.waitForTimeout(300);
+  return clicksUsed;
 }
 
 async function checkNoOverlap(page, expectedCount) {
@@ -100,10 +104,19 @@ try {
     p6: { id: 'p6', name: 'Binh Wong', birthDate: '1990-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], birthLocation: { text: 'Puyallup, Washington', lat: 47.1854, lon: -122.2929 } },
   };
   await loadPeopleIntoGlobe(page, realPeople);
-  await resolveClusterFully(page);
+  const clicksUsed = await resolveClusterFully(page);
   const realResult = await checkNoOverlap(page, 6);
   if (realResult.overlap) throw new Error(`Expected no overlap among 6 real nearby-address cards, but cards ${realResult.i} and ${realResult.j} overlap: ${JSON.stringify(realResult.rects[realResult.i])} vs ${JSON.stringify(realResult.rects[realResult.j])}`);
-  console.log('Confirmed: 6 real, distinct nearby addresses resolve with no pairwise overlap.');
+  console.log(`Confirmed: 6 real, distinct nearby addresses resolve with no pairwise overlap (took ${clicksUsed} click(s)).`);
+
+  console.log('\n=== A real, merely-close (not identical) cluster resolves in just a couple of taps ===');
+  // The reported complaint: the old flat GLOBE_CLUSTER_ZOOM_FACTOR made a
+  // real cluster of distinct-but-nearby people take many taps to resolve.
+  // The per-cluster zoom-to-fit math (see the badge click handler in
+  // renderGlobeFrame) computes the zoom this SPECIFIC cluster needs, so it
+  // should resolve well before exhausting the same 8-click budget above.
+  if (clicksUsed > 4) throw new Error(`Expected a real nearby-but-distinct cluster to resolve within a few taps, took ${clicksUsed}`);
+  console.log(`Confirmed: resolved in ${clicksUsed} tap(s), not a long series of small zooms.`);
 
   console.log('\n=== A hovered/tapped card keeps its scaled size, not the base .person-card:hover size ===');
   // The CSS specificity bug: the mouse is left resting exactly on the last
