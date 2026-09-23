@@ -42,6 +42,16 @@
      sphere/water fill reuses --bg directly (no separate token) so the
      globe's "empty" areas match the page behind it. */
   --map-land: #e4dcc8;
+  /* Stats View's categorical chart palette (see app.js's CHART_COLORS) --
+     six mid-tone hues chosen to read clearly as distinct series against
+     either --surface or --bg, independent of --accent (which some charts
+     use on its own, e.g. the single-series line/scatter charts). */
+  --chart-1: #3d7a6b;
+  --chart-2: #c98a2c;
+  --chart-3: #7a5c96;
+  --chart-4: #4f7cac;
+  --chart-5: #b2555a;
+  --chart-6: #6b8e4e;
 }
 
 * { box-sizing: border-box; }
@@ -445,6 +455,138 @@ body {
   text-align: center;
   max-width: 320px;
   font-size: 1rem;
+}
+
+/* ---------- Stats View ---------- */
+/* Unlike every other view, this one is a plain scrolling dashboard, not a
+   pannable/zoomable canvas -- see the viewModeSelect handler and the
+   wheel/mousedown/touchstart guards in app.js that let native scroll/tap
+   through here instead of hijacking it into canvas pan/zoom. */
+.tree-viewport.stats-active { cursor: default; }
+.tree-viewport.stats-active .tree-canvas { display: none; }
+
+.stats-view {
+  display: none;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  /* Re-enables native touch scrolling within this subtree even though
+     .tree-viewport itself sets touch-action: none for every other view's
+     own gesture handling. */
+  touch-action: auto;
+  box-sizing: border-box;
+  padding: 28px;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
+}
+.tree-viewport.stats-active .stats-view { display: grid; }
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.stat-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.stat-card-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.stat-card-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.stat-chart-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.stat-chart-axis { stroke: var(--line); stroke-width: 1; }
+.stat-chart-line { stroke: var(--accent); stroke-width: 2; }
+.stat-chart-trend { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: 0.75; }
+.stat-chart-dot { fill: var(--accent-dark); }
+.stat-chart-area { fill: var(--accent); opacity: 0.18; }
+.stat-chart-axis-label {
+  font-size: 8px;
+  fill: var(--ink-soft);
+}
+.stat-chart-value-label {
+  font-size: 8px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.stat-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.stat-donut-svg { width: 140px; height: 140px; flex-shrink: 0; }
+.stat-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--ink);
+  flex: 1;
+  min-width: 120px;
+}
+.stat-donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-donut-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.stat-gauge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stat-gauge-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2fr 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+.stat-gauge-label { color: var(--ink); }
+.stat-gauge-track {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+.stat-gauge-fill {
+  height: 100%;
+  transition: width .4s ease;
+}
+.stat-gauge-pct {
+  text-align: right;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Person card ---------- */
@@ -1778,6 +1920,12 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --map-land: #2c2c2c;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
+    --chart-1: #5fae9c;
+    --chart-2: #e0a94a;
+    --chart-3: #a084c0;
+    --chart-4: #7aa8d6;
+    --chart-5: #d4787c;
+    --chart-6: #8fb96a;
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
@@ -1827,6 +1975,16 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
      dataviz skill's OKLCH contrast check: filled land needs no border at
      this contrast. */
   --map-land: #262626;
+  /* Stats View's categorical palette, brightened for contrast against this
+     theme's flat #363636 ground -- same six-hue family as the default
+     theme's --chart-* tokens, not the magenta --accent (reserved for the
+     single-series line/scatter charts, same as every other theme). */
+  --chart-1: #5fae9c;
+  --chart-2: #e0a94a;
+  --chart-3: #b48ee0;
+  --chart-4: #7aa8d6;
+  --chart-5: #e08a8e;
+  --chart-6: #8fb96a;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same

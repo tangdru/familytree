@@ -436,6 +436,7 @@
     content: document.getElementById('treeContent'),
     svg: document.getElementById('linesSvg'),
     emptyState: document.getElementById('emptyState'),
+    statsContainer: document.getElementById('statsContainer'),
     viewModeSelect: document.getElementById('viewModeSelect'),
     chronoRuler: document.getElementById('chronoRuler'),
     chronoRulerInner: document.getElementById('chronoRulerInner'),
@@ -1479,7 +1480,7 @@
   // pinch would ever be allowed to.
   const MAX_ZOOM = 2;
   const view = { x: 40, y: 20, scale: 1 };
-  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'globe'
+  let viewMode = 'traditional'; // 'traditional' | 'chronological' | 'zodiac' | 'centric' | 'globe' | 'stats'
 
   // Centric view's own state: which person is at the center, and which
   // proximity metric currently decides ring placement -- see
@@ -1575,6 +1576,9 @@
     // in style.css) rather than the hidden attribute, which can't animate.
     els.chronoRuler.classList.toggle('visible', viewMode === 'chronological');
     els.centricMetricToggle.classList.toggle('visible', viewMode === 'centric');
+    // Stats View replaces the pannable/zoomable #treeCanvas entirely with
+    // its own plain scrolling dashboard -- see .stats-view in style.css.
+    els.viewport.classList.toggle('stats-active', viewMode === 'stats');
     if (previousViewMode === 'centric' && viewMode !== 'centric' && prevCentricGrid) {
       // Play the collapse over whatever renderTree() is about to build
       // underneath, rather than just letting the grid vanish the instant
@@ -1645,6 +1649,10 @@
       // needs the exact origin renderCentric() just computed, kept
       // perfectly centered every frame, not the generic corner-based fit
       // animateFitToView does.)
+    } else if (viewMode === 'stats') {
+      // Stats View is a plain scrolling dashboard (see .stats-view in
+      // style.css), not a pannable/zoomable canvas -- there's no "fit"
+      // concept for it at all.
     } else {
       // 'traditional' or 'chronological'.
       const stayingWithinTradAndChrono =
@@ -1830,6 +1838,10 @@
   }
 
   els.viewport.addEventListener('wheel', (e) => {
+    // Stats View is a plain scrolling dashboard, not a zoomable canvas --
+    // let the wheel event through to its native scroll instead of hijacking
+    // it into setZoom on the (hidden) treeCanvas underneath.
+    if (viewMode === 'stats') return;
     e.preventDefault();
     if (viewMode === 'globe') {
       setGlobeZoom(globeScale * (1 + -e.deltaY * 0.0015));
@@ -1869,6 +1881,7 @@
     // stopAllGlobeMotion), same as catching a real spinning globe with
     // your hand.
     if (viewMode === 'globe') stopAllGlobeMotion();
+    if (viewMode === 'stats') return; // let clicks/scrolling inside the dashboard behave normally
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) return;
     isPanning = true;
     panStart = viewMode === 'globe'
@@ -1918,6 +1931,7 @@
 
   els.viewport.addEventListener('touchstart', (e) => {
     if (viewMode === 'globe') stopAllGlobeMotion();
+    if (viewMode === 'stats') { touchMode = null; return; } // native scroll/tap inside the dashboard
     if (e.target.closest('.person-card, .fit-view-btn, .centric-metric-toggle, .map-cluster')) { touchMode = null; return; }
     if (e.touches.length === 1) {
       touchMode = 'pan';
@@ -4660,6 +4674,7 @@
     else if (viewMode === 'zodiac') renderZodiac();
     else if (viewMode === 'centric') renderCentric();
     else if (viewMode === 'globe') renderGlobeView();
+    else if (viewMode === 'stats') renderStatsView();
     else renderTraditional();
   }
 
@@ -5139,8 +5154,10 @@
     // Neither Zodiac's columns nor Centric's rings depend on viewport
     // size, and (unlike the other two views) neither draws any connector
     // lines at all -- see renderZodiac()/renderCentric() -- so there's
-    // nothing to redo on resize.
-    else if (viewMode !== 'zodiac' && viewMode !== 'centric') drawLines();
+    // nothing to redo on resize. Stats View's charts are viewBox-scaled
+    // SVGs (see makeChartSvg) that resize purely via CSS, and it draws no
+    // connector lines either.
+    else if (viewMode !== 'zodiac' && viewMode !== 'centric' && viewMode !== 'stats') drawLines();
   }));
 
   // ---------- Zodiac view ----------
@@ -7126,6 +7143,537 @@
   window.addEventListener('resize', () => {
     if (viewMode === 'globe') scheduleGlobeRender();
   });
+
+  // ---------- Stats View ----------
+  // A dashboard of population-level insights, all derived from fields the
+  // tree already stores (no new data collection) -- see els.statsContainer.
+  // Unlike every other view, this one never uses the shared pan/zoom canvas
+  // (view.x/y/scale) or els.content at all; it renders straight into its
+  // own normally-scrolling container (see the viewModeSelect handler and
+  // .stats-view in style.css).
+
+  const KM_PER_MI = 1.609344;
+
+  // Great-circle distance in km between two lat/lon points (haversine) --
+  // used only by migrationDistances below; nothing else in the app has
+  // needed a real distance calculation before now (Centric view's ring
+  // placement is angular, not a true distance -- see its own comments).
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Every recorded family (a distinct parents-set with 1+ recorded
+  // children), grouped the same way the Traditional layout groups siblings
+  // (see familyKey) -- but recomputed fresh here rather than reusing that
+  // layout pass's internal groups, since those live inside a different
+  // function's local scope.
+  function computeFamilyGroups() {
+    const groups = {};
+    for (const p of Object.values(data.people)) {
+      if (!p.parents.length) continue;
+      const key = familyKey(p.parents);
+      (groups[key] = groups[key] || { parentIds: p.parents, children: [] }).children.push(p.id);
+    }
+    return Object.values(groups);
+  }
+
+  // family size -> number of families with exactly that many recorded
+  // children, capped into a trailing "5+" bucket so one unusually large
+  // family doesn't stretch the whole chart's x-axis.
+  function siblingCountDistribution() {
+    const counts = {};
+    for (const g of computeFamilyGroups()) {
+      const size = Math.min(g.children.length, 5);
+      const label = size === 5 ? '5+' : String(size);
+      counts[label] = (counts[label] || 0) + 1;
+    }
+    return ['1', '2', '3', '4', '5+'].map(label => ({ label, value: counts[label] || 0 }));
+  }
+
+  // One point per person's own family (the generation their PARENTS
+  // belong to, so "Gen 1" means "children of Gen 1"), averaging that
+  // generation's family sizes -- shows whether families have been growing
+  // or shrinking as the tree descends.
+  function familySizeTrendByGeneration() {
+    const levels = computeLevels();
+    const byGen = {};
+    for (const g of computeFamilyGroups()) {
+      const parentLevels = g.parentIds.map(id => levels[id]).filter(v => v != null);
+      if (!parentLevels.length) continue;
+      const gen = Math.min(...parentLevels);
+      (byGen[gen] = byGen[gen] || { total: 0, count: 0 });
+      byGen[gen].total += g.children.length;
+      byGen[gen].count += 1;
+    }
+    return Object.keys(byGen).map(Number).sort((a, b) => a - b)
+      .map(gen => ({ gen, avg: byGen[gen].total / byGen[gen].count }));
+  }
+
+  // { birthYear, age } for everyone with a recorded death -- age at death,
+  // not current age, so this only ever reflects a completed lifespan.
+  function longevityPoints() {
+    return Object.values(data.people)
+      .map(p => {
+        if (!p.deathDate) return null;
+        const source = zodiacAdjustedBirthDate(p) || p.birthDate;
+        const birthYear = Number(birthYearOf(source));
+        const age = computeAge(p);
+        return Number.isFinite(birthYear) && age != null ? { birthYear, age } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.birthYear - b.birthYear);
+  }
+
+  // Chinese zodiac animal -> count, ordered by the real 12-year cycle
+  // (ZODIAC_CYCLE) rather than by count, so the donut reads like an actual
+  // zodiac wheel. People with no zodiac recorded are simply excluded.
+  function zodiacCounts() {
+    const counts = {};
+    for (const p of Object.values(data.people)) {
+      if (p.zodiac) counts[p.zodiac] = (counts[p.zodiac] || 0) + 1;
+    }
+    return ZODIAC_CYCLE.map(sign => ({ label: sign, value: counts[sign] || 0 })).filter(d => d.value > 0);
+  }
+
+  // Great-circle km between a person's birthLocation and their own
+  // separately-recorded current location (locations[0]) -- both must carry
+  // real coordinates. Deliberately does NOT fall back to
+  // currentLocationCoordsOf's birthLocation fallback (used for plotting
+  // Globe View markers): that fallback fires for someone with no
+  // locations[] at all, which would silently read here as "never moved"
+  // rather than "no data," understating how far the family has spread.
+  function migrationDistances() {
+    const results = [];
+    for (const p of Object.values(data.people)) {
+      const bl = p.birthLocation;
+      const birth = bl && typeof bl === 'object' && Number.isFinite(bl.lat) && Number.isFinite(bl.lon) ? bl : null;
+      if (!birth) continue;
+      const current = locationEntriesOf(p)[0];
+      if (!current || !Number.isFinite(current.lat) || !Number.isFinite(current.lon)) continue;
+      results.push(haversineKm(birth.lat, birth.lon, current.lat, current.lon));
+    }
+    return results;
+  }
+
+  const MIGRATION_DISTANCE_BUCKETS_KM = [50, 200, 1000, 5000, Infinity];
+  function migrationDistanceHistogram() {
+    const distances = migrationDistances();
+    const labels = ['<50', '50-200', '200-1k', '1k-5k', '5k+'];
+    const counts = new Array(labels.length).fill(0);
+    for (const d of distances) {
+      const idx = MIGRATION_DISTANCE_BUCKETS_KM.findIndex(max => d < max);
+      counts[idx === -1 ? counts.length - 1 : idx]++;
+    }
+    const avg = distances.length ? distances.reduce((a, b) => a + b, 0) / distances.length : null;
+    return { bars: labels.map((label, i) => ({ label, value: counts[i] })), avgKm: avg, count: distances.length };
+  }
+
+  // How many recorded family members were alive at the START of each
+  // decade spanning the tree's full recorded range -- "alive" meaning
+  // born by then and (if deceased) not yet dead. A rough population curve,
+  // not a census; it can only reflect the birth/death dates actually
+  // entered.
+  function populationOverTime() {
+    const withBirthYear = Object.values(data.people)
+      .map(p => {
+        const source = zodiacAdjustedBirthDate(p) || p.birthDate;
+        const birthYear = Number(birthYearOf(source));
+        if (!Number.isFinite(birthYear)) return null;
+        const deathYear = p.deathDate ? Number(birthYearOf(p.deathDate)) : null;
+        return { birthYear, deathYear: Number.isFinite(deathYear) ? deathYear : null };
+      })
+      .filter(Boolean);
+    if (!withBirthYear.length) return [];
+    const minYear = Math.min(...withBirthYear.map(p => p.birthYear));
+    const nowYear = new Date().getFullYear();
+    const maxYear = Math.max(...withBirthYear.map(p => p.deathYear != null ? p.deathYear : nowYear));
+    const startDecade = Math.floor(minYear / 10) * 10;
+    const endDecade = Math.floor(maxYear / 10) * 10;
+    const points = [];
+    for (let decade = startDecade; decade <= endDecade; decade += 10) {
+      const count = withBirthYear.filter(p =>
+        p.birthYear <= decade && (p.deathYear == null || p.deathYear >= decade)
+      ).length;
+      points.push({ decade, count });
+    }
+    return points;
+  }
+
+  // Three simple coverage percentages -- not trivia, but a practical
+  // pointer to where the tree still has gaps worth filling in.
+  function completenessStats() {
+    const people = Object.values(data.people);
+    const total = people.length || 1;
+    const withPhoto = people.filter(p => p.photo).length;
+    const withLocation = people.filter(p => birthLocationTextOf(p) || locationsOf(p).length).length;
+    const withStory = people.filter(p => storiesOf(p).length).length;
+    return [
+      { label: 'Has a photo', pct: withPhoto / total },
+      { label: 'Has a recorded location', pct: withLocation / total },
+      { label: 'Has at least one story', pct: withStory / total },
+    ];
+  }
+
+  // Average (child's birth year - parent's birth year) for every recorded
+  // parent/child edge, grouped by the PARENT's own generation -- shows how
+  // the age gap between generations has shifted as the tree descends.
+  function generationGapByGeneration() {
+    const levels = computeLevels();
+    const byGen = {};
+    for (const p of Object.values(data.people)) {
+      const childBY = Number(birthYearOf(zodiacAdjustedBirthDate(p) || p.birthDate));
+      if (!Number.isFinite(childBY)) continue;
+      for (const parentId of p.parents) {
+        const parent = data.people[parentId];
+        if (!parent) continue;
+        const parentBY = Number(birthYearOf(zodiacAdjustedBirthDate(parent) || parent.birthDate));
+        const gen = levels[parentId];
+        if (!Number.isFinite(parentBY) || gen == null) continue;
+        (byGen[gen] = byGen[gen] || { total: 0, count: 0 });
+        byGen[gen].total += (childBY - parentBY);
+        byGen[gen].count += 1;
+      }
+    }
+    return Object.keys(byGen).map(Number).sort((a, b) => a - b)
+      .map(gen => ({ gen, avgGap: byGen[gen].total / byGen[gen].count }));
+  }
+
+  // ---------- Stats View: small SVG chart primitives ----------
+  // Hand-rolled rather than a library: every chart here is a simple linear
+  // scale over a handful of points, and Stats View should render instantly
+  // without waiting on any lazy-loaded vendor file (unlike Globe/Migration,
+  // which genuinely need d3 + topojson for map projection).
+
+  const CHART_W = 320;
+  const CHART_H = 180;
+  const CHART_PAD = { top: 10, right: 12, bottom: 26, left: 30 };
+  const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
+    'var(--chart-5)', 'var(--chart-6)'];
+
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    return el;
+  }
+
+  function makeChartSvg() {
+    return svgEl('svg', { viewBox: `0 0 ${CHART_W} ${CHART_H}`, class: 'stat-chart-svg' });
+  }
+
+  function chartPlotArea() {
+    return {
+      x0: CHART_PAD.left, y0: CHART_PAD.top,
+      x1: CHART_W - CHART_PAD.right, y1: CHART_H - CHART_PAD.bottom,
+      w: CHART_W - CHART_PAD.left - CHART_PAD.right,
+      h: CHART_H - CHART_PAD.top - CHART_PAD.bottom,
+    };
+  }
+
+  function renderBarChart(points, options) {
+    const opts = options || {};
+    const svg = makeChartSvg();
+    const plot = chartPlotArea();
+    const maxVal = Math.max(1, ...points.map(p => p.value));
+    const barGap = 6;
+    const barW = (plot.w - barGap * (points.length - 1)) / points.length;
+    svg.appendChild(svgEl('line', {
+      x1: plot.x0, y1: plot.y1, x2: plot.x1, y2: plot.y1, class: 'stat-chart-axis',
+    }));
+    points.forEach((p, i) => {
+      const h = maxVal ? (p.value / maxVal) * plot.h : 0;
+      const x = plot.x0 + i * (barW + barGap);
+      const y = plot.y1 - h;
+      svg.appendChild(svgEl('rect', {
+        x, y, width: barW, height: h, rx: 3,
+        fill: opts.color || 'var(--accent)', class: 'stat-chart-bar',
+      }));
+      if (h > 0) {
+        const valueLabel = svgEl('text', {
+          x: x + barW / 2, y: y - 4, class: 'stat-chart-value-label', 'text-anchor': 'middle',
+        });
+        valueLabel.textContent = opts.formatValue ? opts.formatValue(p.value) : String(p.value);
+        svg.appendChild(valueLabel);
+      }
+      const label = svgEl('text', {
+        x: x + barW / 2, y: plot.y1 + 16, class: 'stat-chart-axis-label', 'text-anchor': 'middle',
+      });
+      label.textContent = p.label;
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  function renderLineChart(points, options) {
+    const opts = options || {};
+    const svg = makeChartSvg();
+    const plot = chartPlotArea();
+    if (!points.length) return svg;
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const maxY = Math.max(1, ...ys);
+    const minY = Math.min(0, ...ys);
+    const sx = v => plot.x0 + (maxX === minX ? plot.w / 2 : (v - minX) / (maxX - minX) * plot.w);
+    const sy = v => plot.y1 - (maxY === minY ? 0 : (v - minY) / (maxY - minY) * plot.h);
+    svg.appendChild(svgEl('line', { x1: plot.x0, y1: plot.y1, x2: plot.x1, y2: plot.y1, class: 'stat-chart-axis' }));
+    const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${sx(p.x)} ${sy(p.y)}`).join(' ');
+    svg.appendChild(svgEl('path', { d, class: 'stat-chart-line', fill: 'none' }));
+    points.forEach(p => {
+      svg.appendChild(svgEl('circle', { cx: sx(p.x), cy: sy(p.y), r: 3, class: 'stat-chart-dot' }));
+    });
+    const step = Math.max(1, Math.ceil(points.length / 6));
+    points.forEach((p, i) => {
+      if (i % step !== 0 && i !== points.length - 1) return;
+      const label = svgEl('text', {
+        x: sx(p.x), y: plot.y1 + 16, class: 'stat-chart-axis-label', 'text-anchor': 'middle',
+      });
+      label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  function renderAreaChart(points, options) {
+    const opts = options || {};
+    const svg = makeChartSvg();
+    const plot = chartPlotArea();
+    if (!points.length) return svg;
+    const xs = points.map(p => p.x);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const maxY = Math.max(1, ...points.map(p => p.y));
+    const sx = v => plot.x0 + (maxX === minX ? plot.w / 2 : (v - minX) / (maxX - minX) * plot.w);
+    const sy = v => plot.y1 - (v / maxY) * plot.h;
+    svg.appendChild(svgEl('line', { x1: plot.x0, y1: plot.y1, x2: plot.x1, y2: plot.y1, class: 'stat-chart-axis' }));
+    const linePart = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${sx(p.x)} ${sy(p.y)}`).join(' ');
+    const areaD = `${linePart} L ${sx(maxX)} ${plot.y1} L ${sx(minX)} ${plot.y1} Z`;
+    svg.appendChild(svgEl('path', { d: areaD, class: 'stat-chart-area' }));
+    svg.appendChild(svgEl('path', { d: linePart, class: 'stat-chart-line', fill: 'none' }));
+    const step = Math.max(1, Math.ceil(points.length / 6));
+    points.forEach((p, i) => {
+      if (i % step !== 0 && i !== points.length - 1) return;
+      const label = svgEl('text', {
+        x: sx(p.x), y: plot.y1 + 16, class: 'stat-chart-axis-label', 'text-anchor': 'middle',
+      });
+      label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  // Scatter with a light moving-average trend line overlaid -- the trend
+  // is computed over a window of the nearest third of the (x-sorted)
+  // points, purely visual, not a statistical fit.
+  function renderScatterChart(points, options) {
+    const opts = options || {};
+    const svg = makeChartSvg();
+    const plot = chartPlotArea();
+    if (!points.length) return svg;
+    const sorted = points.slice().sort((a, b) => a.x - b.x);
+    const xs = sorted.map(p => p.x);
+    const ys = sorted.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = 0, maxY = Math.max(1, ...ys);
+    const sx = v => plot.x0 + (maxX === minX ? plot.w / 2 : (v - minX) / (maxX - minX) * plot.w);
+    const sy = v => plot.y1 - (maxY === minY ? 0 : (v - minY) / (maxY - minY) * plot.h);
+    svg.appendChild(svgEl('line', { x1: plot.x0, y1: plot.y1, x2: plot.x1, y2: plot.y1, class: 'stat-chart-axis' }));
+    if (sorted.length >= 5) {
+      const windowSize = Math.max(3, Math.round(sorted.length / 3));
+      const trendPoints = sorted.map((p, i) => {
+        const lo = Math.max(0, i - Math.floor(windowSize / 2));
+        const hi = Math.min(sorted.length, lo + windowSize);
+        const slice = sorted.slice(lo, hi);
+        const avgY = slice.reduce((a, b) => a + b.y, 0) / slice.length;
+        return { x: p.x, y: avgY };
+      });
+      const trendD = trendPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${sx(p.x)} ${sy(p.y)}`).join(' ');
+      svg.appendChild(svgEl('path', { d: trendD, class: 'stat-chart-trend', fill: 'none' }));
+    }
+    sorted.forEach(p => {
+      svg.appendChild(svgEl('circle', { cx: sx(p.x), cy: sy(p.y), r: 3, class: 'stat-chart-dot' }));
+    });
+    const step = Math.max(1, Math.ceil(sorted.length / 6));
+    sorted.forEach((p, i) => {
+      if (i % step !== 0 && i !== sorted.length - 1) return;
+      const label = svgEl('text', {
+        x: sx(p.x), y: plot.y1 + 16, class: 'stat-chart-axis-label', 'text-anchor': 'middle',
+      });
+      label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  function renderDonutChart(segments) {
+    const size = 180;
+    const cx = size / 2, cy = size / 2, rOuter = 80, rInner = 48;
+    const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, class: 'stat-chart-svg stat-donut-svg' });
+    const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+    let angle = -Math.PI / 2;
+    segments.forEach((s, i) => {
+      const frac = s.value / total;
+      const nextAngle = angle + frac * Math.PI * 2;
+      const large = (nextAngle - angle) > Math.PI ? 1 : 0;
+      const p0 = [cx + rOuter * Math.cos(angle), cy + rOuter * Math.sin(angle)];
+      const p1 = [cx + rOuter * Math.cos(nextAngle), cy + rOuter * Math.sin(nextAngle)];
+      const p2 = [cx + rInner * Math.cos(nextAngle), cy + rInner * Math.sin(nextAngle)];
+      const p3 = [cx + rInner * Math.cos(angle), cy + rInner * Math.sin(angle)];
+      const d = frac >= 0.999
+        ? `M ${cx - rOuter} ${cy} A ${rOuter} ${rOuter} 0 1 1 ${cx + rOuter} ${cy}
+           A ${rOuter} ${rOuter} 0 1 1 ${cx - rOuter} ${cy}
+           M ${cx - rInner} ${cy} A ${rInner} ${rInner} 0 1 0 ${cx + rInner} ${cy}
+           A ${rInner} ${rInner} 0 1 0 ${cx - rInner} ${cy} Z`
+        : `M ${p0[0]} ${p0[1]} A ${rOuter} ${rOuter} 0 ${large} 1 ${p1[0]} ${p1[1]}
+           L ${p2[0]} ${p2[1]} A ${rInner} ${rInner} 0 ${large} 0 ${p3[0]} ${p3[1]} Z`;
+      const path = svgEl('path', { d, fill: CHART_COLORS[i % CHART_COLORS.length] });
+      const title = svgEl('title', {});
+      title.textContent = `${s.emoji ? s.emoji + ' ' : ''}${s.label}: ${s.value}`;
+      path.appendChild(title);
+      svg.appendChild(path);
+      angle = nextAngle;
+    });
+    return svg;
+  }
+
+  function renderGaugeBars(rows) {
+    const wrap = document.createElement('div');
+    wrap.className = 'stat-gauge-list';
+    rows.forEach((row, i) => {
+      const line = document.createElement('div');
+      line.className = 'stat-gauge-row';
+      const label = document.createElement('div');
+      label.className = 'stat-gauge-label';
+      label.textContent = row.label;
+      const track = document.createElement('div');
+      track.className = 'stat-gauge-track';
+      const fill = document.createElement('div');
+      fill.className = 'stat-gauge-fill';
+      fill.style.width = `${Math.round(row.pct * 100)}%`;
+      fill.style.background = CHART_COLORS[i % CHART_COLORS.length];
+      track.appendChild(fill);
+      const pctLabel = document.createElement('div');
+      pctLabel.className = 'stat-gauge-pct';
+      pctLabel.textContent = `${Math.round(row.pct * 100)}%`;
+      line.append(label, track, pctLabel);
+      wrap.appendChild(line);
+    });
+    return wrap;
+  }
+
+  // ---------- Stats View: card assembly ----------
+
+  // caption is shown under the chart when contentEl is present, or AS the
+  // empty-state message when it's null -- always the right string for
+  // whichever case actually applies, chosen by each call site below (never
+  // the same string doing double duty as both a chart caption and an
+  // explanation of why there's no chart).
+  function buildStatCard(title, contentEl, caption) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    const heading = document.createElement('h3');
+    heading.className = 'stat-card-title';
+    heading.textContent = title;
+    card.appendChild(heading);
+    if (contentEl) {
+      card.appendChild(contentEl);
+      if (caption) {
+        const note = document.createElement('p');
+        note.className = 'stat-card-note';
+        note.textContent = caption;
+        card.appendChild(note);
+      }
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'stat-card-empty';
+      empty.textContent = caption || 'Not enough data yet.';
+      card.appendChild(empty);
+    }
+    return card;
+  }
+
+  function renderStatsView() {
+    const hasPeople = Object.keys(data.people).length > 0;
+    els.emptyState.hidden = hasPeople;
+    els.statsContainer.innerHTML = '';
+    if (!hasPeople) return;
+
+    const cards = [];
+
+    const siblingDist = siblingCountDistribution();
+    const hasSiblingData = siblingDist.some(d => d.value > 0);
+    cards.push(buildStatCard('Family size',
+      hasSiblingData ? renderBarChart(siblingDist) : null,
+      hasSiblingData
+        ? 'Number of children per family, across every recorded family.'
+        : 'No families with recorded children yet.'));
+
+    const longevity = longevityPoints();
+    cards.push(buildStatCard('Longevity over time',
+      longevity.length ? renderScatterChart(longevity.map(p => ({ x: p.birthYear, y: p.age }))) : null,
+      longevity.length
+        ? 'Age at death vs. birth year, with a trend line, for everyone with a recorded death.'
+        : 'Needs at least one person with a recorded death date.'));
+
+    const zodiac = zodiacCounts();
+    if (zodiac.length) {
+      const donutWrap = document.createElement('div');
+      donutWrap.className = 'stat-donut-wrap';
+      donutWrap.appendChild(renderDonutChart(zodiac.map(z => ({ ...z, emoji: ZODIAC_EMOJI[z.label] }))));
+      const legend = document.createElement('div');
+      legend.className = 'stat-donut-legend';
+      zodiac.forEach((z, i) => {
+        const item = document.createElement('div');
+        item.className = 'stat-donut-legend-item';
+        item.innerHTML = `<span class="stat-donut-swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${ZODIAC_EMOJI[z.label] || ''} ${z.label} (${z.value})`;
+        legend.appendChild(item);
+      });
+      donutWrap.appendChild(legend);
+      cards.push(buildStatCard('Chinese zodiac breakdown', donutWrap));
+    } else {
+      cards.push(buildStatCard('Chinese zodiac breakdown', null, 'No one has a zodiac sign recorded yet.'));
+    }
+
+    const familySizeTrend = familySizeTrendByGeneration();
+    cards.push(buildStatCard('Family size by generation',
+      familySizeTrend.length >= 2
+        ? renderLineChart(familySizeTrend.map(d => ({ x: d.gen, y: d.avg })), { formatX: v => `Gen ${v + 1}` })
+        : null,
+      familySizeTrend.length >= 2
+        ? 'Average children per family, generation by generation.'
+        : 'Needs recorded families across at least two generations.'));
+
+    const migration = migrationDistanceHistogram();
+    cards.push(buildStatCard('Migration distance (km)',
+      migration.count ? renderBarChart(migration.bars, { color: 'var(--chart-2)' }) : null,
+      migration.count
+        ? `Average ${Math.round(migration.avgKm)} km (${Math.round(migration.avgKm / KM_PER_MI)} mi) from birthplace, across ${migration.count} people with both recorded.`
+        : 'Needs a birthplace and a separately recorded current location, both with coordinates.'));
+
+    const population = populationOverTime();
+    cards.push(buildStatCard('Population over time',
+      population.length >= 2 ? renderAreaChart(population.map(d => ({ x: d.decade, y: d.count }))) : null,
+      population.length >= 2
+        ? 'How many recorded family members were alive at the start of each decade.'
+        : 'Needs recorded birth years spanning at least two decades.'));
+
+    const genGap = generationGapByGeneration();
+    cards.push(buildStatCard('Generation gap',
+      genGap.length
+        ? renderBarChart(genGap.map(d => ({ gen: d.gen, label: `Gen ${d.gen + 1}`, value: Math.round(d.avgGap) })),
+          { color: 'var(--chart-3)' })
+        : null,
+      genGap.length
+        ? 'Average parent age (in years) at their child\'s birth, by the parent\'s own generation.'
+        : 'Needs both a parent and child with recorded birth dates.'));
+
+    cards.push(buildStatCard('Data completeness', renderGaugeBars(completenessStats())));
+
+    for (const card of cards) els.statsContainer.appendChild(card);
+  }
 
   // ---------- Seed sample data on first run ----------
 
