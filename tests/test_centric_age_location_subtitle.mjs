@@ -108,7 +108,7 @@ try {
 
   console.log('\n=== Ring axis labels reflect the real-distance-band scheme ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
-  for (const expected of ['5–25 km', '25–100 km', '100–500 km', '500+ km / unknown']) {
+  for (const expected of ['5–25 km (3–16 mi)', '25–100 km (16–62 mi)', '100–500 km (62–311 mi)', '500+ km (311+ mi) / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got labels: ${JSON.stringify(labels)}`);
   }
   console.log('Confirmed: ring labels =', JSON.stringify(labels));

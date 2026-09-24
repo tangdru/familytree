@@ -59,7 +59,7 @@ try {
   console.log('=== Ring labels: 5 real-distance bands, 5x geometric progression ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('labels:', JSON.stringify(labels));
-  for (const expected of ['< 5 km', '5–25 km', '25–100 km', '100–500 km', '500+ km / unknown']) {
+  for (const expected of ['< 5 km (< 3 mi)', '5–25 km (3–16 mi)', '25–100 km (16–62 mi)', '100–500 km (62–311 mi)', '500+ km (311+ mi) / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got: ${JSON.stringify(labels)}`);
   }
   if (labels.length !== 5) throw new Error(`Expected exactly 5 ring labels, got ${labels.length}`);
