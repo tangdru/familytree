@@ -1,32 +1,40 @@
 import { chromium } from 'playwright-core';
 
 // Centric view's Location metric groups by real great-circle distance (see
-// centricLocationRing/haversineKm in app.js) -- a deliberate switch away
-// from the old text heuristic ("same city"/"same region"/"same country"/
-// "same hemisphere"), deferred until enough records had real coordinates
-// to make the distance math worthwhile (see git history / BACKLOG.md).
-// Each fixture below sits at a real-world distance from the center person
-// clearly inside its intended band, with margin from the 50/200/1000/5000 km
-// edges so this isn't sensitive to haversine's small approximation error.
+// centricLocationRing/haversineKm in app.js) in a 5x geometric progression
+// -- 5 / 25 / 100 / 500 km -- tight enough at ring 1 to actually mean "the
+// same locality," not just "somewhere in the region."
+//
+// Each fixture is placed by a PURE LATITUDE offset from the center (same
+// longitude): with no longitude change, haversine's central angle reduces
+// exactly to the latitude delta itself (a = sin²(Δlat/2), so
+// atan2(sqrt(a),sqrt(1-a)) = Δlat/2 exactly), so distance = R * Δlat
+// (radians) precisely -- no approximation error to worry about, unlike a
+// real named city pair.
 function person(id, name, year, loc) {
   return {
     id, name, birthDate: year ? `${year}-01-01` : '', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
     locations: loc ? [loc] : [],
   };
 }
+const CENTER_LAT = 42.3601, CENTER_LON = -71.0589; // Boston, Massachusetts
+const R = 6371;
+function latOffsetFor(km) {
+  return CENTER_LAT + (km / R) * (180 / Math.PI);
+}
+
 const people = {};
 const add = (p) => { people[p.id] = p; };
-// Center: Boston, Massachusetts.
-add(person('center', 'Alice Center', 1970, { text: 'Boston, Massachusetts', lat: 42.3601, lon: -71.0589 }));
-// ~7 km away -- well inside the <50 km band.
-add(person('band1', 'Cam Nearby', 1975, { text: 'Cambridge, Massachusetts', lat: 42.3736, lon: -71.1097 }));
-// ~69 km away -- inside the 50-200 km band.
-add(person('band2', 'Prov Regional', 1978, { text: 'Providence, Rhode Island', lat: 41.8240, lon: -71.4128 }));
-// ~306 km away -- inside the 200-1,000 km band.
-add(person('band3', 'Nyc Distant', 1980, { text: 'New York, New York', lat: 40.7128, lon: -74.0060 }));
-// ~1,720 km away -- inside the 1,000-5,000 km band.
-add(person('band4', 'Chi Faraway', 1982, { text: 'Chicago, Illinois', lat: 41.8781, lon: -87.6298 }));
-// ~16,000 km away -- inside the 5,000+ km band.
+add(person('center', 'Alice Center', 1970, { text: 'Boston, Massachusetts', lat: CENTER_LAT, lon: CENTER_LON }));
+// Exactly 2 km away -- inside the <5 km band.
+add(person('band1', 'Two Km Away', 1975, { text: '~2 km away', lat: latOffsetFor(2), lon: CENTER_LON }));
+// Exactly 12 km away -- inside the 5-25 km band.
+add(person('band2', 'Twelve Km Away', 1978, { text: '~12 km away', lat: latOffsetFor(12), lon: CENTER_LON }));
+// Exactly 50 km away -- inside the 25-100 km band.
+add(person('band3', 'Fifty Km Away', 1980, { text: '~50 km away', lat: latOffsetFor(50), lon: CENTER_LON }));
+// Exactly 225 km away -- inside the 100-500 km band.
+add(person('band4', 'Far Away', 1982, { text: '~225 km away', lat: latOffsetFor(225), lon: CENTER_LON }));
+// ~16,000 km away -- inside the 500+ km band.
 add(person('band5', 'Syd Farthest', 1985, { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 }));
 // No coordinates at all -- must land in the same outermost ring as band5.
 add(person('noLoc', 'No Location', 1990, null));
@@ -48,10 +56,10 @@ try {
   await page.click('.centric-metric-btn[data-metric="location"]');
   await page.waitForTimeout(700);
 
-  console.log('=== Ring labels: 5 real-distance bands ===');
+  console.log('=== Ring labels: 5 real-distance bands, 5x geometric progression ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('labels:', JSON.stringify(labels));
-  for (const expected of ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']) {
+  for (const expected of ['< 5 km (< 3 mi)', '5–25 km (3–16 mi)', '25–100 km (16–62 mi)', '100–500 km (62–311 mi)', '500+ km (311+ mi) / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got: ${JSON.stringify(labels)}`);
   }
   if (labels.length !== 5) throw new Error(`Expected exactly 5 ring labels, got ${labels.length}`);
@@ -66,7 +74,7 @@ try {
     return Math.hypot(dx, dy);
   }, id);
 
-  console.log('\n=== Ring order: <50km < 50-200km < 200-1,000km < 1,000-5,000km < 5,000+km/unknown ===');
+  console.log('\n=== Ring order: <5km < 5-25km < 25-100km < 100-500km < 500+km/unknown ===');
   const d = {};
   for (const id of ['band1', 'band2', 'band3', 'band4', 'band5', 'noLoc']) {
     d[id] = await ringOf(id);

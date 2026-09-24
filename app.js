@@ -5315,15 +5315,20 @@
   }
 
   // Upper bound (km) of each ring except the last, which catches everyone
-  // farther than CENTRIC_DISTANCE_BANDS_KM's last finite value.
-  const CENTRIC_DISTANCE_BANDS_KM = [50, 200, 1000, 5000, Infinity];
+  // farther than CENTRIC_DISTANCE_BANDS_KM's last finite value. A 5x
+  // geometric progression (5 -> 25 -> 100 -> 500), not linear -- the first
+  // ring needs to be tight enough to actually mean "the same locality"
+  // (same town/neighborhood; two people geocoded to the same city
+  // typically land within a couple km of each other), while still reaching
+  // planetary scale by ring 4 without needing a 6th ring to get there.
+  const CENTRIC_DISTANCE_BANDS_KM = [5, 25, 100, 500, Infinity];
 
   // Location-proximity ring, a real great-circle distance between two
   // {lat, lon} coordinates (see currentLocationCoordsOf) rather than the
   // old text-heuristic ("same city"/"same country"/...) this replaced --
   // deferred until enough records had real coordinates to make the
   // distance math worthwhile (see git history). Ring 5 is both "genuinely
-  // 5,000+ km away" and "unlocatable" (either person missing usable
+  // 500+ km away" and "unlocatable" (either person missing usable
   // coordinates) -- same fallback the old text version gave anyone with no
   // location set at all.
   function centricLocationRing(centerCoords, personCoords) {
@@ -5335,12 +5340,43 @@
 
   // What a ring actually means for the current metric, shown as an axis
   // label next to its gridline -- ring 0 (the center person) never gets a
-  // label since there's no gridline drawn at radius 0.
-  function centricRingLabel(metric, ringIndex) {
-    const labels = metric === 'location'
-      ? ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']
-      : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
-    return labels[ringIndex - 1] || labels[labels.length - 1];
+  // label since there's no gridline drawn at radius 0. Returns an array of
+  // 1-2 lines: the age metric is a single line, but the location metric
+  // returns [km line, mi line] -- stacking them keeps each line's own
+  // width down near what a km-only label used to be, instead of a single
+  // line double the width, which is what actually collides with the next
+  // ring's label when rings sit close together (see setCentricRingLabel).
+  function centricRingLabelLines(metric, ringIndex) {
+    if (metric !== 'location') {
+      const labels = ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
+      return [labels[ringIndex - 1] || labels[labels.length - 1]];
+    }
+    const km = ['< 5 km', '5–25 km', '25–100 km', '100–500 km', '500+ km'];
+    const mi = [' (< 3 mi)', ' (3–16 mi)', ' (16–62 mi)', ' (62–311 mi)', ' (311+ mi) / unknown'];
+    const idx = Math.min(ringIndex - 1, km.length - 1);
+    return [km[idx], mi[idx]];
+  }
+
+  // Renders centricRingLabelLines' output into a <text> element as stacked
+  // tspans (one line, or two centered around the text's own y) rather than
+  // a single wide textContent assignment.
+  function setCentricRingLabel(label, metric, ringIndex) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const lines = centricRingLabelLines(metric, ringIndex);
+    while (label.firstChild) label.removeChild(label.firstChild);
+    const x = label.getAttribute('x');
+    lines.forEach((line, i) => {
+      const tspan = document.createElementNS(svgNS, 'tspan');
+      tspan.setAttribute('x', x);
+      if (lines.length === 2) tspan.setAttribute('dy', i === 0 ? '-0.5em' : '1.1em');
+      if (i === 1) {
+        tspan.setAttribute('font-size', '12');
+        tspan.setAttribute('font-weight', '600');
+        tspan.setAttribute('opacity', '0.75');
+      }
+      tspan.textContent = line;
+      label.appendChild(tspan);
+    });
   }
 
   // Reads a --centric-inner/--centric-outer custom property (a plain
@@ -5535,7 +5571,7 @@
         // relative to this metric's own ring count, so ring 4 is the
         // same fixed shade in both Age and Location.
         disc.setAttribute('fill', rgbCss(mixColors(lightColor, darkColor, centricColorT(idx))));
-        label.textContent = centricRingLabel(centricMetric, idx);
+        setCentricRingLabel(label, centricMetric, idx);
       }
     }
 

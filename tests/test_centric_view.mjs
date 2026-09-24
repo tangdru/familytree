@@ -1,14 +1,18 @@
 import { chromium } from 'playwright-core';
 
 // A: center candidate, born 1970, lives Boston (42.3601, -71.0589).
-// B: age diff 2 (ring 1), ~1,720 km away (Chicago) by real distance.
-// C: age diff 12 (ring 2), same coordinates as A (ring 1 by distance).
-// D: age diff 25 (ring 3), ~5,800 km away (Paris).
-// E: no birthdate, no location -> ring 4 (age) / ring 5 (distance, unknown).
+// B: age diff 2 (ring 1), ~12 km away by real distance (5-25 km band).
+// C: age diff 12 (ring 2), same coordinates as A (<5 km band).
+// D: age diff 25 (ring 3), ~5,800 km away (Paris, the 500+ km band).
+// E: no birthdate, no location -> ring 4 (age) / ring 5 (distance, unknown,
+//    same outermost band as D).
 const A = 'A', B = 'B', C = 'C', D = 'D', E = 'E';
 const people = {
   [A]: { id: A, name: 'Alice Center', birthDate: '1970-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }] },
-  [B]: { id: B, name: 'Bob Near', birthDate: '1972-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Chicago, USA', lat: 41.8781, lon: -87.6298 }] },
+  // Exactly 12 km north of A (pure latitude offset -- see
+  // test_centric_location_5rings.mjs's comment on why that gives an exact
+  // haversine distance with no approximation error).
+  [B]: { id: B, name: 'Bob Near', birthDate: '1972-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: '~12 km away', lat: 42.468016, lon: -71.0589 }] },
   [C]: { id: C, name: 'Carol Mid', birthDate: '1982-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }] },
   [D]: { id: D, name: 'Dave Far', birthDate: '1995-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Paris, France', lat: 48.8566, lon: 2.3522 }] },
   [E]: { id: E, name: 'Eve Unknown', birthDate: '', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [] },
@@ -85,9 +89,9 @@ try {
   const activeBtn = await page.evaluate(() => document.querySelector('.centric-metric-btn.active').dataset.metric);
   if (activeBtn !== 'location') throw new Error('Expected the Location button to become active');
   pos = await readPositions();
-  const dC2 = dist(pos.A, pos.C); // same coordinates -> < 50 km band
-  const dB2 = dist(pos.A, pos.B); // ~1,720 km (Chicago) -> 1,000-5,000 km band
-  const dD2 = dist(pos.A, pos.D); // ~5,800 km (Paris) -> 5,000+ km band
+  const dC2 = dist(pos.A, pos.C); // same coordinates -> <5 km band
+  const dB2 = dist(pos.A, pos.B); // ~12 km -> 5-25 km band
+  const dD2 = dist(pos.A, pos.D); // ~5,800 km (Paris) -> 500+ km band
   const dE2 = dist(pos.A, pos.E); // no location at all -> 5,000+ km band too
   console.log(`distances from center by location -- B:${dB2.toFixed(0)} C:${dC2.toFixed(0)} D:${dD2.toFixed(0)} E:${dE2.toFixed(0)}`);
   if (!(dC2 < dB2 && dB2 < dD2)) {
