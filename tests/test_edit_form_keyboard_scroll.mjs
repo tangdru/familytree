@@ -108,6 +108,94 @@ try {
     throw new Error(`Expected #personForm to remain internally scrollable, got overflow-y: ${finalScrollable.overflowY}`);
   }
 
+  console.log('\n=== Regression: scrollFocusedFieldIntoView never touches document/body scroll ===');
+  await page.click('#cancelBtn'); // close the edit form left open by the previous section
+  await page.waitForTimeout(200);
+  // Element.scrollIntoView() walks every scrollable ancestor to satisfy
+  // visibility, and html/body -- despite being `overflow: hidden` -- still
+  // count as scroll containers per the CSS Overflow spec, so a naive
+  // el.scrollIntoView() call can end up nudging document.body/
+  // documentElement's own scrollTop. That's the exact mechanism that left
+  // the sticky .toolbar pinned above the visible area after editing and
+  // saving a person, reported in practice: this function fires repeatedly
+  // (every focus, every keyboard-driven viewport resize), so it could keep
+  // re-introducing that scroll even after resetPageScroll() already ran on
+  // modal close. Spy on the real Element.scrollIntoView to prove the fix
+  // no longer calls it at all -- not just that positions happen to work
+  // out in Chromium, which can't reproduce the underlying Mobile Safari
+  // quirk in the first place.
+  await page.evaluate(() => {
+    window.__scrollIntoViewCalls = 0;
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (...args) {
+      window.__scrollIntoViewCalls++;
+      return orig.apply(this, args);
+    };
+  });
+  await page.click('.person-card:has-text("Jane Doe")');
+  await page.waitForTimeout(200);
+  await page.click('#viewEditBtn');
+  await page.waitForTimeout(200);
+  await page.click('#birthLocationInput');
+  await page.waitForTimeout(100);
+  await page.setViewportSize({ width: 400, height: 320 });
+  await page.waitForTimeout(200);
+  await page.click('#deathInput');
+  await page.setViewportSize({ width: 400, height: 800 });
+  await page.waitForTimeout(200);
+  await page.click('#addLocationBtn');
+  await page.locator('.location-row-input').last().click();
+  await page.waitForTimeout(100);
+  await page.evaluate(() => window.visualViewport.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(100);
+  const spyResult = await page.evaluate(() => ({
+    calls: window.__scrollIntoViewCalls,
+    bodyScrollTop: document.body.scrollTop,
+    docScrollTop: document.documentElement.scrollTop,
+    windowScrollY: window.scrollY,
+  }));
+  console.log(JSON.stringify(spyResult));
+  if (spyResult.calls !== 0) {
+    throw new Error(`Expected scrollFocusedFieldIntoView to never call the native Element.scrollIntoView, but it was called ${spyResult.calls} time(s)`);
+  }
+  if (spyResult.bodyScrollTop !== 0 || spyResult.docScrollTop !== 0 || spyResult.windowScrollY !== 0) {
+    throw new Error(`Expected document/body scroll to stay untouched throughout, got ${JSON.stringify(spyResult)}`);
+  }
+  console.log('Confirmed: the keyboard-scroll fix never calls the native scrollIntoView, so it cannot leak into document/body scroll.');
+
+  console.log('\n=== The actual reported flow: edit, save, close back to Traditional Tree -- header stays put ===');
+  await page.click('#cancelBtn'); // close the edit form left open by the previous section
+  await page.waitForTimeout(200);
+  await page.click('.person-card:has-text("Jane Doe")');
+  await page.waitForTimeout(200);
+  await page.click('#viewEditBtn');
+  await page.waitForTimeout(200);
+  await page.click('#birthLocationInput');
+  await page.waitForTimeout(100);
+  await page.setViewportSize({ width: 400, height: 320 }); // keyboard opens
+  await page.waitForTimeout(200);
+  await page.keyboard.type(', extra');
+  const saveBtn = page.locator('button[type="submit"][form="personForm"]');
+  await saveBtn.click(); // saveData() blurs, closes the edit modal, reopens the read-only view
+  await page.setViewportSize({ width: 400, height: 800 }); // keyboard closes, async per resetPageScroll's own comment
+  await page.waitForTimeout(300);
+  await page.click('#viewCloseBtn'); // "returning to the trad view"
+  await page.waitForTimeout(200);
+  const headerState = await page.evaluate(() => ({
+    toolbarRect: document.querySelector('.toolbar').getBoundingClientRect().toJSON(),
+    bodyScrollTop: document.body.scrollTop,
+    docScrollTop: document.documentElement.scrollTop,
+    windowScrollY: window.scrollY,
+  }));
+  console.log(JSON.stringify(headerState));
+  if (headerState.toolbarRect.top !== 0) {
+    throw new Error(`Expected the sticky toolbar to sit at the very top after returning to Traditional Tree, got top: ${headerState.toolbarRect.top}`);
+  }
+  if (headerState.bodyScrollTop !== 0 || headerState.docScrollTop !== 0 || headerState.windowScrollY !== 0) {
+    throw new Error(`Expected no leftover page scroll after the edit/save/close round-trip, got ${JSON.stringify(headerState)}`);
+  }
+  console.log('Confirmed: the header stays visible after the exact reported edit -> save -> close-back-to-tree flow.');
+
   console.log('\nERRORS:', errors);
   if (errors.length) throw new Error('Unexpected page errors: ' + JSON.stringify(errors));
   console.log('\nALL PASSED');

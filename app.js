@@ -2438,9 +2438,32 @@
   // scrollFooterIntoView: once on focus, and again once the keyboard's
   // viewport resize actually settles, since the first call can run before
   // the keyboard has finished animating in.
+  //
+  // Deliberately NOT el.scrollIntoView(): that walks every scrollable
+  // ancestor to satisfy visibility, and html/body -- despite being
+  // `overflow: hidden` -- still count as scroll containers per the CSS
+  // Overflow spec, so it can end up nudging document.body/documentElement's
+  // own scrollTop on some browsers. That's exactly the mechanism
+  // resetPageScroll() already exists to clean up after (see its own
+  // comment on Mobile Safari scrolling the page for keyboard avoidance) --
+  // but this function fires on the same focus/resize events repeatedly
+  // (e.g. re-focusing the field after picking a location suggestion),
+  // so it could keep re-introducing that scroll after resetPageScroll()
+  // already ran on modal close, leaving the sticky .toolbar pinned above
+  // the visible area once the modal closes. Computing the scroll offset by
+  // hand and applying it straight to els.form.scrollTop can only ever move
+  // #personForm's own internal scroll -- there is no code path left by
+  // which this function can touch document/body scroll at all.
   function scrollFocusedFieldIntoView() {
     const el = document.activeElement;
-    if (el && els.form.contains(el)) el.scrollIntoView({ block: 'nearest' });
+    if (!el || !els.form.contains(el)) return;
+    const formRect = els.form.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    if (elRect.top < formRect.top) {
+      els.form.scrollTop -= (formRect.top - elRect.top);
+    } else if (elRect.bottom > formRect.bottom) {
+      els.form.scrollTop += (elRect.bottom - formRect.bottom);
+    }
   }
   els.form.addEventListener('focusin', scrollFocusedFieldIntoView);
 
