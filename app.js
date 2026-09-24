@@ -5315,15 +5315,20 @@
   }
 
   // Upper bound (km) of each ring except the last, which catches everyone
-  // farther than CENTRIC_DISTANCE_BANDS_KM's last finite value.
-  const CENTRIC_DISTANCE_BANDS_KM = [50, 200, 1000, 5000, Infinity];
+  // farther than CENTRIC_DISTANCE_BANDS_KM's last finite value. A 5x
+  // geometric progression (5 -> 25 -> 100 -> 500), not linear -- the first
+  // ring needs to be tight enough to actually mean "the same locality"
+  // (same town/neighborhood; two people geocoded to the same city
+  // typically land within a couple km of each other), while still reaching
+  // planetary scale by ring 4 without needing a 6th ring to get there.
+  const CENTRIC_DISTANCE_BANDS_KM = [5, 25, 100, 500, Infinity];
 
   // Location-proximity ring, a real great-circle distance between two
   // {lat, lon} coordinates (see currentLocationCoordsOf) rather than the
   // old text-heuristic ("same city"/"same country"/...) this replaced --
   // deferred until enough records had real coordinates to make the
   // distance math worthwhile (see git history). Ring 5 is both "genuinely
-  // 5,000+ km away" and "unlocatable" (either person missing usable
+  // 500+ km away" and "unlocatable" (either person missing usable
   // coordinates) -- same fallback the old text version gave anyone with no
   // location set at all.
   function centricLocationRing(centerCoords, personCoords) {
@@ -5338,7 +5343,7 @@
   // label since there's no gridline drawn at radius 0.
   function centricRingLabel(metric, ringIndex) {
     const labels = metric === 'location'
-      ? ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']
+      ? ['< 5 km', '5–25 km', '25–100 km', '100–500 km', '500+ km / unknown']
       : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }

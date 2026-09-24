@@ -6,18 +6,19 @@ function person(id, name, year, loc) {
 const people = {};
 const add = (p) => { people[p.id] = p; };
 // Location metric now groups by real great-circle distance (see
-// centricLocationRing/haversineKm in app.js), not the old "same city/
-// country/hemisphere" text heuristic -- each fixture below sits at a
-// real-world distance from the center clearly inside its intended band.
+// centricLocationRing/haversineKm in app.js), a 5x geometric progression
+// (5/25/100/500 km) -- not the old "same city/country/hemisphere" text
+// heuristic -- each fixture below sits at a real-world distance from the
+// center clearly inside its intended band.
 // Center: born 1970, Boston, Massachusetts.
 add(person('center', 'Alice Center', 1970, { text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }));
-// ~7 km away -- inside the <50 km band.
+// ~7 km away -- inside the 5-25 km band.
 add(person('sameCity', 'Sam City', 1975, { text: 'Cambridge, USA', lat: 42.3736, lon: -71.1097 }));
-// ~69 km away -- inside the 50-200 km band.
+// ~69 km away -- inside the 25-100 km band.
 add(person('sameCountry', 'Cody Country', 1980, { text: 'Providence, USA', lat: 41.8240, lon: -71.4128 }));
-// ~306 km away -- inside the 200-1,000 km band.
+// ~306 km away -- inside the 100-500 km band.
 add(person('sameHemi', 'Hemi North', 1982, { text: 'New York, USA', lat: 40.7128, lon: -74.0060 }));
-// ~16,000 km away -- inside the 5,000+ km band.
+// ~16,000 km away -- inside the 500+ km band.
 add(person('otherHemi', 'Sydney South', 1985, { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 }));
 // No location at all.
 add(person('noLoc', 'No Location', 1990, null));
@@ -103,11 +104,11 @@ try {
   if (Math.abs(dOtherHemi - dNoLoc) > 2) {
     throw new Error(`Expected the farthest real distance and noLoc in the same outermost ring, got distances ${dOtherHemi} vs ${dNoLoc}`);
   }
-  console.log('Confirmed: <50km < 50-200km < 200-1,000km < 5,000+km, and the farthest real distance lands with no-location in the outermost ring.');
+  console.log('Confirmed: 5-25km < 25-100km < 100-500km < 500+km, and the farthest real distance lands with no-location in the outermost ring.');
 
   console.log('\n=== Ring axis labels reflect the real-distance-band scheme ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
-  for (const expected of ['< 50 km', '50–200 km', '200–1,000 km', '5,000+ km / unknown']) {
+  for (const expected of ['5–25 km', '25–100 km', '100–500 km', '500+ km / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got labels: ${JSON.stringify(labels)}`);
   }
   console.log('Confirmed: ring labels =', JSON.stringify(labels));
