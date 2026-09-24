@@ -7391,12 +7391,20 @@
   // scale over a handful of points, and Stats View should render instantly
   // without waiting on any lazy-loaded vendor file (unlike Globe/Migration,
   // which genuinely need d3 + topojson for map projection).
+  //
+  // Styled per the dataviz skill (Information Is Beautiful-leaning forms,
+  // still held to its accessibility floor): the validated 8-hue categorical
+  // palette (references/palette.md) in fixed order, never cycled; a pulled-
+  // out headline number per card (see renderStatHeadline) instead of
+  // leading straight into the chart; and a direct annotation on the one
+  // point each chart's story is actually about (see annotateExtreme/
+  // annotatePeak) rather than leaving the reader to find it themselves.
 
   const CHART_W = 320;
   const CHART_H = 180;
   const CHART_PAD = { top: 10, right: 12, bottom: 26, left: 30 };
   const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
-    'var(--chart-5)', 'var(--chart-6)'];
+    'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)'];
 
   function svgEl(tag, attrs) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -7404,17 +7412,57 @@
     return el;
   }
 
-  function makeChartSvg() {
-    return svgEl('svg', { viewBox: `0 0 ${CHART_W} ${CHART_H}`, class: 'stat-chart-svg' });
+  function makeChartSvg(w, h) {
+    return svgEl('svg', { viewBox: `0 0 ${w || CHART_W} ${h || CHART_H}`, class: 'stat-chart-svg' });
   }
 
-  function chartPlotArea() {
+  function chartPlotArea(w, h) {
+    const width = w || CHART_W, height = h || CHART_H;
     return {
       x0: CHART_PAD.left, y0: CHART_PAD.top,
-      x1: CHART_W - CHART_PAD.right, y1: CHART_H - CHART_PAD.bottom,
-      w: CHART_W - CHART_PAD.left - CHART_PAD.right,
-      h: CHART_H - CHART_PAD.top - CHART_PAD.bottom,
+      x1: width - CHART_PAD.right, y1: height - CHART_PAD.bottom,
+      w: width - CHART_PAD.left - CHART_PAD.right,
+      h: height - CHART_PAD.top - CHART_PAD.bottom,
     };
+  }
+
+  // A pulled-out number above a chart, editorial-style, instead of leading
+  // straight into the plot -- deliberately smaller than a true dashboard
+  // hero figure (marks-and-anatomy.md reserves that, >=48px, for exactly
+  // one number per whole view), since this repeats once per card.
+  function renderStatHeadline(value, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'stat-headline';
+    const val = document.createElement('div');
+    val.className = 'stat-headline-value';
+    val.textContent = value;
+    const lab = document.createElement('div');
+    lab.className = 'stat-headline-label';
+    lab.textContent = label;
+    wrap.append(val, lab);
+    return wrap;
+  }
+
+  // A leader-line callout pointing at one specific (x,y) chart point --
+  // the direct-annotation pattern used by annotateExtreme/annotatePeak
+  // below, factored out since both need the exact same three-piece anatomy
+  // (a short connector, a dot marking the exact point, and offset text).
+  function annotatePoint(svg, px, py, text, options) {
+    const opts = options || {};
+    const dx = opts.dx != null ? opts.dx : 0;
+    const dy = opts.dy != null ? opts.dy : -14;
+    const tx = px + dx, ty = py + dy;
+    if (dx || dy) {
+      svg.appendChild(svgEl('line', {
+        x1: px, y1: py, x2: tx, y2: ty - (dy < 0 ? 6 : -6), class: 'stat-chart-leader',
+      }));
+    }
+    svg.appendChild(svgEl('circle', { cx: px, cy: py, r: 4, class: 'stat-chart-annotation-dot' }));
+    const label = svgEl('text', {
+      x: tx, y: ty, class: 'stat-chart-annotation', 'text-anchor': opts.anchor || 'middle',
+    });
+    label.textContent = text;
+    svg.appendChild(label);
   }
 
   function renderBarChart(points, options) {
@@ -7451,6 +7499,49 @@
     return svg;
   }
 
+  // Circle-packing in place of a bar chart for a small, fixed set of
+  // buckets -- one bubble per bucket, AREA (not radius) proportional to
+  // its count, the actual count set as the bubble's own label so the
+  // reader never has to eyeball a height against an axis.
+  function renderBubbleChart(points, options) {
+    const opts = options || {};
+    const W = 320, H = 168;
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'stat-chart-svg stat-bubble-svg' });
+    const maxVal = Math.max(1, ...points.map(p => p.value));
+    const slotW = W / points.length;
+    // Capped well under slotW/2 so two adjacent max-size bubbles never
+    // touch (an 8px surface gap at the widest, per marks-and-anatomy.md's
+    // spacer convention), regardless of how many buckets are passed in.
+    const maxR = Math.min(46, slotW / 2 - 8);
+    const minR = Math.min(15, maxR * 0.4);
+    const baselineY = H - 20;
+    points.forEach((p, i) => {
+      const cx = slotW * i + slotW / 2;
+      const r = p.value > 0 ? minR + (maxR - minR) * Math.sqrt(p.value / maxVal) : 0;
+      if (r > 0) {
+        const cy = baselineY - r;
+        svg.appendChild(svgEl('circle', {
+          cx, cy, r, class: 'stat-bubble', fill: opts.color || 'var(--accent)',
+        }));
+        const valueLabel = svgEl('text', {
+          x: cx, y: cy + 5, class: 'stat-bubble-value', 'text-anchor': 'middle',
+        });
+        valueLabel.textContent = String(p.value);
+        svg.appendChild(valueLabel);
+      }
+      const label = svgEl('text', {
+        x: cx, y: H - 4, class: 'stat-chart-axis-label', 'text-anchor': 'middle',
+      });
+      label.textContent = p.label;
+      svg.appendChild(label);
+    });
+    return svg;
+  }
+
+  // options.endLabel: draws the last point's value directly beside its
+  // dot (ink-colored text, per marks-and-anatomy.md -- identity comes from
+  // the colored dot beside it, never from coloring the text itself),
+  // instead of leaving the reader to read it off the axis.
   function renderLineChart(points, options) {
     const opts = options || {};
     const svg = makeChartSvg();
@@ -7465,9 +7556,11 @@
     const sy = v => plot.y1 - (maxY === minY ? 0 : (v - minY) / (maxY - minY) * plot.h);
     svg.appendChild(svgEl('line', { x1: plot.x0, y1: plot.y1, x2: plot.x1, y2: plot.y1, class: 'stat-chart-axis' }));
     const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${sx(p.x)} ${sy(p.y)}`).join(' ');
-    svg.appendChild(svgEl('path', { d, class: 'stat-chart-line', fill: 'none' }));
+    svg.appendChild(svgEl('path', { d, class: 'stat-chart-line', fill: 'none', stroke: opts.color || 'var(--accent)' }));
     points.forEach(p => {
-      svg.appendChild(svgEl('circle', { cx: sx(p.x), cy: sy(p.y), r: 3, class: 'stat-chart-dot' }));
+      svg.appendChild(svgEl('circle', {
+        cx: sx(p.x), cy: sy(p.y), r: 3, class: 'stat-chart-dot', fill: opts.color || 'var(--accent-dark)',
+      }));
     });
     const step = Math.max(1, Math.ceil(points.length / 6));
     points.forEach((p, i) => {
@@ -7478,9 +7571,22 @@
       label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
       svg.appendChild(label);
     });
+    if (opts.endLabel) {
+      const last = points[points.length - 1];
+      const lx = sx(last.x), ly = sy(last.y);
+      const onRightEdge = lx > plot.x0 + plot.w * 0.7;
+      const label = svgEl('text', {
+        x: onRightEdge ? lx - 8 : lx + 8, y: ly - 8,
+        class: 'stat-chart-end-label', 'text-anchor': onRightEdge ? 'end' : 'start',
+      });
+      label.textContent = opts.formatValue ? opts.formatValue(last.y) : String(last.y);
+      svg.appendChild(label);
+    }
     return svg;
   }
 
+  // options.annotatePeak: calls out the highest point directly, instead of
+  // leaving "where's the peak" to axis-reading.
   function renderAreaChart(points, options) {
     const opts = options || {};
     const svg = makeChartSvg();
@@ -7505,12 +7611,21 @@
       label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
       svg.appendChild(label);
     });
+    if (opts.annotatePeak) {
+      const peak = points.reduce((a, b) => (b.y > a.y ? b : a));
+      const px = sx(peak.x), py = sy(peak.y);
+      annotatePoint(svg, px, py, opts.formatPeak ? opts.formatPeak(peak) : String(peak.y),
+        { dx: px > plot.x0 + plot.w * 0.6 ? -6 : 6, anchor: px > plot.x0 + plot.w * 0.6 ? 'end' : 'start' });
+    }
     return svg;
   }
 
   // Scatter with a light moving-average trend line overlaid -- the trend
   // is computed over a window of the nearest third of the (x-sorted)
-  // points, purely visual, not a statistical fit.
+  // points, purely visual, not a statistical fit. options.annotateExtreme:
+  // 'max' or 'min' calls out that one point directly (the actual headline
+  // this chart leads with -- see renderStatHeadline's caller) instead of
+  // leaving the reader to spot it among the other dots.
   function renderScatterChart(points, options) {
     const opts = options || {};
     const svg = makeChartSvg();
@@ -7548,18 +7663,29 @@
       label.textContent = opts.formatX ? opts.formatX(p.x) : String(p.x);
       svg.appendChild(label);
     });
+    if (opts.annotateExtreme) {
+      const extreme = sorted.reduce((a, b) =>
+        (opts.annotateExtreme === 'min' ? b.y < a.y : b.y > a.y) ? b : a);
+      const px = sx(extreme.x), py = sy(extreme.y);
+      annotatePoint(svg, px, py, opts.formatExtreme ? opts.formatExtreme(extreme) : String(extreme.y),
+        { dx: px > plot.x0 + plot.w * 0.6 ? -6 : 6, anchor: px > plot.x0 + plot.w * 0.6 ? 'end' : 'start' });
+    }
     return svg;
   }
 
-  function renderDonutChart(segments) {
-    const size = 180;
-    const cx = size / 2, cy = size / 2, rOuter = 80, rInner = 48;
-    const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, class: 'stat-chart-svg stat-donut-svg' });
+  // A zodiac WHEEL, not a donut-with-a-side-legend: each sign's emoji sits
+  // directly on its own wedge, at the ring's own angle, so identity never
+  // depends on cross-referencing a legend across the card.
+  function renderZodiacWheel(segments) {
+    const size = 240;
+    const cx = size / 2, cy = size / 2, rOuter = 76, rInner = 44, rLabel = 100;
+    const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, class: 'stat-chart-svg stat-wheel-svg' });
     const total = segments.reduce((a, s) => a + s.value, 0) || 1;
     let angle = -Math.PI / 2;
     segments.forEach((s, i) => {
       const frac = s.value / total;
       const nextAngle = angle + frac * Math.PI * 2;
+      const mid = (angle + nextAngle) / 2;
       const large = (nextAngle - angle) > Math.PI ? 1 : 0;
       const p0 = [cx + rOuter * Math.cos(angle), cy + rOuter * Math.sin(angle)];
       const p1 = [cx + rOuter * Math.cos(nextAngle), cy + rOuter * Math.sin(nextAngle)];
@@ -7577,32 +7703,114 @@
       title.textContent = `${s.emoji ? s.emoji + ' ' : ''}${s.label}: ${s.value}`;
       path.appendChild(title);
       svg.appendChild(path);
+      const lx = cx + rLabel * Math.cos(mid), ly = cy + rLabel * Math.sin(mid);
+      const emojiLabel = svgEl('text', {
+        x: lx, y: ly, class: 'stat-wheel-emoji', 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      });
+      emojiLabel.textContent = s.emoji || s.label;
+      svg.appendChild(emojiLabel);
+      // The count sits just inside the ring at the same angle, but only
+      // when the wedge is wide enough to hold it without crowding its
+      // neighbors -- a thin sliver still gets its emoji + hover title above.
+      if (frac >= 0.07) {
+        const clx = cx + ((rOuter + rInner) / 2) * Math.cos(mid);
+        const cly = cy + ((rOuter + rInner) / 2) * Math.sin(mid);
+        const countLabel = svgEl('text', {
+          x: clx, y: cly, class: 'stat-wheel-count', 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        });
+        countLabel.textContent = String(s.value);
+        svg.appendChild(countLabel);
+      }
       angle = nextAngle;
     });
     return svg;
   }
 
-  function renderGaugeBars(rows) {
+  // A radial "distance ladder": one ring per band, ordered near -> far, so
+  // this is an ORDINAL encoding (one hue, monotone opacity outward) rather
+  // than categorical -- the bands aren't independent identities, they're
+  // positions along "how far," and color should say so.
+  function renderRadialLadder(bars) {
+    const size = 200;
+    const cx = size / 2, cy = size / 2;
+    const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, class: 'stat-chart-svg stat-radial-svg' });
+    const maxVal = Math.max(1, ...bars.map(b => b.value));
+    const strokeW = 12, ringGap = 4, rStart = 18;
+    const opacityOf = i => (bars.length > 1 ? 0.35 + 0.65 * (i / (bars.length - 1)) : 1);
+    bars.forEach((b, i) => {
+      const r = rStart + i * (strokeW + ringGap);
+      svg.appendChild(svgEl('circle', {
+        cx, cy, r, class: 'stat-radial-track', fill: 'none', 'stroke-width': strokeW,
+      }));
+      const frac = b.value / maxVal;
+      const circumference = 2 * Math.PI * r;
+      const dash = Math.max(0, circumference * frac - (frac > 0 ? 2 : 0)); // 2px surface gap at the arc's open end
+      const arc = svgEl('circle', {
+        cx, cy, r, class: 'stat-radial-arc', fill: 'none', 'stroke-width': strokeW,
+        'stroke-linecap': 'round',
+        'stroke-dasharray': `${dash} ${circumference - dash}`,
+        transform: `rotate(-90 ${cx} ${cy})`,
+      });
+      arc.style.stroke = 'var(--chart-2)';
+      arc.style.opacity = opacityOf(i);
+      svg.appendChild(arc);
+    });
+    // A below-chart legend, not hover-only tooltips: the rings themselves
+    // have no room for their own bucket-label text, and hover doesn't
+    // reach touchscreens, which this app is built for (see the keyboard-
+    // scroll fix elsewhere in Stats View's own history).
     const wrap = document.createElement('div');
-    wrap.className = 'stat-gauge-list';
+    wrap.className = 'stat-radial-wrap';
+    wrap.appendChild(svg);
+    const legend = document.createElement('div');
+    legend.className = 'stat-radial-legend';
+    bars.forEach((b, i) => {
+      const item = document.createElement('div');
+      item.className = 'stat-radial-legend-item';
+      const swatch = document.createElement('span');
+      swatch.className = 'stat-radial-swatch';
+      swatch.style.opacity = opacityOf(i);
+      item.append(swatch, document.createTextNode(`${b.label}: ${b.value}`));
+      legend.appendChild(item);
+    });
+    wrap.appendChild(legend);
+    return wrap;
+  }
+
+  // The dataviz skill's Meter form ("a single ratio against a limit") for
+  // Data completeness, as three big circular badges instead of horizontal
+  // progress bars -- the percentage IS the headline here, so it's set
+  // right in the middle of its own ring rather than beside a bar.
+  function renderRadialBadges(rows) {
+    const wrap = document.createElement('div');
+    wrap.className = 'stat-badge-row';
+    const size = 92, r = 36, stroke = 9;
+    const c = size / 2;
     rows.forEach((row, i) => {
-      const line = document.createElement('div');
-      line.className = 'stat-gauge-row';
+      const item = document.createElement('div');
+      item.className = 'stat-badge-item';
+      const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, class: 'stat-badge-svg' });
+      const color = CHART_COLORS[i % CHART_COLORS.length];
+      const track = svgEl('circle', { cx: c, cy: c, r, fill: 'none', 'stroke-width': stroke, class: 'stat-badge-track' });
+      track.style.stroke = color;
+      svg.appendChild(track);
+      const circumference = 2 * Math.PI * r;
+      const dash = circumference * row.pct;
+      const arc = svgEl('circle', {
+        cx: c, cy: c, r, fill: 'none', 'stroke-width': stroke, 'stroke-linecap': 'round',
+        'stroke-dasharray': `${dash} ${circumference - dash}`,
+        transform: `rotate(-90 ${c} ${c})`,
+      });
+      arc.style.stroke = color;
+      svg.appendChild(arc);
+      const pctText = svgEl('text', { x: c, y: c + 6, class: 'stat-badge-pct', 'text-anchor': 'middle' });
+      pctText.textContent = `${Math.round(row.pct * 100)}%`;
+      svg.appendChild(pctText);
       const label = document.createElement('div');
-      label.className = 'stat-gauge-label';
+      label.className = 'stat-badge-label';
       label.textContent = row.label;
-      const track = document.createElement('div');
-      track.className = 'stat-gauge-track';
-      const fill = document.createElement('div');
-      fill.className = 'stat-gauge-fill';
-      fill.style.width = `${Math.round(row.pct * 100)}%`;
-      fill.style.background = CHART_COLORS[i % CHART_COLORS.length];
-      track.appendChild(fill);
-      const pctLabel = document.createElement('div');
-      pctLabel.className = 'stat-gauge-pct';
-      pctLabel.textContent = `${Math.round(row.pct * 100)}%`;
-      line.append(label, track, pctLabel);
-      wrap.appendChild(line);
+      item.append(svg, label);
+      wrap.appendChild(item);
     });
     return wrap;
   }
@@ -7638,6 +7846,15 @@
     return card;
   }
 
+  // Wraps a headline stat + a chart into one fragment, so buildStatCard's
+  // own (title, content, caption) shape never has to change to fit it.
+  function withHeadline(headlineEl, chartEl) {
+    const wrap = document.createElement('div');
+    wrap.className = 'stat-card-body';
+    wrap.append(headlineEl, chartEl);
+    return wrap;
+  }
+
   function renderStatsView() {
     const hasPeople = Object.keys(data.people).length > 0;
     els.emptyState.hidden = hasPeople;
@@ -7646,74 +7863,110 @@
 
     const cards = [];
 
+    const familyGroups = computeFamilyGroups();
     const siblingDist = siblingCountDistribution();
     const hasSiblingData = siblingDist.some(d => d.value > 0);
     cards.push(buildStatCard('Family size',
-      hasSiblingData ? renderBarChart(siblingDist) : null,
+      hasSiblingData
+        ? withHeadline(
+            renderStatHeadline(Math.max(...familyGroups.map(g => g.children.length)), 'kids in the largest family'),
+            renderBubbleChart(siblingDist))
+        : null,
       hasSiblingData
         ? 'Number of children per family, across every recorded family.'
         : 'No families with recorded children yet.'));
 
     const longevity = longevityPoints();
-    cards.push(buildStatCard('Longevity over time',
-      longevity.length ? renderScatterChart(longevity.map(p => ({ x: p.birthYear, y: p.age }))) : null,
-      longevity.length
-        ? 'Age at death vs. birth year, with a trend line, for everyone with a recorded death.'
-        : 'Needs at least one person with a recorded death date.'));
+    if (longevity.length) {
+      const oldest = longevity.reduce((a, b) => (b.age > a.age ? b : a));
+      cards.push(buildStatCard('Longevity over time',
+        withHeadline(
+          renderStatHeadline(`${oldest.age} yrs`, 'longest recorded life'),
+          renderScatterChart(longevity.map(p => ({ x: p.birthYear, y: p.age })), {
+            annotateExtreme: 'max', formatExtreme: p => `${p.y} yrs`,
+          })),
+        'Age at death vs. birth year, with a trend line, for everyone with a recorded death.'));
+    } else {
+      cards.push(buildStatCard('Longevity over time', null, 'Needs at least one person with a recorded death date.'));
+    }
 
     const zodiac = zodiacCounts();
     if (zodiac.length) {
-      const donutWrap = document.createElement('div');
-      donutWrap.className = 'stat-donut-wrap';
-      donutWrap.appendChild(renderDonutChart(zodiac.map(z => ({ ...z, emoji: ZODIAC_EMOJI[z.label] }))));
-      const legend = document.createElement('div');
-      legend.className = 'stat-donut-legend';
-      zodiac.forEach((z, i) => {
-        const item = document.createElement('div');
-        item.className = 'stat-donut-legend-item';
-        item.innerHTML = `<span class="stat-donut-swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${ZODIAC_EMOJI[z.label] || ''} ${z.label} (${z.value})`;
-        legend.appendChild(item);
-      });
-      donutWrap.appendChild(legend);
-      cards.push(buildStatCard('Chinese zodiac breakdown', donutWrap));
+      const mostCommon = zodiac.reduce((a, b) => (b.value > a.value ? b : a));
+      cards.push(buildStatCard('Chinese zodiac breakdown',
+        withHeadline(
+          renderStatHeadline(`${ZODIAC_EMOJI[mostCommon.label] || ''} ${mostCommon.label}`, 'most common sign'),
+          renderZodiacWheel(zodiac.map(z => ({ ...z, emoji: ZODIAC_EMOJI[z.label] }))))));
     } else {
       cards.push(buildStatCard('Chinese zodiac breakdown', null, 'No one has a zodiac sign recorded yet.'));
     }
 
+    // Family size and the age gap between generations, side by side under
+    // one heading -- two different units (kids vs. years), so this is two
+    // small-multiple line panels sharing an x-axis, never one chart with
+    // two y-scales (see choosing-a-form.md: "never a dual-axis chart").
     const familySizeTrend = familySizeTrendByGeneration();
-    cards.push(buildStatCard('Family size by generation',
-      familySizeTrend.length >= 2
-        ? renderLineChart(familySizeTrend.map(d => ({ x: d.gen, y: d.avg })), { formatX: v => `Gen ${v + 1}` })
-        : null,
-      familySizeTrend.length >= 2
-        ? 'Average children per family, generation by generation.'
-        : 'Needs recorded families across at least two generations.'));
+    const genGap = generationGapByGeneration();
+    const hasGenTrends = familySizeTrend.length >= 2 || genGap.length >= 2;
+    if (hasGenTrends) {
+      const panels = document.createElement('div');
+      panels.className = 'stat-multiple-row';
+      if (familySizeTrend.length >= 2) {
+        const panel = document.createElement('div');
+        panel.className = 'stat-multiple-panel';
+        const label = document.createElement('div');
+        label.className = 'stat-multiple-label';
+        label.textContent = 'Family size';
+        panel.append(label, renderLineChart(familySizeTrend.map(d => ({ x: d.gen, y: d.avg })), {
+          formatX: v => `Gen ${v + 1}`, endLabel: true, formatValue: v => v.toFixed(1),
+          color: 'var(--chart-1)',
+        }));
+        panels.appendChild(panel);
+      }
+      if (genGap.length >= 2) {
+        const panel = document.createElement('div');
+        panel.className = 'stat-multiple-panel';
+        const label = document.createElement('div');
+        label.className = 'stat-multiple-label';
+        label.textContent = 'Generation gap (yrs)';
+        panel.append(label, renderLineChart(genGap.map(d => ({ x: d.gen, y: Math.round(d.avgGap) })), {
+          formatX: v => `Gen ${v + 1}`, endLabel: true, color: 'var(--chart-2)',
+        }));
+        panels.appendChild(panel);
+      }
+      cards.push(buildStatCard('Generational trends', panels,
+        'Average children per family, and the average parent age at their child\'s birth, generation by generation.'));
+    } else {
+      cards.push(buildStatCard('Generational trends', null,
+        'Needs recorded families (and parent/child birth dates) across at least two generations.'));
+    }
 
     const migration = migrationDistanceHistogram();
     cards.push(buildStatCard('Migration distance (km)',
-      migration.count ? renderBarChart(migration.bars, { color: 'var(--chart-2)' }) : null,
       migration.count
-        ? `Average ${Math.round(migration.avgKm)} km (${Math.round(migration.avgKm / KM_PER_MI)} mi) from birthplace, across ${migration.count} people with both recorded.`
+        ? withHeadline(
+            renderStatHeadline(`${Math.round(Math.max(...migrationDistances()))} km`, 'farthest single move'),
+            renderRadialLadder(migration.bars))
+        : null,
+      migration.count
+        ? `Average ${Math.round(migration.avgKm)} km (${Math.round(migration.avgKm / KM_PER_MI)} mi) from birthplace, across ${migration.count} people with both recorded. Rings run closest (center) to farthest (outer).`
         : 'Needs a birthplace and a separately recorded current location, both with coordinates.'));
 
     const population = populationOverTime();
-    cards.push(buildStatCard('Population over time',
-      population.length >= 2 ? renderAreaChart(population.map(d => ({ x: d.decade, y: d.count }))) : null,
-      population.length >= 2
-        ? 'How many recorded family members were alive at the start of each decade.'
-        : 'Needs recorded birth years spanning at least two decades.'));
+    if (population.length >= 2) {
+      const peak = population.reduce((a, b) => (b.count > a.count ? b : a));
+      cards.push(buildStatCard('Population over time',
+        withHeadline(
+          renderStatHeadline(peak.count, `alive in the ${peak.decade}s`),
+          renderAreaChart(population.map(d => ({ x: d.decade, y: d.count })), {
+            annotatePeak: true, formatPeak: p => String(p.y),
+          })),
+        'How many recorded family members were alive at the start of each decade.'));
+    } else {
+      cards.push(buildStatCard('Population over time', null, 'Needs recorded birth years spanning at least two decades.'));
+    }
 
-    const genGap = generationGapByGeneration();
-    cards.push(buildStatCard('Generation gap',
-      genGap.length
-        ? renderBarChart(genGap.map(d => ({ gen: d.gen, label: `Gen ${d.gen + 1}`, value: Math.round(d.avgGap) })),
-          { color: 'var(--chart-3)' })
-        : null,
-      genGap.length
-        ? 'Average parent age (in years) at their child\'s birth, by the parent\'s own generation.'
-        : 'Needs both a parent and child with recorded birth dates.'));
-
-    cards.push(buildStatCard('Data completeness', renderGaugeBars(completenessStats())));
+    cards.push(buildStatCard('Data completeness', renderRadialBadges(completenessStats())));
 
     for (const card of cards) els.statsContainer.appendChild(card);
   }

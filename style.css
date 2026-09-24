@@ -43,15 +43,21 @@
      globe's "empty" areas match the page behind it. */
   --map-land: #e4dcc8;
   /* Stats View's categorical chart palette (see app.js's CHART_COLORS) --
-     six mid-tone hues chosen to read clearly as distinct series against
-     either --surface or --bg, independent of --accent (which some charts
-     use on its own, e.g. the single-series line/scatter charts). */
-  --chart-1: #3d7a6b;
-  --chart-2: #c98a2c;
-  --chart-3: #7a5c96;
-  --chart-4: #4f7cac;
-  --chart-5: #b2555a;
-  --chart-6: #6b8e4e;
+     the dataviz skill's validated 8-hue default (references/palette.md):
+     fixed order, passes the lightness/chroma/CVD/contrast checks against
+     this app's own surfaces (light #f4f1ea, dark #201c16, and Midnight
+     Magenta's flat #363636 -- see below), independent of --accent (which
+     some charts use on its own, e.g. the single-series line/scatter
+     charts). Never reorder or cycle these -- the order IS the CVD-safety
+     mechanism (see color-formula.md's six checks). */
+  --chart-1: #2a78d6; /* blue */
+  --chart-2: #eb6834; /* orange */
+  --chart-3: #1baf7a; /* aqua */
+  --chart-4: #eda100; /* yellow */
+  --chart-5: #e87ba4; /* magenta */
+  --chart-6: #008300; /* green */
+  --chart-7: #4a3aa7; /* violet */
+  --chart-8: #e34948; /* red */
 }
 
 * { box-sizing: border-box; }
@@ -511,6 +517,30 @@ body {
   font-style: italic;
 }
 
+.stat-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Editorial pulled-out number above a chart -- see renderStatHeadline in
+   app.js. Deliberately smaller than the dataviz skill's true "hero figure"
+   (>=48px, exactly one per view): this repeats once per card. */
+.stat-headline { line-height: 1.1; }
+.stat-headline-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--ink);
+  /* Proportional figures, not tabular-nums -- marks-and-anatomy.md:
+     tabular-nums widens every digit to match "0" and looks loose at
+     display sizes; that spec is for columns that must align, not a
+     standalone number like this one. */
+}
+.stat-headline-label {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
 .stat-chart-svg {
   width: 100%;
   height: auto;
@@ -530,63 +560,139 @@ body {
   font-weight: 600;
   fill: var(--ink);
 }
+.stat-chart-end-label {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+.stat-chart-leader {
+  stroke: var(--ink-soft);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.stat-chart-annotation-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.stat-chart-annotation {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--ink);
+}
 
-.stat-donut-wrap {
+/* Family size's circle-packing bubbles (see renderBubbleChart) -- area,
+   not radius, is proportional to count. */
+.stat-bubble { fill-opacity: 0.85; }
+.stat-bubble-value {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #fff;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--accent-dark);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* The zodiac wheel (see renderZodiacWheel) -- emoji sit directly on their
+   own wedge instead of a side legend. */
+.stat-wheel-emoji { font-size: 18px; }
+.stat-wheel-count {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.35);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Family size / Generation gap small multiples, side by side under one
+   "Generational trends" card -- two units, so two single-axis panels
+   rather than one dual-axis chart (see choosing-a-form.md). */
+.stat-multiple-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.stat-multiple-panel {
+  flex: 1 1 120px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-multiple-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* Migration distance's radial ladder (see renderRadialLadder) -- one hue,
+   monotone opacity outward: an ORDINAL near->far encoding, not categorical
+   identity, since the rings are positions along one scale, not separate
+   series. */
+.stat-radial-track { stroke: var(--line); opacity: 0.25; }
+.stat-radial-wrap {
   display: flex;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }
-.stat-donut-svg { width: 140px; height: 140px; flex-shrink: 0; }
-.stat-donut-legend {
+.stat-radial-svg { width: 130px; height: 130px; flex-shrink: 0; }
+.stat-radial-legend {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--ink);
   flex: 1;
-  min-width: 120px;
+  min-width: 110px;
 }
-.stat-donut-legend-item {
+.stat-radial-legend-item {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.stat-donut-swatch {
+.stat-radial-swatch {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  background: var(--chart-2);
   display: inline-block;
   flex-shrink: 0;
 }
 
-.stat-gauge-list {
+/* Data completeness's circular percentage badges (see renderRadialBadges)
+   -- the dataviz skill's Meter form for "a single ratio against a limit."
+   Track uses the same hue as its own arc, per the skill's meter spec
+   ("the unfilled track is a lighter step of the same ramp"), approximated
+   here as the same stroke at a fraction of the opacity. */
+.stat-badge-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.stat-badge-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.stat-gauge-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 2fr 40px;
   align-items: center;
-  gap: 10px;
-  font-size: 0.85rem;
+  gap: 6px;
+  flex: 1 1 80px;
 }
-.stat-gauge-label { color: var(--ink); }
-.stat-gauge-track {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  height: 10px;
-  overflow: hidden;
+.stat-badge-svg { width: 84px; height: 84px; }
+.stat-badge-track { opacity: 0.22; }
+.stat-badge-pct {
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--ink);
 }
-.stat-gauge-fill {
-  height: 100%;
-  transition: width .4s ease;
-}
-.stat-gauge-pct {
-  text-align: right;
+.stat-badge-label {
+  font-size: 0.72rem;
   color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 /* ---------- Person card ---------- */
@@ -1920,12 +2026,14 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --map-land: #2c2c2c;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
-    --chart-1: #5fae9c;
-    --chart-2: #e0a94a;
-    --chart-3: #a084c0;
-    --chart-4: #7aa8d6;
-    --chart-5: #d4787c;
-    --chart-6: #8fb96a;
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #008300;
+    --chart-7: #9085e9;
+    --chart-8: #e66767;
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
@@ -1975,16 +2083,22 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
      dataviz skill's OKLCH contrast check: filled land needs no border at
      this contrast. */
   --map-land: #262626;
-  /* Stats View's categorical palette, brightened for contrast against this
-     theme's flat #363636 ground -- same six-hue family as the default
-     theme's --chart-* tokens, not the magenta --accent (reserved for the
-     single-series line/scatter charts, same as every other theme). */
-  --chart-1: #5fae9c;
-  --chart-2: #e0a94a;
-  --chart-3: #b48ee0;
-  --chart-4: #7aa8d6;
-  --chart-5: #e08a8e;
-  --chart-6: #8fb96a;
+  /* Stats View's categorical palette -- the dataviz skill's validated
+     8-hue dark-mode steps (references/palette.md), re-checked against
+     this theme's own flat #363636 ground with the skill's validator
+     script: all 8 pass lightness/chroma/CVD/normal-vision, green (slot 6)
+     needs the "relief" clause (visible direct labels, already how every
+     chart here labels its marks) since it sits under 3:1 alone. Not the
+     magenta --accent, which stays reserved for single-series line/scatter
+     charts, same as every other theme. */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same
