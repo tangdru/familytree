@@ -2438,6 +2438,49 @@
     if (last) last.focus();
   });
 
+  // #personForm IS .modal-body, scrolling its own contents internally (see
+  // that class's comment in style.css) rather than the page -- and the
+  // on-screen keyboard's native "keep the focused field in view" behavior
+  // is unreliable against a nested scroll container like this one, on top
+  // of racing the async fitModalOverlaysToVisualViewport resize (see the
+  // global visualViewport listener below). Most visible on the Location
+  // field, which sits low enough in the form to end up entirely hidden
+  // behind the keyboard, but not specific to it -- this covers every
+  // field, present or future, including ones inside dynamically-added rows
+  // (Location(s)/Contact(s)), since focusin bubbles up to this one static
+  // #personForm listener. Same two-call pattern as the story editor's own
+  // scrollFooterIntoView: once on focus, and again once the keyboard's
+  // viewport resize actually settles, since the first call can run before
+  // the keyboard has finished animating in.
+  //
+  // Deliberately NOT el.scrollIntoView(): that walks every scrollable
+  // ancestor to satisfy visibility, and html/body -- despite being
+  // `overflow: hidden` -- still count as scroll containers per the CSS
+  // Overflow spec, so it can end up nudging document.body/documentElement's
+  // own scrollTop on some browsers. That's exactly the mechanism
+  // resetPageScroll() already exists to clean up after (see its own
+  // comment on Mobile Safari scrolling the page for keyboard avoidance) --
+  // but this function fires on the same focus/resize events repeatedly
+  // (e.g. re-focusing the field after picking a location suggestion),
+  // so it could keep re-introducing that scroll after resetPageScroll()
+  // already ran on modal close, leaving the sticky .toolbar pinned above
+  // the visible area once the modal closes. Computing the scroll offset by
+  // hand and applying it straight to els.form.scrollTop can only ever move
+  // #personForm's own internal scroll -- there is no code path left by
+  // which this function can touch document/body scroll at all.
+  function scrollFocusedFieldIntoView() {
+    const el = document.activeElement;
+    if (!el || !els.form.contains(el)) return;
+    const formRect = els.form.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    if (elRect.top < formRect.top) {
+      els.form.scrollTop -= (formRect.top - elRect.top);
+    } else if (elRect.bottom > formRect.bottom) {
+      els.form.scrollTop += (elRect.bottom - formRect.bottom);
+    }
+  }
+  els.form.addEventListener('focusin', scrollFocusedFieldIntoView);
+
   // ---------- Modal open/close ----------
 
   function openModalForAdd() {
@@ -8012,6 +8055,9 @@
     // Also unconditional, same reasoning -- see fitModalOverlaysToVisualViewport.
     window.visualViewport.addEventListener('resize', fitModalOverlaysToVisualViewport);
     window.visualViewport.addEventListener('scroll', fitModalOverlaysToVisualViewport);
+    // Also unconditional -- a no-op whenever the edit form isn't open or
+    // nothing inside it is focused (see scrollFocusedFieldIntoView).
+    window.visualViewport.addEventListener('resize', scrollFocusedFieldIntoView);
   }
   window.addEventListener('scroll', resetHorizontalScroll, { passive: true });
 
