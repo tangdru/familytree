@@ -6639,7 +6639,7 @@
   }
 
   // ---------- Globe auto-spin (idle animation) ----------
-  // A slow, continuous rotation around the vertical (polar) axis --
+  // A continuous ambient rotation around the vertical (polar) axis --
   // longitude only, same as a real desktop globe someone gave a push --
   // that runs whenever nothing else has claimed the rotation: not while
   // dragging, not while inertia or a scripted animateGlobeTo is still
@@ -6656,9 +6656,9 @@
   // motion rather than leveling first, then separately snapping straight
   // to full auto-spin speed. Longitude's actual position is never reset,
   // only its speed ramps -- wherever the user left it stays put.
-  const GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION = 90; // the "rotation time" -- tune this
+  const GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION = 30; // the "rotation time" -- tune this
   const GLOBE_AUTOSPIN_DEGREES_PER_SEC = 360 / GLOBE_AUTOSPIN_SECONDS_PER_REVOLUTION;
-  const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 4000;
+  const GLOBE_AUTOSPIN_IDLE_DELAY_MS = 2000;
   const GLOBE_AUTOSPIN_RAMP_MS = 3000;
   let globeAutoSpinFrame = null;
   let globeSpinUpFrame = null;
@@ -7014,6 +7014,12 @@
     }
 
     const cardEls = {};
+    // Markers wait to fade in until after the land/sphere fade above
+    // finishes (see the animateEntryIn block below) -- on entry, the globe
+    // should visibly materialize FIRST, with the people on it appearing
+    // once there's actually a globe for them to sit on, rather than both
+    // popping in together while the land underneath is still translucent.
+    const entryFadeEls = [];
     const placed = computeGlobeForceLayout(individualsToPlace);
     for (const { id, person, text } of individualsToPlace) {
       const card = buildCard(person, { subtitle: text });
@@ -7031,6 +7037,7 @@
       // in the DOM and its real (name-wrap-dependent) height can be
       // measured.
       card.style.top = `${pt.y - card.offsetHeight / 2}px`;
+      if (animateEntryIn) entryFadeEls.push(card);
     }
 
     for (const { cx, cy, avgLon, avgLat, minPairDist, count, names } of badgeSpecs) {
@@ -7060,6 +7067,23 @@
         animateGlobeTo([-avgLon, -avgLat], targetScale);
       });
       els.content.appendChild(badge);
+      if (animateEntryIn) entryFadeEls.push(badge);
+    }
+
+    if (entryFadeEls.length) {
+      entryFadeEls.forEach(el => { el.style.opacity = '0'; });
+      // Delayed to start just after the land/sphere's own 500ms fade (see
+      // above) has finished, then a short fade of its own -- these
+      // elements are torn down and rebuilt on every subsequent render
+      // (see the .map-card/.map-cluster removal above), so this timer
+      // only ever touches the one entry frame's markers, never a later
+      // frame's fresh ones.
+      setTimeout(() => {
+        entryFadeEls.forEach(el => {
+          el.style.transition = 'opacity 300ms ease-out';
+          el.style.opacity = '1';
+        });
+      }, 550);
     }
 
     if (animateFlip) animateLayoutIn(cardEls, oldPositions);
@@ -7094,10 +7118,18 @@
   }
 
   function setGlobeZoom(newScale) {
+    // Zooming (wheel or pinch) counts as touching the globe just as much as
+    // dragging does -- cancel any auto-spin/inertia in progress and rearm
+    // the idle timer, so a burst of zoom ticks doesn't let auto-spin creep
+    // in mid-gesture (each tick is a discrete event with no "release" of
+    // its own to hang a single start/stop pair on, so this just re-arms on
+    // every tick instead).
+    stopAllGlobeMotion();
     const min = globeInitialScale * GLOBE_ZOOM_OUT_FACTOR;
     const max = globeInitialScale * GLOBE_ZOOM_IN_FACTOR;
     globeScale = Math.min(max, Math.max(min, newScale));
     scheduleGlobeRender();
+    scheduleGlobeAutoSpinResume();
   }
 
   // Eases rotation and zoom to a target together over FIT_VIEW_MS -- the

@@ -213,11 +213,11 @@ try {
   if (totalDrift < 40) throw new Error(`Expected the flick's total rotation (drag + inertia) to clearly exceed a plain drag's own movement, got only ${totalDrift.toFixed(1)}px total`);
 
   console.log('\n=== After a short idle period, the globe resumes auto-spinning on its own ===');
-  // GLOBE_AUTOSPIN_IDLE_DELAY_MS (4000ms) after settling, plus
+  // GLOBE_AUTOSPIN_IDLE_DELAY_MS (2000ms) after settling, plus
   // GLOBE_AUTOSPIN_RAMP_MS (3000ms) for the combined tilt/speed ramp --
   // the flick above was purely horizontal so there's no tilt to recover,
   // but the ramp still takes just as long to reach full spin speed.
-  await page.waitForTimeout(4000 + 3000 + 500);
+  await page.waitForTimeout(2000 + 3000 + 500);
   const afterIdle = await posOfCluster();
   if (!afterIdle) throw new Error('Expected the cluster to still be present once auto-spin resumes');
   const autoSpinDrift = Math.hypot(afterIdle.left - stillSettled.left, afterIdle.top - stillSettled.top);
@@ -254,7 +254,7 @@ try {
   // Wait through the idle delay and the combined tilt/speed ramp, checked
   // right as it finishes (before full-speed auto-spin has had long to run
   // on its own).
-  await page.waitForTimeout(4000 + 3000 + 100);
+  await page.waitForTimeout(2000 + 3000 + 100);
   const afterLeveling = await posOfCluster();
   if (!afterLeveling) throw new Error('Expected the cluster to still be present after leveling');
   const remainingTilt = Math.abs(afterLeveling.top - beforeTilt.top);
