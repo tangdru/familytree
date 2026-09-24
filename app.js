@@ -2424,6 +2424,26 @@
     if (last) last.focus();
   });
 
+  // #personForm IS .modal-body, scrolling its own contents internally (see
+  // that class's comment in style.css) rather than the page -- and the
+  // on-screen keyboard's native "keep the focused field in view" behavior
+  // is unreliable against a nested scroll container like this one, on top
+  // of racing the async fitModalOverlaysToVisualViewport resize (see the
+  // global visualViewport listener below). Most visible on the Location
+  // field, which sits low enough in the form to end up entirely hidden
+  // behind the keyboard, but not specific to it -- this covers every
+  // field, present or future, including ones inside dynamically-added rows
+  // (Location(s)/Contact(s)), since focusin bubbles up to this one static
+  // #personForm listener. Same two-call pattern as the story editor's own
+  // scrollFooterIntoView: once on focus, and again once the keyboard's
+  // viewport resize actually settles, since the first call can run before
+  // the keyboard has finished animating in.
+  function scrollFocusedFieldIntoView() {
+    const el = document.activeElement;
+    if (el && els.form.contains(el)) el.scrollIntoView({ block: 'nearest' });
+  }
+  els.form.addEventListener('focusin', scrollFocusedFieldIntoView);
+
   // ---------- Modal open/close ----------
 
   function openModalForAdd() {
@@ -7464,6 +7484,9 @@
     // Also unconditional, same reasoning -- see fitModalOverlaysToVisualViewport.
     window.visualViewport.addEventListener('resize', fitModalOverlaysToVisualViewport);
     window.visualViewport.addEventListener('scroll', fitModalOverlaysToVisualViewport);
+    // Also unconditional -- a no-op whenever the edit form isn't open or
+    // nothing inside it is focused (see scrollFocusedFieldIntoView).
+    window.visualViewport.addEventListener('resize', scrollFocusedFieldIntoView);
   }
   window.addEventListener('scroll', resetHorizontalScroll, { passive: true });
 
