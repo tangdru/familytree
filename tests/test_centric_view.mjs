@@ -1,16 +1,16 @@
 import { chromium } from 'playwright-core';
 
-// A: center candidate, born 1970, lives "Boston, USA".
-// B: age diff 2 (ring 1), different city same country as A.
-// C: age diff 12 (ring 2), same city as A (ring 1 by location).
-// D: age diff 25 (ring 3), different country.
-// E: no birthdate, no location -> ring 4 (age) / ring 3 (location).
+// A: center candidate, born 1970, lives Boston (42.3601, -71.0589).
+// B: age diff 2 (ring 1), ~1,720 km away (Chicago) by real distance.
+// C: age diff 12 (ring 2), same coordinates as A (ring 1 by distance).
+// D: age diff 25 (ring 3), ~5,800 km away (Paris).
+// E: no birthdate, no location -> ring 4 (age) / ring 5 (distance, unknown).
 const A = 'A', B = 'B', C = 'C', D = 'D', E = 'E';
 const people = {
-  [A]: { id: A, name: 'Alice Center', birthDate: '1970-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: ['Boston, USA'] },
-  [B]: { id: B, name: 'Bob Near', birthDate: '1972-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: ['Chicago, USA'] },
-  [C]: { id: C, name: 'Carol Mid', birthDate: '1982-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: ['Boston, USA'] },
-  [D]: { id: D, name: 'Dave Far', birthDate: '1995-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: ['Paris, France'] },
+  [A]: { id: A, name: 'Alice Center', birthDate: '1970-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }] },
+  [B]: { id: B, name: 'Bob Near', birthDate: '1972-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Chicago, USA', lat: 41.8781, lon: -87.6298 }] },
+  [C]: { id: C, name: 'Carol Mid', birthDate: '1982-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }] },
+  [D]: { id: D, name: 'Dave Far', birthDate: '1995-01-01', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [{ text: 'Paris, France', lat: 48.8566, lon: 2.3522 }] },
   [E]: { id: E, name: 'Eve Unknown', birthDate: '', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: [] },
 };
 
@@ -79,21 +79,24 @@ try {
   if (connectorCount !== 0) throw new Error(`Expected zero connector lines in centric view, found ${connectorCount}`);
   console.log('Confirmed: no connector lines (grid circles/labels aside).');
 
-  console.log('\n=== Switch to Location metric: Carol (same city as Alice) becomes closest ===');
+  console.log('\n=== Switch to Location metric: Carol (same coordinates as Alice) becomes closest ===');
   await page.click('.centric-metric-btn[data-metric="location"]');
   await page.waitForTimeout(500);
   const activeBtn = await page.evaluate(() => document.querySelector('.centric-metric-btn.active').dataset.metric);
   if (activeBtn !== 'location') throw new Error('Expected the Location button to become active');
   pos = await readPositions();
-  const dC2 = dist(pos.A, pos.C); // same city -> ring 1
-  const dB2 = dist(pos.A, pos.B); // same country, different city -> ring 2
-  const dD2 = dist(pos.A, pos.D); // different country -> ring 3
-  const dE2 = dist(pos.A, pos.E); // no location -> ring 3 too
+  const dC2 = dist(pos.A, pos.C); // same coordinates -> < 50 km band
+  const dB2 = dist(pos.A, pos.B); // ~1,720 km (Chicago) -> 1,000-5,000 km band
+  const dD2 = dist(pos.A, pos.D); // ~5,800 km (Paris) -> 5,000+ km band
+  const dE2 = dist(pos.A, pos.E); // no location at all -> 5,000+ km band too
   console.log(`distances from center by location -- B:${dB2.toFixed(0)} C:${dC2.toFixed(0)} D:${dD2.toFixed(0)} E:${dE2.toFixed(0)}`);
   if (!(dC2 < dB2 && dB2 < dD2)) {
-    throw new Error(`Expected Carol (same city) closest, then Bob (same country), then Dave (different country). Got C:${dC2} B:${dB2} D:${dD2}`);
+    throw new Error(`Expected Carol (nearest) closest, then Bob (mid-distance), then Dave (farthest). Got C:${dC2} B:${dB2} D:${dD2}`);
   }
-  console.log('Confirmed: location-proximity rings order correctly, Carol is now closest.');
+  if (Math.abs(dD2 - dE2) > 2) {
+    throw new Error(`Expected Dave (genuinely 5,000+ km away) and Eve (no location at all) to share the outermost ring, got D:${dD2} E:${dE2}`);
+  }
+  console.log('Confirmed: real-distance rings order correctly, Carol is now closest, and "genuinely far" shares a ring with "unlocatable."');
 
   console.log('\n=== Clicking the already-centered card (Alice) opens her modal instead of re-centering ===');
   await page.click(`[data-id="${A}"]`);
