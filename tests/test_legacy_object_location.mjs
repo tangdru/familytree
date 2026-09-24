@@ -1,10 +1,10 @@
 import { chromium } from 'playwright-core';
 
-// Simulates a record saved while the real-distance Centric feature (PR
-// #105/#106) was briefly live: a location entry saved as a {text, lat,
-// lon} object instead of a plain string. After reverting that feature,
-// this shape must not crash rendering -- see locationsOf's defensive
-// unwrap.
+// A location entry saved as a {text, lat, lon} object (picked from the
+// autocomplete) mixed with an older plain-string entry (typed free text,
+// from before autocomplete existed, or never re-picked) -- both shapes
+// must coexist without crashing rendering, in every view that touches
+// locations -- see locationsOf's defensive unwrap.
 const p1 = 'p1';
 const people = {
   [p1]: {
@@ -44,11 +44,12 @@ try {
   console.log('\n=== Centric view: the OBJECT-shaped center person must not crash rendering or leave stale Age labels ===');
   // 'Leftover Object' (p1) is still centered here (default center = first
   // person by insertion order) with its location STILL in the object
-  // shape -- this exercises the exact bug: centerLoc = currentLocationOf
-  // (center) runs very early in renderCentric, before the axis labels are
-  // (re)drawn, so a throw there bails out before ever reaching that code,
-  // leaving whatever labels the PREVIOUS metric (Age) drew stuck on
-  // screen even though the Location button is now active.
+  // shape -- this exercises the exact bug: centerCoords =
+  // currentLocationCoordsOf(center) runs very early in renderCentric,
+  // before the axis labels are (re)drawn, so a throw there bails out
+  // before ever reaching that code, leaving whatever labels the PREVIOUS
+  // metric (Age) drew stuck on screen even though the Location button is
+  // now active.
   await page.selectOption('#viewModeSelect', 'centric');
   await page.waitForTimeout(700);
   await page.click('.centric-metric-btn[data-metric="location"]');
@@ -59,7 +60,10 @@ try {
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('axis labels:', JSON.stringify(labels));
   if (labels.some(l => /yrs/.test(l))) throw new Error(`Expected Location-metric labels, but found stale Age labels: ${JSON.stringify(labels)}`);
-  if (!labels.some(l => /Same city|Elsewhere/.test(l))) throw new Error(`Expected Location-metric labels (e.g. "Same city"), got: ${JSON.stringify(labels)}`);
+  // p2 ("Chicago, Illinois" as a plain string, no coordinates) has nothing
+  // to compute a real distance from/to -- lands in the outermost "unknown"
+  // ring, same fallback the old text heuristic gave anyone location-less.
+  if (!labels.some(l => /km/.test(l))) throw new Error(`Expected Location-metric distance-band labels (e.g. "< 50 km"), got: ${JSON.stringify(labels)}`);
   await page.selectOption('#viewModeSelect', 'traditional');
   await page.waitForTimeout(300);
 

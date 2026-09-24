@@ -1,23 +1,35 @@
 import { chromium } from 'playwright-core';
 
-function person(id, name, year, city) {
-  return { id, name, birthDate: year ? `${year}-01-01` : '', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: city ? [city] : [] };
+// Centric view's Location metric groups by real great-circle distance (see
+// centricLocationRing/haversineKm in app.js) -- a deliberate switch away
+// from the old text heuristic ("same city"/"same region"/"same country"/
+// "same hemisphere"), deferred until enough records had real coordinates
+// to make the distance math worthwhile (see git history / BACKLOG.md).
+// Each fixture below sits at a real-world distance from the center person
+// clearly inside its intended band, with margin from the 50/200/1000/5000 km
+// edges so this isn't sensitive to haversine's small approximation error.
+function person(id, name, year, loc) {
+  return {
+    id, name, birthDate: year ? `${year}-01-01` : '', deathDate: '', photo: '', notes: '', parents: [], spouses: [],
+    locations: loc ? [loc] : [],
+  };
 }
 const people = {};
 const add = (p) => { people[p.id] = p; };
-// Center: Boston, Massachusetts (US, "City, State" format so the region
-// tier -- the US state -- is distinct from the country tier).
-add(person('center', 'Alice Center', 1970, 'Boston, Massachusetts'));
-add(person('sameCity', 'Sam City', 1975, 'Boston, Massachusetts'));
-// Same state (region), different city.
-add(person('sameRegion', 'Remy Region', 1978, 'Worcester, Massachusetts'));
-// Same country (US), different state -- region tier misses, country tier catches it.
-add(person('sameCountry', 'Cody Country', 1980, 'Chicago, Illinois'));
-// Same hemisphere (Northern), different country.
-add(person('sameHemi', 'Hemi North', 1982, 'Paris, France'));
-// Different hemisphere entirely.
-add(person('otherHemi', 'Sydney South', 1985, 'Sydney, Australia'));
-add(person('noLoc', 'No Location', 1990, ''));
+// Center: Boston, Massachusetts.
+add(person('center', 'Alice Center', 1970, { text: 'Boston, Massachusetts', lat: 42.3601, lon: -71.0589 }));
+// ~7 km away -- well inside the <50 km band.
+add(person('band1', 'Cam Nearby', 1975, { text: 'Cambridge, Massachusetts', lat: 42.3736, lon: -71.1097 }));
+// ~69 km away -- inside the 50-200 km band.
+add(person('band2', 'Prov Regional', 1978, { text: 'Providence, Rhode Island', lat: 41.8240, lon: -71.4128 }));
+// ~306 km away -- inside the 200-1,000 km band.
+add(person('band3', 'Nyc Distant', 1980, { text: 'New York, New York', lat: 40.7128, lon: -74.0060 }));
+// ~1,720 km away -- inside the 1,000-5,000 km band.
+add(person('band4', 'Chi Faraway', 1982, { text: 'Chicago, Illinois', lat: 41.8781, lon: -87.6298 }));
+// ~16,000 km away -- inside the 5,000+ km band.
+add(person('band5', 'Syd Farthest', 1985, { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 }));
+// No coordinates at all -- must land in the same outermost ring as band5.
+add(person('noLoc', 'No Location', 1990, null));
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 try {
@@ -36,14 +48,14 @@ try {
   await page.click('.centric-metric-btn[data-metric="location"]');
   await page.waitForTimeout(700);
 
-  console.log('=== Ring labels: 5 tiers, region restored ===');
+  console.log('=== Ring labels: 5 real-distance bands ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('labels:', JSON.stringify(labels));
-  for (const expected of ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']) {
+  for (const expected of ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got: ${JSON.stringify(labels)}`);
   }
   if (labels.length !== 5) throw new Error(`Expected exactly 5 ring labels, got ${labels.length}`);
-  console.log('Confirmed: all 5 location ring labels present.');
+  console.log('Confirmed: all 5 distance-band ring labels present.');
 
   const ringOf = async (id) => page.evaluate((id) => {
     const center = document.querySelector('.centric-center-card').getBoundingClientRect();
@@ -54,19 +66,19 @@ try {
     return Math.hypot(dx, dy);
   }, id);
 
-  console.log('\n=== Ring order: city < region < country < hemisphere < elsewhere ===');
+  console.log('\n=== Ring order: <50km < 50-200km < 200-1,000km < 1,000-5,000km < 5,000+km/unknown ===');
   const d = {};
-  for (const id of ['sameCity', 'sameRegion', 'sameCountry', 'sameHemi', 'otherHemi', 'noLoc']) {
+  for (const id of ['band1', 'band2', 'band3', 'band4', 'band5', 'noLoc']) {
     d[id] = await ringOf(id);
   }
   console.log('distances:', JSON.stringify(d));
-  if (!(d.sameCity < d.sameRegion && d.sameRegion < d.sameCountry && d.sameCountry < d.sameHemi && d.sameHemi < d.otherHemi)) {
-    throw new Error(`Expected strictly increasing radii city < region < country < hemisphere < elsewhere, got ${JSON.stringify(d)}`);
+  if (!(d.band1 < d.band2 && d.band2 < d.band3 && d.band3 < d.band4 && d.band4 < d.band5)) {
+    throw new Error(`Expected strictly increasing radii band1 < band2 < band3 < band4 < band5, got ${JSON.stringify(d)}`);
   }
-  if (Math.abs(d.otherHemi - d.noLoc) > 2) {
-    throw new Error(`Expected otherHemi and noLoc in the same outermost ring, got ${d.otherHemi} vs ${d.noLoc}`);
+  if (Math.abs(d.band5 - d.noLoc) > 2) {
+    throw new Error(`Expected the farthest real distance and "no coordinates at all" to share the outermost ring, got ${d.band5} vs ${d.noLoc}`);
   }
-  console.log('Confirmed: 5-tier ordering correct, cross-hemisphere and no-location share the outermost ring.');
+  console.log('Confirmed: 5-band ordering correct by real km, and "no coordinates" shares the outermost ring with "genuinely far."');
 
   console.log('\n=== Switching Age <-> Location shows/hides the 5th ring (element itself persists, see ensureCentricGridElements) ===');
   const countVisibleRings = () => page.evaluate(() =>

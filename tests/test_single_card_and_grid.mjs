@@ -151,7 +151,7 @@ try {
   const locationLabels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
   console.log('location labels:', JSON.stringify(locationLabels));
   if (locationLabels.length !== 5) throw new Error(`Expected exactly 5 settled location-metric labels, got ${JSON.stringify(locationLabels)}`);
-  for (const expected of ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']) {
+  for (const expected of ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']) {
     if (!locationLabels.includes(expected)) throw new Error(`Expected a "${expected}" label, got ${JSON.stringify(locationLabels)}`);
   }
   console.log('Confirmed: axis labels update when the metric toggle changes.');

@@ -1,22 +1,26 @@
 import { chromium } from 'playwright-core';
 
-function person(id, name, year, city) {
-  return { id, name, birthDate: year ? `${year}-01-01` : '', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: city ? [city] : [] };
+function person(id, name, year, loc) {
+  return { id, name, birthDate: year ? `${year}-01-01` : '', deathDate: '', photo: '', notes: '', parents: [], spouses: [], locations: loc ? [loc] : [] };
 }
 const people = {};
 const add = (p) => { people[p.id] = p; };
-// Center: born 1970, Boston USA.
-add(person('center', 'Alice Center', 1970, 'Boston, USA'));
-// Same city as center.
-add(person('sameCity', 'Sam City', 1975, 'Boston, USA'));
-// Same country (US), different city.
-add(person('sameCountry', 'Cody Country', 1980, 'Chicago, USA'));
-// Same hemisphere (Northern) but different country -- France.
-add(person('sameHemi', 'Hemi North', 1982, 'Paris, France'));
-// Southern hemisphere -- Australia (opposite hemisphere from Boston).
-add(person('otherHemi', 'Sydney South', 1985, 'Sydney, Australia'));
+// Location metric now groups by real great-circle distance (see
+// centricLocationRing/haversineKm in app.js), not the old "same city/
+// country/hemisphere" text heuristic -- each fixture below sits at a
+// real-world distance from the center clearly inside its intended band.
+// Center: born 1970, Boston, Massachusetts.
+add(person('center', 'Alice Center', 1970, { text: 'Boston, USA', lat: 42.3601, lon: -71.0589 }));
+// ~7 km away -- inside the <50 km band.
+add(person('sameCity', 'Sam City', 1975, { text: 'Cambridge, USA', lat: 42.3736, lon: -71.1097 }));
+// ~69 km away -- inside the 50-200 km band.
+add(person('sameCountry', 'Cody Country', 1980, { text: 'Providence, USA', lat: 41.8240, lon: -71.4128 }));
+// ~306 km away -- inside the 200-1,000 km band.
+add(person('sameHemi', 'Hemi North', 1982, { text: 'New York, USA', lat: 40.7128, lon: -74.0060 }));
+// ~16,000 km away -- inside the 5,000+ km band.
+add(person('otherHemi', 'Sydney South', 1985, { text: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 }));
 // No location at all.
-add(person('noLoc', 'No Location', 1990, ''));
+add(person('noLoc', 'No Location', 1990, null));
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 try {
@@ -63,7 +67,7 @@ try {
     const el = document.querySelector('[data-id="sameCity"] .person-dates');
     return el ? el.textContent : null;
   });
-  if (locSubtitle !== 'Boston, USA') throw new Error(`Expected location text, got: "${locSubtitle}"`);
+  if (locSubtitle !== 'Cambridge, USA') throw new Error(`Expected location text, got: "${locSubtitle}"`);
   console.log('Confirmed: subtitle =', JSON.stringify(locSubtitle));
 
   const noLocSubtitle = await page.evaluate(() => {
@@ -73,7 +77,7 @@ try {
   if (noLocSubtitle !== '') throw new Error(`Expected blank subtitle for no location, got: "${noLocSubtitle}"`);
   console.log('Confirmed: person with no location shows blank subtitle (not a stale birth year).');
 
-  console.log('\n=== Location rings: city / country / hemisphere / elsewhere ===');
+  console.log('\n=== Location rings: real distance bands, near to far ===');
   const ringOf = async (id) => page.evaluate((id) => {
     // Reverse-engineer which ring a card landed in from its radial distance
     // to the center card, since ring membership isn't exposed as a DOM attr.
@@ -92,18 +96,18 @@ try {
   const dNoLoc = await ringOf('noLoc');
 
   if (!(dSameCity < dSameCountry && dSameCountry < dSameHemi && dSameHemi < dOtherHemi)) {
-    throw new Error(`Expected strictly increasing radii city < country < hemisphere < elsewhere, got: ${JSON.stringify({ dSameCity, dSameCountry, dSameHemi, dOtherHemi })}`);
+    throw new Error(`Expected strictly increasing radii near < mid < far < farthest, got: ${JSON.stringify({ dSameCity, dSameCountry, dSameHemi, dOtherHemi })}`);
   }
-  // otherHemi (Australia, Southern) and noLoc should land in the SAME
-  // (outermost, "elsewhere") ring as each other.
+  // Sydney (~16,000 km, the 5,000+ km band) and noLoc (unlocatable) should
+  // land in the SAME outermost ring as each other.
   if (Math.abs(dOtherHemi - dNoLoc) > 2) {
-    throw new Error(`Expected otherHemi and noLoc in the same outermost ring, got distances ${dOtherHemi} vs ${dNoLoc}`);
+    throw new Error(`Expected the farthest real distance and noLoc in the same outermost ring, got distances ${dOtherHemi} vs ${dNoLoc}`);
   }
-  console.log('Confirmed: same-city < same-country < same-hemisphere < elsewhere, and cross-hemisphere lands with no-location in the outermost ring.');
+  console.log('Confirmed: <50km < 50-200km < 200-1,000km < 5,000+km, and the farthest real distance lands with no-location in the outermost ring.');
 
-  console.log('\n=== Ring axis labels reflect the new 4-tier location scheme ===');
+  console.log('\n=== Ring axis labels reflect the real-distance-band scheme ===');
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#centricLabelsSvg text')).map(t => t.textContent));
-  for (const expected of ['Same city', 'Same country', 'Same hemisphere', 'Elsewhere']) {
+  for (const expected of ['< 50 km', '50–200 km', '200–1,000 km', '5,000+ km / unknown']) {
     if (!labels.includes(expected)) throw new Error(`Expected a "${expected}" ring label, got labels: ${JSON.stringify(labels)}`);
   }
   console.log('Confirmed: ring labels =', JSON.stringify(labels));

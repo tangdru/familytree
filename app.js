@@ -164,33 +164,6 @@
     return COUNTRY_NAME_TO_ISO[last] || null;
   }
 
-  // Best-effort country -> hemisphere (N/S), keyed by the same ISO codes as
-  // COUNTRY_NAME_TO_ISO -- used by Centric view's Location metric to group
-  // by "same hemisphere" (see centricLocationRing). For a country whose
-  // territory actually straddles the equator (Brazil, Indonesia, Kenya,
-  // Ecuador...), this picks whichever hemisphere its capital/majority
-  // population sits in -- good enough for grouping a family tree, not a
-  // GIS tool. Unmapped countries (or no country at all) just don't match
-  // anyone else's hemisphere.
-  const COUNTRY_HEMISPHERE = {
-    US: 'N', GB: 'N', CA: 'N', MX: 'N', FR: 'N', DE: 'N', IT: 'N', ES: 'N', PT: 'N',
-    NL: 'N', BE: 'N', CH: 'N', AT: 'N', IE: 'N', SE: 'N', NO: 'N', DK: 'N', FI: 'N', IS: 'N',
-    PL: 'N', CZ: 'N', HU: 'N', RO: 'N', BG: 'N', GR: 'N', HR: 'N', RS: 'N', UA: 'N', RU: 'N',
-    TR: 'N', IL: 'N', SA: 'N', AE: 'N', EG: 'N',
-    CN: 'N', JP: 'N', KR: 'N', KP: 'N', TW: 'N', HK: 'N', VN: 'N', TH: 'N', PH: 'N',
-    ID: 'S', MY: 'N', SG: 'N',
-    IN: 'N', PK: 'N', BD: 'N', LK: 'N', NP: 'N',
-    ZA: 'S', NG: 'N', KE: 'S', ET: 'N', GH: 'N', MA: 'N', DZ: 'N',
-    BR: 'S', AR: 'S', CL: 'S', CO: 'N', PE: 'S', VE: 'N', EC: 'S',
-    CU: 'N', DO: 'N', HT: 'N', JM: 'N', PR: 'N',
-    AU: 'S', NZ: 'S', LU: 'N',
-  };
-
-  function hemisphereForLocation(loc) {
-    const country = guessCountryFromLocationText(loc);
-    return country ? (COUNTRY_HEMISPHERE[country] || null) : null;
-  }
-
   /** @type {{people: Object<string, Person>}} */
   let data = { people: {} };
 
@@ -986,10 +959,9 @@
   // the birth-location field has no use for coordinates, so it's omitted
   // there and this whole mechanism is a no-op for it.
   //
-  // Coordinates captured here are used only for storage right now -- the
-  // Centric view's Location metric still runs on plain text (see
-  // centricLocationRing) until enough records have real coordinates to
-  // make the real-distance ring math worthwhile. See BACKLOG.md.
+  // Coordinates captured here also drive Centric view's Location metric
+  // (see centricLocationRing) and Globe View's markers -- picking a real
+  // suggestion (not just typing free text) is what makes both work.
   function setupLocationAutocomplete(input, list, onPick) {
     const optionsEl = list.querySelector('.combo-options');
     let debounceTimer = null;
@@ -5332,31 +5304,33 @@
     return 4;
   }
 
-  // Location-proximity ring. There's no geocoding anywhere in this app --
-  // just free-text "City, State/Country" strings (see currentLocationOf)
-  // -- so "proximity" here is textual/best-effort, not a real distance:
-  // ring 1 is the exact same location string; ring 2 shares the same
-  // trailing comma-separated segment (a US state for "City, State", or
-  // just the country again for "City, Country" -- for that shape this
-  // tier and ring 3 naturally coincide); ring 3 shares the same guessed
-  // country (see guessCountryFromLocationText -- a real country match,
-  // not just matching text, so two different-state "City, State" US
-  // locations still land here even though ring 2 missed them); ring 4
-  // shares the same hemisphere (see hemisphereForLocation); ring 5 is
-  // everyone else, including anyone with no location set at all.
-  function centricLocationRing(centerLoc, personLoc) {
-    if (!centerLoc || !personLoc) return 5;
-    if (personLoc.toLowerCase() === centerLoc.toLowerCase()) return 1;
-    const centerRegion = centerLoc.split(',').pop().trim().toLowerCase();
-    const personRegion = personLoc.split(',').pop().trim().toLowerCase();
-    if (centerRegion && centerRegion === personRegion) return 2;
-    const centerCountry = guessCountryFromLocationText(centerLoc);
-    const personCountry = guessCountryFromLocationText(personLoc);
-    if (centerCountry && centerCountry === personCountry) return 3;
-    const centerHemi = hemisphereForLocation(centerLoc);
-    const personHemi = hemisphereForLocation(personLoc);
-    if (centerHemi && centerHemi === personHemi) return 4;
-    return 5;
+  // Great-circle distance in km between two lat/lon points (haversine).
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Upper bound (km) of each ring except the last, which catches everyone
+  // farther than CENTRIC_DISTANCE_BANDS_KM's last finite value.
+  const CENTRIC_DISTANCE_BANDS_KM = [50, 200, 1000, 5000, Infinity];
+
+  // Location-proximity ring, a real great-circle distance between two
+  // {lat, lon} coordinates (see currentLocationCoordsOf) rather than the
+  // old text-heuristic ("same city"/"same country"/...) this replaced --
+  // deferred until enough records had real coordinates to make the
+  // distance math worthwhile (see git history). Ring 5 is both "genuinely
+  // 5,000+ km away" and "unlocatable" (either person missing usable
+  // coordinates) -- same fallback the old text version gave anyone with no
+  // location set at all.
+  function centricLocationRing(centerCoords, personCoords) {
+    if (!centerCoords || !personCoords) return 5;
+    const km = haversineKm(centerCoords.lat, centerCoords.lon, personCoords.lat, personCoords.lon);
+    const idx = CENTRIC_DISTANCE_BANDS_KM.findIndex(max => km < max);
+    return idx === -1 ? 5 : idx + 1;
   }
 
   // What a ring actually means for the current metric, shown as an axis
@@ -5364,7 +5338,7 @@
   // label since there's no gridline drawn at radius 0.
   function centricRingLabel(metric, ringIndex) {
     const labels = metric === 'location'
-      ? ['Same city', 'Same region', 'Same country', 'Same hemisphere', 'Elsewhere']
+      ? ['< 50 km', '50–200 km', '200–1,000 km', '1,000–5,000 km', '5,000+ km / unknown']
       : ['0–5 yrs', '6–15 yrs', '16–30 yrs', '30+ yrs / unknown'];
     return labels[ringIndex - 1] || labels[labels.length - 1];
   }
@@ -5852,7 +5826,7 @@
     }
     const center = data.people[centricCenterId];
     const centerYear = effectiveBirthYear(center);
-    const centerLoc = currentLocationOf(center);
+    const centerCoords = currentLocationCoordsOf(center);
 
     // Every ring for the current metric always exists (1..4 for age, 1..5
     // for location), even ones nobody currently falls into -- so
@@ -5866,7 +5840,7 @@
       if (p.id === centricCenterId) continue;
       let ring;
       if (centricMetric === 'location') {
-        ring = centricLocationRing(centerLoc, currentLocationOf(p));
+        ring = centricLocationRing(centerCoords, currentLocationCoordsOf(p));
       } else {
         ring = centricAgeRing(centerYear, effectiveBirthYear(p));
       }
