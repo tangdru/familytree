@@ -6788,45 +6788,6 @@
   // which way the person actually traveled, so many overlapping paths on
   // one map read as a consistent "arc = movement" visual language rather
   // than noise.
-  // ---------- Globe graticule dots ----------
-  // A dot at each longitude/latitude gridline intersection, purely
-  // decorative -- no interaction, no data. Colored via --grid-dot (see
-  // style.css), the SAME literal value each theme already uses for the
-  // app's own ambient background dot texture (.tree-viewport's
-  // background-image), so the grid reads as that same dot pattern
-  // continuing across the globe's surface rather than a separate map
-  // overlay in its own color.
-  const GLOBE_GRATICULE_STEP_DEG = 20; // degrees between adjacent gridlines, both axes
-  // Stops well short of the poles -- every longitude line converges there,
-  // so a row this close still reads as a dense, evenly-spaced band right
-  // along the globe's rim (where the orthographic projection itself also
-  // compresses points closer together) rather than a sparse polar cap, and
-  // excludes the arctic/antarctic circles (~66.5 degrees) entirely.
-  const GLOBE_GRATICULE_MAX_LAT_DEG = 60;
-  const GLOBE_GRATICULE_DOT_RADIUS = 1.5; // px, matches the ambient background dot's own ~1px radius
-
-  function drawGlobeGraticule(projection, front) {
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const group = document.createElementNS(svgNS, 'g');
-    const dotColor = rgbCss(readHexColorVar('--grid-dot'));
-    for (let lat = -GLOBE_GRATICULE_MAX_LAT_DEG; lat <= GLOBE_GRATICULE_MAX_LAT_DEG; lat += GLOBE_GRATICULE_STEP_DEG) {
-      for (let lon = -180; lon < 180; lon += GLOBE_GRATICULE_STEP_DEG) {
-        // Same front-hemisphere cull every other point on the globe uses
-        // (see the `front` comment at its own definition) -- a gridline
-        // intersection on the far side shouldn't show through the sphere.
-        if (d3.geoDistance([lon, lat], front) > Math.PI / 2) continue;
-        const [x, y] = projection([lon, lat]);
-        const dot = document.createElementNS(svgNS, 'circle');
-        dot.setAttribute('cx', x);
-        dot.setAttribute('cy', y);
-        dot.setAttribute('r', GLOBE_GRATICULE_DOT_RADIUS);
-        dot.setAttribute('fill', dotColor);
-        group.appendChild(dot);
-      }
-    }
-    return group;
-  }
-
   function migrationArcPath(a, b, curvature = 0.16) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = Math.hypot(dx, dy) || 1;
@@ -6969,14 +6930,6 @@
     const animateEntryIn = globeEntryFadePending;
     globeEntryFadePending = false;
 
-    // Used to cull anything on the far side of the globe (more than a
-    // quarter-circle from the point currently facing the viewer) -- both
-    // the graticule dots below and, further down, each person -- since the
-    // projection would otherwise happily project a back-facing point onto
-    // the visible disc anyway (clipAngle only clips drawn geometry, not
-    // point projection).
-    const front = [-globeRotation[0], -globeRotation[1]];
-
     els.svg.innerHTML = '';
     const spherePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     spherePath.setAttribute('d', geoPath({ type: 'Sphere' }));
@@ -6989,26 +6942,25 @@
     landPath.setAttribute('fill', 'var(--map-land)');
     landPath.setAttribute('stroke', 'none');
     els.svg.appendChild(landPath);
-
-    const graticuleGroup = drawGlobeGraticule(projection, front);
-    els.svg.appendChild(graticuleGroup);
-
     if (animateEntryIn) {
       // Force the 10% frame to actually paint before releasing to 100% --
       // without this the two opacity writes coalesce into one and nothing
       // visibly fades (same technique animateLayoutIn uses for cards).
-      // The graticule fades in right alongside the land/sphere, as one
-      // surface -- it's meant to read as texture on the globe itself, not
-      // a separate overlay with its own timing.
-      spherePath.style.opacity = landPath.style.opacity = graticuleGroup.style.opacity = '0.1';
-      spherePath.style.transition = landPath.style.transition = graticuleGroup.style.transition = 'opacity 500ms ease-out';
+      spherePath.style.opacity = landPath.style.opacity = '0.1';
+      spherePath.style.transition = landPath.style.transition = 'opacity 500ms ease-out';
       void landPath.getBoundingClientRect();
-      requestAnimationFrame(() => { spherePath.style.opacity = landPath.style.opacity = graticuleGroup.style.opacity = '1'; });
+      requestAnimationFrame(() => { spherePath.style.opacity = landPath.style.opacity = '1'; });
     }
 
     const oldPositions = animateFlip ? captureCardPositions() : null;
     els.content.querySelectorAll('.map-card, .map-cluster').forEach(el => el.remove());
 
+    // A person on the far side of the globe (more than a quarter-circle
+    // from the point currently facing the viewer) isn't shown at all --
+    // the projection would otherwise happily project them onto the
+    // visible disc anyway, since clipAngle only clips drawn geometry, not
+    // point projection.
+    const front = [-globeRotation[0], -globeRotation[1]];
     const visible = globePeople
       .map(p => {
         if (d3.geoDistance([p.lon, p.lat], front) > Math.PI / 2) return null;
