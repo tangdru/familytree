@@ -42,6 +42,14 @@
      sphere/water fill reuses --bg directly (no separate token) so the
      globe's "empty" areas match the page behind it. */
   --map-land: #e4dcc8;
+  /* Globe View's graticule dots (see drawGlobeGraticule in app.js) --
+     deliberately the exact same value as .tree-viewport's own ambient
+     background-image dot color just below, so the globe's longitude/
+     latitude grid reads as a continuation of that same dot texture rather
+     than a separate overlay. Kept as its own token (not read directly off
+     the background-image, which JS can't parse) so it can vary by theme
+     the same way that image's literal color already does. */
+  --grid-dot: #e3dac6;
 }
 
 * { box-sizing: border-box; }
@@ -1778,6 +1786,7 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
     --map-land: #2c2c2c;
     --centric-inner: #6a6a6a;
     --centric-outer: #2c2c2c;
+    --grid-dot: #362f22;
   }
   .tree-viewport { background-image: radial-gradient(circle, #362f22 1px, transparent 1px); }
   .person-photo { background: #3a3324; color: #6f6650; }
@@ -1827,6 +1836,7 @@ span.contact-chip:hover { border-color: var(--card-border); background: var(--bg
      dataviz skill's OKLCH contrast check: filled land needs no border at
      this contrast. */
   --map-land: #262626;
+  --grid-dot: #4a4a4a;
   /* Solid buttons fill white/black instead of magenta in this theme --
      --accent itself stays magenta above (still used for borders/rings,
      e.g. Centric view's centered-photo ring). Defined here as the same
