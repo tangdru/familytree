@@ -6797,10 +6797,12 @@
   // continuing across the globe's surface rather than a separate map
   // overlay in its own color.
   const GLOBE_GRATICULE_STEP_DEG = 20; // degrees between adjacent gridlines, both axes
-  // Stops short of the poles rather than going all the way to +/-90 --
-  // every longitude line converges there, which would stack many dots
-  // almost on top of each other right at each pole.
-  const GLOBE_GRATICULE_MAX_LAT_DEG = 80;
+  // Stops well short of the poles -- every longitude line converges there,
+  // so a row this close still reads as a dense, evenly-spaced band right
+  // along the globe's rim (where the orthographic projection itself also
+  // compresses points closer together) rather than a sparse polar cap, and
+  // excludes the arctic/antarctic circles (~66.5 degrees) entirely.
+  const GLOBE_GRATICULE_MAX_LAT_DEG = 60;
   const GLOBE_GRATICULE_DOT_RADIUS = 1.5; // px, matches the ambient background dot's own ~1px radius
 
   function drawGlobeGraticule(projection, front) {
