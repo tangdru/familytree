@@ -3000,10 +3000,10 @@
       if (documentedBorn) lines.push(`Documented: ${documentedBorn}`);
       lines.push(`Zodiac-adjusted: ${formatDateDisplay(adjusted)}`);
     } else if (documentedBorn) {
-      lines.push(`Born ${documentedBorn}`);
+      lines.push(`b. ${documentedBorn}`);
     }
     const died = formatDateDisplay(p.deathDate);
-    if (died) lines.push(`Died: ${died}`);
+    if (died) lines.push(`d. ${died}`);
     return lines;
   }
 
@@ -4838,9 +4838,14 @@
       // positioning -- see effectiveBirthYear.
       const born = effectiveBirthYear(person);
       const died = formatYear(person.deathDate);
-      if (born && died) datesEl.textContent = `b. ${born}, d. ${died}`;
-      else if (born) datesEl.textContent = `b. ${born}`;
-      else if (died) datesEl.textContent = `d. ${died}`;
+      // No "b."/"d." prefixes here (unlike the Person View profile card's
+      // own detail lines, see personViewDetailLines) -- this caption sits
+      // right under every card's photo across the whole tree, so it stays
+      // as compact as possible: a bare year, or a hyphenated range once
+      // there's a death year to bound it.
+      if (born && died) datesEl.textContent = `${born}-${died}`;
+      else if (born) datesEl.textContent = `${born}`;
+      else if (died) datesEl.textContent = `${died}`;
       else datesEl.textContent = '';
     }
 
