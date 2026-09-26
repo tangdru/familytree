@@ -88,7 +88,7 @@ try {
   if (detailLines2.some(l => l.startsWith('Documented:') || l.startsWith('Zodiac-adjusted:'))) {
     throw new Error(`Expected plain date text with no Documented:/Zodiac-adjusted: labels when no zodiac is set, got: ${JSON.stringify(detailLines2)}`);
   }
-  if (!detailLines2.some(l => l.startsWith('Born '))) throw new Error(`Expected a plain "Born ..." line, got: ${JSON.stringify(detailLines2)}`);
+  if (!detailLines2.some(l => l.startsWith('b. '))) throw new Error(`Expected a plain "b. ..." line, got: ${JSON.stringify(detailLines2)}`);
   console.log('Confirmed: no zodiac set means no extra labeling, just the plain date as before.');
 
   console.log('\nERRORS:', errors);
