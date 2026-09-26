@@ -4838,7 +4838,7 @@
       // positioning -- see effectiveBirthYear.
       const born = effectiveBirthYear(person);
       const died = formatYear(person.deathDate);
-      if (born && died) datesEl.textContent = `${born} – ${died}`;
+      if (born && died) datesEl.textContent = `b. ${born}, d. ${died}`;
       else if (born) datesEl.textContent = `b. ${born}`;
       else if (died) datesEl.textContent = `d. ${died}`;
       else datesEl.textContent = '';
