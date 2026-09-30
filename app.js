@@ -6908,6 +6908,16 @@
   // subsequent drag/pinch/wheel/animated frame via scheduleGlobeRender or
   // animateGlobeTo.
   function renderGlobeFrame(options) {
+    // Guards against a frame that was already queued (scheduleGlobeRender's
+    // one-shot requestAnimationFrame, or animateGlobeTo's own step loop --
+    // neither keeps a cancelable handle the way startGlobeAutoSpin/
+    // startGlobeInertia/startGlobeSpinUp's self-checking loops do) still
+    // firing one tick after the view mode has already changed away from
+    // Globe. Left unguarded, that stale frame would re-append fresh
+    // .map-card/.map-cluster elements into #treeContent right after the
+    // NEW view's own render just finished populating it -- stray cluster
+    // badges left floating over the Traditional/Chronological/Zodiac tree.
+    if (viewMode !== 'globe') return;
     const animateFlip = options && options.animateFlip;
     const vw = els.viewport.clientWidth;
     const vh = els.viewport.clientHeight;
