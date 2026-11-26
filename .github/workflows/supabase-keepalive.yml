@@ -1,0 +1,54 @@
+name: Keep Supabase project alive
+
+# Supabase's free tier auto-pauses a project after 7 days with no API
+# activity -- which is exactly what paused the family tree's real backend
+# (see the "Your Supabase Project ... has been paused" email). This
+# workflow writes to it every few days, comfortably inside that window,
+# so it never happens again.
+#
+# It only ever touches ONE dedicated placeholder row, keyed by an id
+# ("keepalive-ping") that the app itself never generates or reads -- the
+# real tree's data lives entirely under id "main" (see SUPABASE_ROW_ID in
+# app.js). So this never appears anywhere in the app, for anyone.
+#
+# Reads the project URL/anon key straight out of config.js at run time
+# (rather than duplicating them as a separate secret) so there's exactly
+# one place to update if the key is ever rotated. The anon key is designed
+# to be public -- see config.js's own comment -- so there's no added
+# exposure in a public workflow log either.
+
+on:
+  schedule:
+    - cron: '0 12 */3 * *' # every ~3 days, well inside the 7-day pause window
+  workflow_dispatch: {} # lets us trigger it manually to verify it works
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Supabase URL/key from config.js
+        id: cfg
+        run: |
+          url=$(grep -oP "url:\s*'\K[^']+" config.js)
+          key=$(grep -oP "anonKey:\s*'\K[^']+" config.js)
+          if [ -z "$url" ] || [ -z "$key" ]; then
+            echo "::error::Could not read Supabase url/anonKey out of config.js"
+            exit 1
+          fi
+          echo "::add-mask::$key"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert the keep-alive placeholder row
+        run: |
+          curl -fsS -X POST "${{ steps.cfg.outputs.url }}/rest/v1/family_tree" \
+            -H "apikey: ${{ steps.cfg.outputs.key }}" \
+            -H "Authorization: Bearer ${{ steps.cfg.outputs.key }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates,return=minimal" \
+            -d '{"id": "keepalive-ping", "data": {}}'
